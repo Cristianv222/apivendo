@@ -5,19 +5,20 @@
 
 INFORMACIÓN GENERAL
 -------------------
-Fecha de generación: 2025-07-10 12:03:44
-Ubicación: C:\Users\Crisv\vendo_sri
-Python Version: Python 3.13.2
-Pip Version: pip 25.1.1 from C:\Users\Crisv\vendo_sri\venv\Lib\site-packages\pip (python 3.13)
-Entorno Virtual: ✅ ACTIVO (C:\Users\Crisv\vendo_sri\venv)
-Sistema Operativo: nt
-Usuario: Crisv
+Fecha de generación: 2025-07-11 17:15:41
+Ubicación: /app
+Python Version: Python 3.11.13
+Pip Version: pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)
+Entorno Virtual: ❌ NO ACTIVO
+Sistema Operativo: posix
+Usuario: Desconocido
 
 ================================================================================
                             ESTRUCTURA DEL PROYECTO
 ================================================================================
 
 ├── .env (269B)
+├── .gitignore (4.0KB)
 ├── apps/ (11 elementos)
 │   ├── __init__.py (0B)
 │   ├── __pycache__/ (excluido)
@@ -26,8 +27,9 @@ Usuario: Crisv
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (0B)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
 │   │   ├── migrations/ (2 elementos)
@@ -47,8 +49,9 @@ Usuario: Crisv
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (0B)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
 │   │   ├── migrations/ (2 elementos)
@@ -62,16 +65,18 @@ Usuario: Crisv
 │   ├── companies/ (10 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
-│   │   ├── admin.py (0B)
+│   │   ├── admin.py (2.0KB)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
-│   │   ├── migrations/ (2 elementos)
+│   │   ├── migrations/ (3 elementos)
+│   │   │   ├── 0001_initial.py (1.8KB)
 │   │   │   ├── __init__.py (0B)
 │   │   │   └── __pycache__/ (excluido)
-│   │   ├── models.py (100B)
+│   │   ├── models.py (2.4KB)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (0B)
@@ -79,16 +84,19 @@ Usuario: Crisv
 │   ├── core/ (10 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
-│   │   ├── admin.py (0B)
+│   │   ├── admin.py (8.4KB)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
-│   │   ├── migrations/ (2 elementos)
+│   │   ├── migrations/ (4 elementos)
+│   │   │   ├── 0001_initial.py (6.4KB)
+│   │   │   ├── 0002_initial.py (3.3KB)
 │   │   │   ├── __init__.py (0B)
 │   │   │   └── __pycache__/ (excluido)
-│   │   ├── models.py (95B)
+│   │   ├── models.py (8.0KB)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (0B)
@@ -98,8 +106,9 @@ Usuario: Crisv
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (0B)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
 │   │   ├── migrations/ (2 elementos)
@@ -115,8 +124,9 @@ Usuario: Crisv
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (0B)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
 │   │   ├── migrations/ (2 elementos)
@@ -132,8 +142,9 @@ Usuario: Crisv
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (0B)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
 │   │   ├── migrations/ (2 elementos)
@@ -149,8 +160,9 @@ Usuario: Crisv
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (0B)
 │   │   ├── apps.py (0B)
-│   │   ├── management/ (2 elementos)
+│   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
 │   │   ├── migrations/ (2 elementos)
@@ -161,76 +173,90 @@ Usuario: Crisv
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (0B)
 │   │   └── views.py (0B)
-│   └── users/ (10 elementos)
+│   └── users/ (12 elementos)
 │       ├── __init__.py (0B)
 │       ├── __pycache__/ (excluido)
-│       ├── admin.py (0B)
-│       ├── apps.py (0B)
-│       ├── management/ (2 elementos)
+│       ├── adapters.py (9.4KB)
+│       ├── admin.py (5.1KB)
+│       ├── apps.py (550B)
+│       ├── management/ (3 elementos)
 │       │   ├── __init__.py (0B)
-│       │   └── commands/ (1 elementos)
-│       │       └── __init__.py (0B)
-│       ├── migrations/ (2 elementos)
+│       │   ├── __pycache__/ (excluido)
+│       │   └── commands/ (2 elementos)
+│       │       ├── __init__.py (0B)
+│       │       └── setup_oauth.py (10.9KB)
+│       ├── migrations/ (3 elementos)
+│       │   ├── 0001_initial.py (4.6KB)
 │       │   ├── __init__.py (0B)
 │       │   └── __pycache__/ (excluido)
-│       ├── models.py (96B)
+│       ├── models.py (5.0KB)
+│       ├── signals.py (944B)
 │       ├── tests/ (1 elementos)
 │       │   └── __init__.py (0B)
-│       ├── urls.py (0B)
-│       └── views.py (0B)
-├── docker-compose.yml (1.0KB)
-├── dockerfile (523B)
+│       ├── urls.py (967B)
+│       └── views.py (4.4KB)
+├── docker-compose.yml (1.1KB)
+├── dockerfile (605B)
 ├── docs/ (5 elementos)
-│   ├── api/ (0 elementos)
-│   ├── deployment/ (0 elementos)
-│   ├── development/ (0 elementos)
-│   ├── security/ (0 elementos)
-│   └── sri_integration/ (0 elementos)
-├── fixtures/ (0 elementos)
+│   ├── api/ (1 elementos)
+│   ├── deployment/ (1 elementos)
+│   ├── development/ (1 elementos)
+│   ├── security/ (1 elementos)
+│   └── sri_integration/ (1 elementos)
+├── fixtures/ (1 elementos)
 ├── generar_documentacion.py (22.7KB)
 ├── locale/ (2 elementos)
 │   ├── en/ (1 elementos)
-│   │   └── LC_MESSAGES/ (0 elementos)
+│   │   └── LC_MESSAGES/ (1 elementos)
 │   └── es/ (1 elementos)
-│       └── LC_MESSAGES/ (0 elementos)
+│       └── LC_MESSAGES/ (1 elementos)
+├── logs/ (1 elementos)
+│   └── vendo_sri.log (12.1KB)
 ├── manage.py (687B)
-├── requirements.txt (110B)
-├── scripts/ (0 elementos)
+├── requirements.txt (1.1KB)
+├── scripts/ (1 elementos)
 ├── services/ (1 elementos)
 │   └── __init__.py (0B)
 ├── static/ (2 elementos)
 │   ├── admin/ (3 elementos)
-│   │   ├── css/ (0 elementos)
-│   │   ├── img/ (0 elementos)
-│   │   └── js/ (0 elementos)
-│   └── api_docs/ (0 elementos)
-├── storage/ (4 elementos)
-│   ├── backups/ (0 elementos)
-│   ├── certificates/ (2 elementos)
+│   │   ├── css/ (1 elementos)
+│   │   ├── img/ (1 elementos)
+│   │   └── js/ (1 elementos)
+│   └── api_docs/ (1 elementos)
+├── storage/ (5 elementos)
+│   ├── backups/ (1 elementos)
+│   ├── certificates/ (3 elementos)
 │   │   ├── encrypted/ (0 elementos)
 │   │   └── temp/ (0 elementos)
-│   ├── invoices/ (3 elementos)
-│   │   ├── pdf/ (0 elementos)
-│   │   ├── sent/ (0 elementos)
-│   │   └── xml/ (0 elementos)
-│   └── logs/ (1 elementos)
-│       └── vendo_sri.log (304B)
-├── templates/ (3 elementos)
+│   ├── invoices/ (4 elementos)
+│   │   ├── pdf/ (1 elementos)
+│   │   ├── sent/ (1 elementos)
+│   │   └── xml/ (1 elementos)
+│   └── logs/ (2 elementos)
+│       └── vendo_sri.log (657B)
+├── templates/ (6 elementos)
 │   ├── admin/ (1 elementos)
-│   │   └── custom/ (0 elementos)
-│   ├── api_docs/ (0 elementos)
-│   └── email_templates/ (0 elementos)
+│   │   └── custom/ (1 elementos)
+│   ├── api_docs/ (1 elementos)
+│   ├── dashboard.html (13.5KB)
+│   ├── email_templates/ (1 elementos)
+│   ├── socialaccount/ (1 elementos)
+│   │   └── authentication_error.html (13.3KB)
+│   └── users/ (3 elementos)
+│       ├── account_rejected.html (10.7KB)
+│       ├── login.html (17.2KB)
+│       └── waiting_room.html (10.3KB)
 ├── tests/ (2 elementos)
 │   ├── __init__.py (0B)
-│   └── fixtures/ (0 elementos)
+│   └── fixtures/ (1 elementos)
 ├── utils/ (1 elementos)
 │   └── __init__.py (0B)
 ├── vendo_sri/ (6 elementos)
 │   ├── __init__.py (0B)
 │   ├── __pycache__/ (excluido)
 │   ├── asgi.py (425B)
-│   ├── settings.py (4.1KB)
-│   ├── urls.py (777B)
+│   ├── settings.py (12.2KB)
+│   ├── urls.py (8.2KB)
 │   └── wsgi.py (425B)
 └── venv/ (excluido)
 
@@ -244,23 +270,24 @@ manage.py               ✅ Existe
 requirements.txt        ✅ Existe
 .env                    ✅ Existe
 .env.example            ❌ Faltante
-.gitignore              ❌ Faltante
+.gitignore              ✅ Existe
 README.md               ❌ Faltante
 docker-compose.yml      ✅ Existe
 
 ESTADÍSTICAS POR EXTENSIÓN
 --------------------------
-.py                   103 archivos ( 94.5%)
-(sin extensión)         2 archivos (  1.8%)
-.backup                 1 archivos (  0.9%)
-.yml                    1 archivos (  0.9%)
-.txt                    1 archivos (  0.9%)
-.log                    1 archivos (  0.9%)
+.py                   110 archivos ( 74.3%)
+(sin extensión)        28 archivos ( 18.9%)
+.html                   5 archivos (  3.4%)
+.log                    2 archivos (  1.4%)
+.backup                 1 archivos (  0.7%)
+.yml                    1 archivos (  0.7%)
+.txt                    1 archivos (  0.7%)
 
 TOTALES
 -------
-Total de archivos: 109
-Total de directorios: 2606
+Total de archivos: 148
+Total de directorios: 3573
 
 ================================================================================
                            APLICACIONES DJANGO
@@ -270,7 +297,7 @@ ESTADO DE LAS APPS
 --------------------------------------------------------------------------------
 App                  Estado     Básicos    Total      Archivos Existentes           
 --------------------------------------------------------------------------------
-__pycache__          Vacía      0/5        1          Ninguno
+__pycache__          Vacía      0/5        2          Ninguno
 api                  Completa   5/5        6          models.py, views.py, urls...
 certificates         Completa   5/5        6          models.py, views.py, urls...
 companies            Completa   5/5        6          models.py, views.py, urls...
@@ -279,7 +306,7 @@ invoicing            Completa   5/5        6          models.py, views.py, urls.
 notifications        Completa   5/5        6          models.py, views.py, urls...
 settings             Completa   5/5        6          models.py, views.py, urls...
 sri_integration      Completa   5/5        6          models.py, views.py, urls...
-users                Completa   5/5        6          models.py, views.py, urls...
+users                Completa   5/5        8          models.py, views.py, urls...
 
 DETALLE POR APP
 ==================================================
@@ -353,7 +380,7 @@ DETALLE POR APP
 ----------------------------------------
 INSTALLED_APPS       ✅ Configurado   Apps instaladas
 DATABASES            ✅ Configurado   Configuración de BD
-REST_FRAMEWORK       ❌ Faltante      API REST Framework
+REST_FRAMEWORK       ✅ Configurado   API REST Framework
 STATIC_URL           ✅ Configurado   Archivos estáticos
 DEBUG                ✅ Configurado   Modo debug
 SECRET_KEY           ✅ Configurado   Clave secreta
@@ -362,12 +389,18 @@ CONTENIDO DE INSTALLED_APPS:
 ----------------------------------------
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 
+# ==========================================
+# MIDDLEWARE CONFIGURATION
+# ==========================================
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'allauth.account.middleware.AccountMiddleware',  # Requerido para allauth
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -379,27 +412,55 @@ MIDDLEWARE = [
 
 PAQUETES REQUERIDOS PARA SRI
 ----------------------------
-Django                    ✅ Instalado     4.2.7           (Req: 4.2.7)
-djangorestframework       ❌ Faltante      No instalado    (Req: 3.14.0)
-psycopg2-binary           ❌ Faltante      No instalado    (Req: 2.9.7)
+Django                    ✅ Instalado     5.2.3           (Req: 4.2.7)
+djangorestframework       ✅ Instalado     3.16.0          (Req: 3.14.0)
+psycopg2-binary           ✅ Instalado     2.9.10          (Req: 2.9.7)
 python-decouple           ✅ Instalado     3.8             (Req: 3.8)
 celery                    ❌ Faltante      No instalado    (Req: 5.3.4)
 redis                     ❌ Faltante      No instalado    (Req: 5.0.1)
-cryptography              ❌ Faltante      No instalado    (Req: 41.0.7)
-lxml                      ❌ Faltante      No instalado    (Req: 4.9.3)
+cryptography              ✅ Instalado     45.0.4          (Req: 41.0.7)
+lxml                      ✅ Instalado     5.4.0           (Req: 4.9.3)
 zeep                      ❌ Faltante      No instalado    (Req: 4.2.1)
-reportlab                 ❌ Faltante      No instalado    (Req: 4.0.7)
-Pillow                    ❌ Faltante      No instalado    (Req: 10.1.0)
+reportlab                 ✅ Instalado     4.4.2           (Req: 4.0.7)
+Pillow                    ✅ Instalado     11.2.1          (Req: 10.1.0)
 drf-spectacular           ❌ Faltante      No instalado    (Req: 0.26.5)
 
 
 TODOS LOS PAQUETES INSTALADOS
 -----------------------------
-asgiref==3.9.1
-Django==4.2.7
+asgiref==3.8.1
+certifi==2025.6.15
+cffi==1.17.1
+charset-normalizer==3.4.2
+crispy-bootstrap5==2025.6
+cryptography==45.0.4
+Django==5.2.3
+django-allauth==65.9.0
+django-cors-headers==4.7.0
+django-crispy-forms==2.4
+django-debug-toolbar==5.2.0
+django-extensions==4.1
+django-filter==25.1
+djangorestframework==3.16.0
+et_xmlfile==2.0.0
+idna==3.10
+lxml==5.4.0
+oauthlib==3.3.1
+openpyxl==3.1.5
+pillow==11.2.1
+psycopg2-binary==2.9.10
+pycparser==2.22
+PyJWT==2.10.1
+python-dateutil==2.9.0.post0
 python-decouple==3.8
+reportlab==4.4.2
+requests==2.32.4
+requests-oauthlib==2.0.0
+six==1.17.0
 sqlparse==0.5.3
 tzdata==2025.2
+urllib3==2.5.0
+xmltodict==0.14.2
 
 ================================================================================
                     ESTRUCTURA DE ALMACENAMIENTO SEGURO
@@ -421,7 +482,6 @@ storage/backups/                    ✅ Respaldos de BD
 
 ARCHIVOS FALTANTES CRÍTICOS
 ---------------------------
-❌ .gitignore
 ❌ README.md
 
 APPS DJANGO SIN CONFIGURAR
