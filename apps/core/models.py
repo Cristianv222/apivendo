@@ -1,504 +1,303 @@
 ﻿# -*- coding: utf-8 -*-
 """
-Modelos del módulo Users para VENDO_SRI
-Sistema de autenticación con OAuth y gestión de usuarios
+Core models for VENDO_SRI
+Modelos base y compartidos del sistema
 """
-import uuid
+
 from django.db import models
-from django.contrib.auth.models import AbstractUser
-from django.core.validators import RegexValidator
 from django.utils.translation import gettext_lazy as _
-from django.urls import reverse
-from django.utils import timezone
+from django.contrib.auth import get_user_model
 
 
-class User(AbstractUser):
+User = get_user_model()
+
+
+class BaseModel(models.Model):
     """
-    Modelo de usuario personalizado para VENDO_SRI
-    Incluye soporte para OAuth y autenticación por email
+    Modelo base abstracto con campos comunes
     """
-    id = models.UUIDField(
-        primary_key=True, 
-        default=uuid.uuid4, 
-        editable=False,
-        verbose_name=_('ID')
-    )
     
-    # Email como username field
-    email = models.EmailField(
-        _('email address'),
-        unique=True,
-        error_messages={
-            'unique': _("Ya existe un usuario con este email."),
-        },
-    )
-    
-    # Información personal
-    document_type = models.CharField(
-        max_length=20,
-        choices=[
-            ('cedula', _('Cédula')),
-            ('pasaporte', _('Pasaporte')),
-            ('ruc', _('RUC')),
-        ],
-        default='cedula',
-        verbose_name=_('Tipo de documento')
-    )
-    
-    document_number = models.CharField(
-        max_length=20,
-        unique=True,
-        blank=True,
-        null=True,
-        verbose_name=_('Número de documento'),
-        help_text=_('Número de cédula o documento de identidad (opcional para registro social)'),
-        validators=[
-            RegexValidator(
-                regex=r'^[\d\-]+$',
-                message=_('El número de documento solo puede contener números y guiones.'),
-            ),
-        ]   
-    )
-    
-    phone = models.CharField(
-        max_length=20,
-        blank=True,
-        verbose_name=_('Teléfono'),
-        validators=[
-            RegexValidator(
-                regex=r'^[\d\+\-\(\)\s]+$',
-                message=_('Formato de teléfono inválido.'),
-            ),
-        ]
-    )
-    
-    mobile = models.CharField(
-        max_length=20,
-        blank=True,
-        verbose_name=_('Celular'),
-        validators=[
-            RegexValidator(
-                regex=r'^[\d\+\-\(\)\s]+$',
-                message=_('Formato de celular inválido.'),
-            ),
-        ]
-    )
-    
-    # Campos adicionales
-    avatar = models.ImageField(
-        upload_to='avatars/',
-        blank=True,
-        verbose_name=_('Avatar')
-    )
-    
-    birth_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name=_('Fecha de nacimiento')
-    )
-    
-    address = models.TextField(
-        blank=True,
-        verbose_name=_('Dirección')
-    )
-    
-    # Configuración de usuario
-    language = models.CharField(
-        max_length=10,
-        choices=[
-            ('es', _('Español')),
-            ('en', _('Inglés')),
-        ],
-        default='es',
-        verbose_name=_('Idioma')
-    )
-    
-    timezone = models.CharField(
-        max_length=50,
-        default='America/Guayaquil',
-        verbose_name=_('Zona horaria')
-    )
-    
-    # Control de acceso
-    is_system_admin = models.BooleanField(
-        default=False,
-        verbose_name=_('Administrador del sistema')
-    )
-    
-    force_password_change = models.BooleanField(
-        default=False,
-        verbose_name=_('Forzar cambio de contraseña')
-    )
-    
-    password_changed_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name=_('Contraseña cambiada el')
-    )
-    
-    last_activity = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name=_('Última actividad')
-    )
-    
-    # ==========================================
-    # SISTEMA DE APROBACIÓN - SALA DE ESPERA
-    # ==========================================
-    
-    approval_status = models.CharField(
-        max_length=20,
-        choices=[
-            ('pending', _('Pendiente de aprobación')),
-            ('approved', _('Aprobado')),
-            ('rejected', _('Rechazado')),
-        ],
-        default='pending',
-        verbose_name=_('Estado de aprobación'),
-        help_text=_('Estado del usuario en el sistema de aprobación')
-    )
-    
-    approved_by = models.ForeignKey(
-        'self',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='approved_users',
-        verbose_name=_('Aprobado por'),
-        help_text=_('Administrador que aprobó/rechazó al usuario')
-    )
-    
-    approved_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        verbose_name=_('Fecha de aprobación'),
-        help_text=_('Fecha y hora de aprobación o rechazo')
-    )
-    
-    rejection_reason = models.TextField(
-        blank=True,
-        verbose_name=_('Motivo de rechazo'),
-        help_text=_('Razón por la cual se rechazó al usuario')
-    )
-    
-    # Fechas de control
     created_at = models.DateTimeField(
+        _('created at'),
         auto_now_add=True,
-        verbose_name=_('Fecha de creación')
+        help_text=_('Date and time when the record was created.')
     )
     
     updated_at = models.DateTimeField(
+        _('updated at'),
         auto_now=True,
-        verbose_name=_('Fecha de actualización')
+        help_text=_('Date and time when the record was last updated.')
     )
     
-    # Corregir conflictos de related_name
-    groups = models.ManyToManyField(
-        'auth.Group',
-        verbose_name=_('groups'),
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text=_(
-            'The groups this user belongs to. A user will get all permissions '
-            'granted to each of their groups.'
-        ),
-        related_name='vendo_sri_user_set',
-        related_query_name='vendo_sri_user',
+        related_name='%(class)s_created',
+        verbose_name=_('created by'),
+        help_text=_('User who created this record.')
     )
     
-    user_permissions = models.ManyToManyField(
-        'auth.Permission',
-        verbose_name=_('user permissions'),
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
-        help_text=_('Specific permissions for this user.'),
-        related_name='vendo_sri_user_set',
-        related_query_name='vendo_sri_user',
+        related_name='%(class)s_updated',
+        verbose_name=_('updated by'),
+        help_text=_('User who last updated this record.')
     )
     
-    # Configuración para login con email
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
+    is_active = models.BooleanField(
+        _('is active'),
+        default=True,
+        help_text=_('Designates whether this record should be treated as active.')
+    )
     
     class Meta:
-        verbose_name = _('Usuario')
-        verbose_name_plural = _('Usuarios')
-        db_table = 'users_user'
-        indexes = [
-            models.Index(fields=['email']),
-            models.Index(fields=['document_number']),
-            models.Index(fields=['is_active', 'is_staff']),
-            models.Index(fields=['approval_status']),
-            models.Index(fields=['created_at']),
-        ]
-    
-    def __str__(self):
-        return f"{self.get_full_name()} ({self.email})"
-    
-    def clean(self):
-        """Validaciones personalizadas"""
-        from django.core.exceptions import ValidationError
-        
-        super().clean()
-        
-        # Validar email
-        if self.email:
-            self.email = self.email.lower().strip()
-        
-        # Validar documento
-        if self.document_type == 'cedula' and self.document_number:
-            if len(self.document_number) != 10:
-                raise ValidationError({
-                    'document_number': _('La cédula debe tener 10 dígitos.')
-                })
-        elif self.document_type == 'ruc' and self.document_number:
-            if len(self.document_number) != 13:
-                raise ValidationError({
-                    'document_number': _('El RUC debe tener 13 dígitos.')
-                })
+        abstract = True
+        ordering = ['-created_at']
     
     def save(self, *args, **kwargs):
-        """Sobrescribir save para lógica adicional"""
-        self.full_clean()  # Ejecutar validaciones
-        
-        # Normalizar email
-        if self.email:
-            self.email = self.email.lower().strip()
-        
-        # Lógica de usuarios nuevos - automáticamente en estado pendiente
-        if not self.pk:  # Usuario nuevo
-            # Solo los superusuarios y system_admin se aprueban automáticamente
-            if self.is_superuser or self.is_system_admin:
-                self.approval_status = 'approved'
-                self.approved_at = timezone.now()
-        
+        """Guarda el modelo con validaciones adicionales"""
+        self.full_clean()
         super().save(*args, **kwargs)
-        
-        # Crear perfil automáticamente
-        if not hasattr(self, 'profile'):
-            UserProfile.objects.get_or_create(user=self)
-    
-    def get_absolute_url(self):
-        return reverse('users:user_detail', kwargs={'pk': self.pk})
-    
-    def get_full_name(self):
-        """Retorna el nombre completo del usuario"""
-        return f"{self.first_name} {self.last_name}".strip() or self.username
-    
-    # ==========================================
-    # MÉTODOS DE APROBACIÓN
-    # ==========================================
-    
-    def is_pending_approval(self):
-        """Verifica si el usuario está pendiente de aprobación"""
-        return self.approval_status == 'pending'
-    
-    def is_approved(self):
-        """Verifica si el usuario ha sido aprobado"""
-        return self.approval_status == 'approved'
-    
-    def is_rejected(self):
-        """Verifica si el usuario ha sido rechazado"""
-        return self.approval_status == 'rejected'
-    
-    def can_login(self):
-        """Verifica si el usuario puede iniciar sesión"""
-        return self.is_active and self.is_approved()
-    
-    def approve_user(self, approved_by_user, send_notification=True):
-        """Aprueba al usuario"""
-        self.approval_status = 'approved'
-        self.approved_by = approved_by_user
-        self.approved_at = timezone.now()
-        self.is_active = True  # También activarlo
-        self.save(update_fields=[
-            'approval_status', 'approved_by', 'approved_at', 'is_active'
-        ])
-        
-        if send_notification:
-            # Aquí se podría agregar lógica de notificación
-            pass
-    
-    def reject_user(self, rejected_by_user, reason='', send_notification=True):
-        """Rechaza al usuario"""
-        self.approval_status = 'rejected'
-        self.approved_by = rejected_by_user
-        self.approved_at = timezone.now()
-        self.rejection_reason = reason
-        self.is_active = False  # También desactivarlo
-        self.save(update_fields=[
-            'approval_status', 'approved_by', 'approved_at', 
-            'rejection_reason', 'is_active'
-        ])
-        
-        if send_notification:
-            # Aquí se podría agregar lógica de notificación
-            pass
-
-    def get_approval_status_display_with_icon(self):
-        """Retorna el estado de aprobación con icono"""
-        status_icons = {
-            'pending': '⏳',
-            'approved': '✅',
-            'rejected': '❌',
-        }
-        icon = status_icons.get(self.approval_status, '❓')
-        display = self.get_approval_status_display()
-        return f"{icon} {display}"
 
 
-class UserProfile(models.Model):
+class AuditLog(BaseModel):
     """
-    Perfil extendido del usuario
+    Registro de auditoría para cambios importantes en el sistema
     """
-    user = models.OneToOneField(
-        User,
-        on_delete=models.CASCADE,
-        related_name='profile',
-        verbose_name=_('Usuario')
-    )
     
-    # Información profesional
-    position = models.CharField(
-        max_length=100,
-        blank=True,
-        verbose_name=_('Cargo')
-    )
+    ACTION_CHOICES = [
+        ('CREATE', _('Create')),
+        ('UPDATE', _('Update')),
+        ('DELETE', _('Delete')),
+        ('LOGIN', _('Login')),
+        ('LOGOUT', _('Logout')),
+        ('EXPORT', _('Export')),
+        ('IMPORT', _('Import')),
+        ('SEND', _('Send')),
+        ('RECEIVE', _('Receive')),
+        ('AUTHORIZE', _('Authorize')),
+        ('REJECT', _('Reject')),
+    ]
     
-    department = models.CharField(
-        max_length=100,
-        blank=True,
-        verbose_name=_('Departamento')
-    )
-    
-    employee_code = models.CharField(
-        max_length=20,
-        blank=True,
-        unique=True,
-        null=True,
-        verbose_name=_('Código de empleado')
-    )
-    
-    # Configuraciones de la interfaz
-    theme = models.CharField(
-        max_length=20,
-        choices=[
-            ('light', _('Claro')),
-            ('dark', _('Oscuro')),
-            ('auto', _('Automático')),
-        ],
-        default='light',
-        verbose_name=_('Tema')
-    )
-    
-    sidebar_collapsed = models.BooleanField(
-        default=False,
-        verbose_name=_('Sidebar colapsado')
-    )
-    
-    # Notificaciones
-    email_notifications = models.BooleanField(
-        default=True,
-        verbose_name=_('Notificaciones por email')
-    )
-    
-    sms_notifications = models.BooleanField(
-        default=False,
-        verbose_name=_('Notificaciones por SMS')
-    )
-    
-    system_notifications = models.BooleanField(
-        default=True,
-        verbose_name=_('Notificaciones del sistema')
-    )
-    
-    # Información adicional
-    bio = models.TextField(
-        blank=True,
-        verbose_name=_('Biografía')
-    )
-    
-    social_media = models.JSONField(
-        default=dict,
-        blank=True,
-        verbose_name=_('Redes sociales')
-    )
-    
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        verbose_name = _('Perfil de usuario')
-        verbose_name_plural = _('Perfiles de usuario')
-        db_table = 'users_user_profile'
-    
-    def __str__(self):
-        return f"Perfil de {self.user.get_full_name()}"
-
-
-class UserSession(models.Model):
-    """
-    Modelo para gestionar sesiones de usuario
-    """
     user = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
-        related_name='sessions',
-        verbose_name=_('Usuario')
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='audit_logs',
+        verbose_name=_('user'),
+        help_text=_('User who performed the action.')
     )
     
-    # Información de la sesión
-    session_key = models.CharField(
-        max_length=40,
-        unique=True,
-        verbose_name=_('Clave de sesión')
+    action = models.CharField(
+        _('action'),
+        max_length=20,
+        choices=ACTION_CHOICES,
+        help_text=_('Type of action performed.')
+    )
+    
+    model_name = models.CharField(
+        _('model name'),
+        max_length=100,
+        help_text=_('Name of the model affected.')
+    )
+    
+    object_id = models.CharField(
+        _('object ID'),
+        max_length=100,
+        blank=True,
+        help_text=_('ID of the object affected.')
+    )
+    
+    object_representation = models.CharField(
+        _('object representation'),
+        max_length=255,
+        blank=True,
+        help_text=_('String representation of the object.')
+    )
+    
+    changes = models.JSONField(
+        _('changes'),
+        default=dict,
+        blank=True,
+        help_text=_('JSON representation of changes made.')
     )
     
     ip_address = models.GenericIPAddressField(
-        verbose_name=_('Dirección IP')
+        _('IP address'),
+        null=True,
+        blank=True,
+        help_text=_('IP address from which the action was performed.')
     )
     
     user_agent = models.TextField(
+        _('user agent'),
         blank=True,
-        verbose_name=_('User Agent')
+        help_text=_('Browser/client information.')
     )
     
-    # Control de tiempo
-    login_at = models.DateTimeField(
-        auto_now_add=True,
-        verbose_name=_('Inicio de sesión')
-    )
-    
-    last_activity = models.DateTimeField(
-        auto_now=True,
-        verbose_name=_('Última actividad')
-    )
-    
-    logout_at = models.DateTimeField(
-        null=True,
+    additional_data = models.JSONField(
+        _('additional data'),
+        default=dict,
         blank=True,
-        verbose_name=_('Cierre de sesión')
-    )
-    
-    # Estado
-    is_expired = models.BooleanField(
-        default=False,
-        verbose_name=_('Expirada')
+        help_text=_('Additional context data.')
     )
     
     class Meta:
-        verbose_name = _('Sesión de usuario')
-        verbose_name_plural = _('Sesiones de usuario')
-        db_table = 'users_user_session'
+        verbose_name = _('Audit Log')
+        verbose_name_plural = _('Audit Logs')
+        ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['user', 'login_at']),
-            models.Index(fields=['session_key']),
-            models.Index(fields=['is_expired']),
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['action', 'created_at']),
+            models.Index(fields=['model_name', 'object_id']),
         ]
     
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.login_at}"
+        user_display = self.user.get_display_name() if self.user else _('System')
+        return f"{user_display} - {self.get_action_display()} - {self.model_name}"
+
+
+class SystemConfiguration(BaseModel):
+    """
+    Configuraciones del sistema
+    """
+    
+    CONFIG_TYPES = [
+        ('SYSTEM', _('System')),
+        ('SRI', _('SRI')),
+        ('EMAIL', _('Email')),
+        ('NOTIFICATION', _('Notification')),
+        ('SECURITY', _('Security')),
+        ('BACKUP', _('Backup')),
+    ]
+    
+    key = models.CharField(
+        _('configuration key'),
+        max_length=100,
+        unique=True,
+        help_text=_('Unique identifier for the configuration.')
+    )
+    
+    value = models.TextField(
+        _('configuration value'),
+        help_text=_('Configuration value (can be JSON).')
+    )
+    
+    config_type = models.CharField(
+        _('configuration type'),
+        max_length=20,
+        choices=CONFIG_TYPES,
+        default='SYSTEM',
+        help_text=_('Type of configuration.')
+    )
+    
+    description = models.TextField(
+        _('description'),
+        blank=True,
+        help_text=_('Description of what this configuration does.')
+    )
+    
+    is_sensitive = models.BooleanField(
+        _('is sensitive'),
+        default=False,
+        help_text=_('Whether this configuration contains sensitive data.')
+    )
+    
+    class Meta:
+        verbose_name = _('System Configuration')
+        verbose_name_plural = _('System Configurations')
+        ordering = ['config_type', 'key']
+    
+    def __str__(self):
+        return f"{self.get_config_type_display()}: {self.key}"
+
+
+class FileUpload(BaseModel):
+    """
+    Registro de archivos subidos al sistema
+    """
+    
+    FILE_TYPES = [
+        ('DOCUMENT', _('Document')),
+        ('IMAGE', _('Image')),
+        ('CERTIFICATE', _('Certificate')),
+        ('BACKUP', _('Backup')),
+        ('EXPORT', _('Export')),
+        ('IMPORT', _('Import')),
+        ('LOG', _('Log')),
+    ]
+    
+    file = models.FileField(
+        _('file'),
+        upload_to='uploads/%Y/%m/%d/',
+        help_text=_('Uploaded file.')
+    )
+    
+    original_name = models.CharField(
+        _('original file name'),
+        max_length=255,
+        help_text=_('Original name of the uploaded file.')
+    )
+    
+    file_type = models.CharField(
+        _('file type'),
+        max_length=20,
+        choices=FILE_TYPES,
+        default='DOCUMENT',
+        help_text=_('Type of file uploaded.')
+    )
+    
+    file_size = models.PositiveIntegerField(
+        _('file size'),
+        help_text=_('Size of the file in bytes.')
+    )
+    
+    mime_type = models.CharField(
+        _('MIME type'),
+        max_length=100,
+        blank=True,
+        help_text=_('MIME type of the file.')
+    )
+    
+    description = models.TextField(
+        _('description'),
+        blank=True,
+        help_text=_('Description of the file.')
+    )
+    
+    is_public = models.BooleanField(
+        _('is public'),
+        default=False,
+        help_text=_('Whether this file can be accessed publicly.')
+    )
+    
+    checksum = models.CharField(
+        _('checksum'),
+        max_length=64,
+        blank=True,
+        help_text=_('File checksum for integrity verification.')
+    )
+    
+    class Meta:
+        verbose_name = _('File Upload')
+        verbose_name_plural = _('File Uploads')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.original_name} ({self.get_file_type_display()})"
     
     @property
-    def duration(self):
-        """Retorna la duración de la sesión"""
-        end_time = self.logout_at or self.last_activity
-        return end_time - self.login_at if end_time else None
+    def file_size_human(self):
+        """Devuelve el tamaño del archivo en formato legible"""
+        size = self.file_size
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024.0:
+                return f"{size:.1f} {unit}"
+            size /= 1024.0
+        return f"{size:.1f} TB"

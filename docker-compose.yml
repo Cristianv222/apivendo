@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
 
   web:
-    build: .
+    image: vendo_sri_web  # ← CORREGIDO: usar imagen en lugar de build
     container_name: vendo_sri_web
     command: python manage.py runserver 0.0.0.0:8000
     volumes:

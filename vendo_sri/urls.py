@@ -8,23 +8,89 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
 from django.http import HttpResponse
-from apps.users.views import dashboard_view
+
+# ==========================================
+# VISTAS TEMPORALES BÁSICAS
+# ==========================================
 
 def home_redirect(request):
     """Redirección inteligente desde la raíz"""
     if request.user.is_authenticated:
-        if request.user.is_pending_approval():
-            return redirect('users:waiting_room')
-        elif request.user.is_rejected():
-            return redirect('users:account_rejected')
-        elif request.user.is_approved():
-            return redirect('dashboard')
-    
+        return redirect('dashboard')
     return redirect('account_login')
+
+def dashboard_view(request):
+    """Vista temporal básica del dashboard"""
+    if not request.user.is_authenticated:
+        return redirect('account_login')
+    
+    # Template básico inline
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Dashboard - VENDO SRI</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    </head>
+    <body>
+        <nav class="navbar navbar-dark bg-primary">
+            <div class="container">
+                <span class="navbar-brand">VENDO SRI</span>
+                <div>
+                    <span class="text-white me-3">Hola, {request.user.email}</span>
+                    <a href="/accounts/logout/" class="btn btn-outline-light btn-sm">Salir</a>
+                </div>
+            </div>
+        </nav>
+        <div class="container mt-4">
+            <div class="row">
+                <div class="col-12">
+                    <div class="alert alert-success">
+                        <h4>¡Sistema funcionando correctamente!</h4>
+                        <p>Usuario: <strong>{request.user.email}</strong></p>
+                        <p>Las migraciones y configuración están listas.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Panel de Administración</h5>
+                        </div>
+                        <div class="card-body">
+                            <p>Accede al panel de administración para gestionar usuarios, empresas y configuración.</p>
+                            <a href="/admin/" class="btn btn-primary">Ir al Admin</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5>Información del Usuario</h5>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Email:</strong> {request.user.email}</p>
+                            <p><strong>Nombre:</strong> {request.user.get_full_name() or 'No configurado'}</p>
+                            <p><strong>Staff:</strong> {'Sí' if request.user.is_staff else 'No'}</p>
+                            <p><strong>Superuser:</strong> {'Sí' if request.user.is_superuser else 'No'}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+    return HttpResponse(html)
 
 def health_check(request):
     """Endpoint de salud para monitoreo"""
     return HttpResponse("OK - VENDO_SRI", content_type='text/plain')
+
+# ==========================================
+# CONFIGURACIÓN DE URLs
+# ==========================================
 
 urlpatterns = [
     # ==========================================
@@ -43,19 +109,19 @@ urlpatterns = [
     path('dashboard/', dashboard_view, name='dashboard'),
     
     # ==========================================
-    # AUTENTICACIÓN (ALLAUTH + CUSTOM)
+    # AUTENTICACIÓN (ALLAUTH)
     # ==========================================
     
     # URLs de allauth (incluye OAuth con Google)
     path('accounts/', include('allauth.urls')),
     
-    # URLs personalizadas de users (sala de espera, etc.)
-    path('accounts/', include('apps.users.urls')),
+    # URLs personalizadas de users (comentadas por ahora)
+    # path('accounts/', include('apps.users.urls')),
     
     # ==========================================
-    # APLICACIONES LOCALES
+    # APLICACIONES LOCALES (COMENTADAS POR AHORA)
     # ==========================================
-    path('api/', include('apps.api.urls')),
+    # path('api/', include('apps.api.urls')),
     # path('companies/', include('apps.companies.urls')),
     # path('invoicing/', include('apps.invoicing.urls')),
     # path('certificates/', include('apps.certificates.urls')),
@@ -143,8 +209,7 @@ print("\n=== RUTAS DE AUTENTICACIÓN DISPONIBLES ===")
 print("📧 Login con email: /accounts/login/")
 print("🔗 Login con Google: /accounts/google/login/")
 print("🚪 Logout: /accounts/logout/")
-print("⏳ Sala de espera: /accounts/waiting-room/")
-print("❌ Cuenta rechazada: /accounts/account-rejected/")
-print("👥 Gestión usuarios (admin): /accounts/pending-approval/")
 print("🏠 Dashboard: /dashboard/")
+print("🔧 Admin: /admin/")
+print("💚 Health check: /health/")
 print("===============================================")
