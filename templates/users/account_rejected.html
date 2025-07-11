@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuenta Rechazada - VENDO SRI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .rejected-container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            padding: 3rem;
+            max-width: 600px;
+            width: 100%;
+            margin: 20px;
+            text-align: center;
+        }
+        
+        .rejected-icon {
+            font-size: 4rem;
+            color: #dc3545;
+            margin-bottom: 2rem;
+        }
+        
+        .rejected-title {
+            color: #343a40;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+        
+        .rejected-message {
+            color: #6c757d;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+        
+        .info-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.5rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .info-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .info-label {
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .info-value {
+            color: #6c757d;
+        }
+        
+        .reason-card {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+        
+        .reason-title {
+            color: #856404;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .reason-text {
+            color: #664d03;
+            line-height: 1.6;
+            font-style: italic;
+        }
+        
+        .contact-info {
+            background: #e3f2fd;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        
+        .btn-group .btn {
+            margin: 0 0.5rem;
+            border-radius: 10px;
+            padding: 12px 24px;
+            font-weight: 500;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+            border: none;
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #545b62 100%);
+            border: none;
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+            color: white;
+            text-decoration: none;
+        }
+        
+        .rejected-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: #f8d7da;
+            color: #721c24;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        @media (max-width: 768px) {
+            .rejected-container {
+                padding: 2rem 1.5rem;
+                margin: 10px;
+            }
+            
+            .rejected-icon {
+                font-size: 3rem;
+            }
+            
+            .info-item {
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+            
+            .btn-group .btn {
+                width: 100%;
+                margin: 0.5rem 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="rejected-container">
+        <!-- Icono de rechazo -->
+        <div class="rejected-icon">
+            <i class="fas fa-times-circle"></i>
+        </div>
+        
+        <!-- Título y mensaje principal -->
+        <h1 class="rejected-title">Tu solicitud de cuenta ha sido rechazada</h1>
+        <p class="rejected-message">
+            Lamentamos informarte que tu solicitud de registro no ha sido aprobada. 
+            Puedes encontrar más detalles sobre el motivo del rechazo a continuación.
+        </p>
+        
+        <!-- Información del usuario -->
+        <div class="info-card">
+            <h5 class="mb-3"><i class="fas fa-user-circle me-2 text-primary"></i>Información de tu cuenta</h5>
+            
+            <div class="info-item">
+                <span class="info-label">Nombre:</span>
+                <span class="info-value">{{ user.get_full_name }}</span>
+            </div>
+            
+            <div class="info-item">
+                <span class="info-label">Email:</span>
+                <span class="info-value">{{ user.email }}</span>
+            </div>
+            
+            <div class="info-item">
+                <span class="info-label">Fecha de rechazo:</span>
+                <span class="info-value">{{ rejected_at|date:"d/m/Y H:i" }}</span>
+            </div>
+            
+            {% if rejected_by %}
+            <div class="info-item">
+                <span class="info-label">Revisado por:</span>
+                <span class="info-value">{{ rejected_by.get_full_name }}</span>
+            </div>
+            {% endif %}
+            
+            <div class="info-item">
+                <span class="info-label">Estado:</span>
+                <span class="info-value">
+                    <span class="rejected-status">
+                        <i class="fas fa-times-circle"></i>
+                        Rechazada
+                    </span>
+                </span>
+            </div>
+        </div>
+        
+        <!-- Motivo del rechazo -->
+        {% if rejection_reason %}
+        <div class="reason-card">
+            <h6 class="reason-title">
+                <i class="fas fa-exclamation-triangle"></i>
+                Motivo del rechazo
+            </h6>
+            <p class="reason-text">{{ rejection_reason }}</p>
+        </div>
+        {% endif %}
+        
+        <!-- Información de contacto -->
+        <div class="contact-info">
+            <h6 class="mb-2"><i class="fas fa-info-circle me-2 text-info"></i>¿Tienes alguna pregunta?</h6>
+            <p class="mb-2 small">
+                Si no estás de acuerdo con esta decisión o necesitas más información, 
+                puedes contactarnos para solicitar una revisión:
+            </p>
+            <p class="mb-0 small">
+                <i class="fas fa-envelope me-2"></i>
+                <a href="mailto:{{ contact_email }}?subject=Revisión de cuenta rechazada - {{ user.email }}">{{ contact_email }}</a>
+            </p>
+        </div>
+        
+        <!-- Botones de acción -->
+        <div class="btn-group mt-4">
+            <a href="mailto:{{ contact_email }}?subject=Revisión de cuenta rechazada - {{ user.email }}&body=Hola,%0A%0ASolicito una revisión de mi cuenta rechazada.%0A%0AEmail: {{ user.email }}%0ANombre: {{ user.get_full_name }}%0AFecha de rechazo: {{ rejected_at|date:'d/m/Y H:i' }}%0A%0AGracias." 
+               class="btn btn-primary">
+                <i class="fas fa-envelope me-2"></i>
+                Solicitar Revisión
+            </a>
+            
+            <a href="{% url 'users:logout' %}" class="btn btn-secondary">
+                <i class="fas fa-sign-out-alt me-2"></i>
+                Cerrar Sesión
+            </a>
+        </div>
+        
+        <!-- Información adicional -->
+        <div class="mt-4">
+            <small class="text-muted">
+                <i class="fas fa-shield-alt me-1"></i>
+                Las decisiones de aprobación se basan en nuestras políticas de seguridad y términos de servicio.
+            </small>
+        </div>
+        
+        <!-- Sugerencias -->
+        <div class="mt-3">
+            <small class="text-muted">
+                <strong>Posibles motivos de rechazo:</strong>
+                Información incompleta, documentos no válidos, violación de términos de servicio, 
+                o solicitudes duplicadas.
+            </small>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Función para copiar email al portapapeles
+        function copyEmail() {
+            const email = '{{ contact_email }}';
+            navigator.clipboard.writeText(email).then(function() {
+                // Mostrar feedback visual
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-check me-2"></i>Copiado';
+                btn.classList.add('btn-success');
+                
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('btn-success');
+                }, 2000);
+            });
+        }
+        
+        // Función para expandir/contraer detalles
+        function toggleDetails() {
+            const details = document.querySelector('.additional-details');
+            const btn = document.querySelector('.toggle-details-btn');
+            
+            if (details.style.display === 'none') {
+                details.style.display = 'block';
+                btn.innerHTML = '<i class="fas fa-chevron-up me-2"></i>Ocultar detalles';
+            } else {
+                details.style.display = 'none';
+                btn.innerHTML = '<i class="fas fa-chevron-down me-2"></i>Ver más detalles';
+            }
+        }
+        
+        // Auto-scroll suave al cargar
+        document.addEventListener('DOMContentLoaded', function() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    </script>
+</body>
+</html>

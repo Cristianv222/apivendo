@@ -1,6 +1,59 @@
-Django==4.2.7
-python-decouple==3.8
-asgiref==3.9.1
+# ============================================
+# REQUIREMENTS.TXT PARA VENDO_SRI CON OAUTH
+# ============================================
+
+# Django Core
+Django==5.2.3
+asgiref==3.8.1
 sqlparse==0.5.3
 tzdata==2025.2
-psycopg2-binary>=2.9.0
+
+# Database
+psycopg2-binary==2.9.10
+
+# Authentication & OAuth (AGREGADO)
+django-allauth==65.9.0
+PyJWT==2.10.1
+oauthlib==3.3.1
+requests-oauthlib==2.0.0
+
+# API & REST
+djangorestframework==3.16.0
+django-cors-headers==4.7.0
+django-filter==25.1
+
+# Forms & UI
+django-crispy-forms==2.4
+crispy-bootstrap5==2025.6
+
+# Configuration
+python-decouple==3.8
+
+# Utilities
+Pillow==11.2.1
+requests==2.32.4
+python-dateutil==2.9.0.post0
+
+# Development (opcional)
+django-debug-toolbar==5.2.0
+django-extensions==4.1
+
+# Security & Validation
+cryptography==45.0.4
+certifi==2025.6.15
+
+# File processing
+openpyxl==3.1.5
+reportlab==4.4.2
+
+# XML processing (para SRI)
+lxml==5.4.0
+xmltodict==0.14.2
+
+# Celery & Redis (si planeas usarlos)
+# celery==5.5.3
+# redis==6.2.0
+# django-redis==6.0.0
+
+# Rate limiting (si planeas usarlo)
+# django-ratelimit==4.1.0

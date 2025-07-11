@@ -16,8 +16,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar código
 COPY . .
 
-# Crear directorios
+# Crear directorios y archivo de log
 RUN mkdir -p storage/logs storage/backups storage/certificates
+RUN touch storage/logs/vendo_sri.log
+RUN chmod -R 755 storage/
 
 # Puerto
 EXPOSE 8000

@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: test-build
+    build: .
     container_name: vendo_sri_web
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
