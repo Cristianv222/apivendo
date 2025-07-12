@@ -7,6 +7,7 @@ Sistema de Usuarios personalizado para VENDO_SRI
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 
 
 class UserManager(BaseUserManager):
@@ -173,3 +174,213 @@ class UserProfile(models.Model):
     
     def __str__(self):
         return f"Profile for {self.user.get_display_name()}"
+
+
+# ==========================================
+# NUEVOS MODELOS PARA SALA DE ESPERA
+# ==========================================
+
+class UserCompanyAssignment(models.Model):
+    """Modelo para asignar usuarios a empresas específicas"""
+    
+    STATUS_CHOICES = [
+        ('waiting', _('En Sala de Espera')),
+        ('assigned', _('Asignado')),
+        ('rejected', _('Rechazado')),
+        ('suspended', _('Suspendido')),
+    ]
+    
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='company_assignment',
+        verbose_name=_('Usuario')
+    )
+    
+    assigned_companies = models.ManyToManyField(
+        'companies.Company',
+        blank=True,
+        related_name='assigned_users',
+        verbose_name=_('Empresas Asignadas')
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='waiting',
+        verbose_name=_('Estado')
+    )
+    
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='users_assigned',
+        verbose_name=_('Asignado por')
+    )
+    
+    assigned_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Fecha de Asignación')
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        verbose_name=_('Notas del Administrador')
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Fecha de Creación')
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=_('Última Actualización')
+    )
+    
+    class Meta:
+        verbose_name = _('Asignación de Usuario')
+        verbose_name_plural = _('Asignaciones de Usuarios')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.get_status_display()}"
+    
+    def assign_companies(self, companies, assigned_by_user):
+        """Asignar empresas al usuario"""
+        self.assigned_companies.set(companies)
+        self.status = 'assigned'
+        self.assigned_by = assigned_by_user
+        self.assigned_at = timezone.now()
+        self.save()
+    
+    def is_waiting(self):
+        """Verifica si el usuario está en sala de espera"""
+        return self.status == 'waiting'
+    
+    def is_assigned(self):
+        """Verifica si el usuario ya fue asignado"""
+        return self.status == 'assigned'
+    
+    def get_assigned_companies(self):
+        """Obtiene las empresas asignadas al usuario"""
+        return self.assigned_companies.all()
+
+
+class AdminNotification(models.Model):
+    """Notificaciones para administradores"""
+    
+    NOTIFICATION_TYPES = [
+        ('user_waiting', _('Usuario en Sala de Espera')),
+        ('user_registered', _('Nuevo Usuario Registrado')),
+        ('company_request', _('Solicitud de Empresa')),
+        ('system_alert', _('Alerta del Sistema')),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('low', _('Baja')),
+        ('normal', _('Normal')),
+        ('high', _('Alta')),
+        ('urgent', _('Urgente')),
+    ]
+    
+    notification_type = models.CharField(
+        max_length=20,
+        choices=NOTIFICATION_TYPES,
+        verbose_name=_('Tipo de Notificación')
+    )
+    
+    title = models.CharField(
+        max_length=200,
+        verbose_name=_('Título')
+    )
+    
+    message = models.TextField(
+        verbose_name=_('Mensaje')
+    )
+    
+    priority = models.CharField(
+        max_length=10,
+        choices=PRIORITY_CHOICES,
+        default='normal',
+        verbose_name=_('Prioridad')
+    )
+    
+    related_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='admin_notifications',
+        verbose_name=_('Usuario Relacionado')
+    )
+    
+    is_read = models.BooleanField(
+        default=False,
+        verbose_name=_('Leída')
+    )
+    
+    read_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='read_notifications',
+        verbose_name=_('Leída por')
+    )
+    
+    read_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name=_('Fecha de Lectura')
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('Fecha de Creación')
+    )
+    
+    class Meta:
+        verbose_name = _('Notificación de Admin')
+        verbose_name_plural = _('Notificaciones de Admin')
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['is_read', '-created_at']),
+            models.Index(fields=['notification_type']),
+            models.Index(fields=['priority']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} - {self.get_priority_display()}"
+    
+    def mark_as_read(self, user):
+        """Marcar notificación como leída"""
+        self.is_read = True
+        self.read_by = user
+        self.read_at = timezone.now()
+        self.save()
+    
+    @classmethod
+    def create_user_waiting_notification(cls, user):
+        """Crear notificación cuando un usuario está en sala de espera"""
+        return cls.objects.create(
+            notification_type='user_waiting',
+            title=f'Usuario en sala de espera',
+            message=f'El usuario {user.email} está esperando asignación de empresa.',
+            priority='normal',
+            related_user=user
+        )
+    
+    @classmethod
+    def create_user_registered_notification(cls, user):
+        """Crear notificación cuando se registra un nuevo usuario"""
+        return cls.objects.create(
+            notification_type='user_registered',
+            title=f'Nuevo usuario registrado',
+            message=f'Se ha registrado un nuevo usuario: {user.email}',
+            priority='normal',
+            related_user=user
+        )

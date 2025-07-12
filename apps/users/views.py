@@ -1,148 +1,131 @@
 # -*- coding: utf-8 -*-
 """
 Views for users app
-Vistas para la gestión de usuarios en VENDO_SRI
+Vistas para gestión de usuarios y sala de espera
 """
 
 from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
-from django.contrib.auth import login, logout
 from django.contrib import messages
-from django.utils.translation import gettext_lazy as _
-from django.views.generic import TemplateView
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.csrf import csrf_exempt
-import json
-
+from django.utils.deprecation import MiddlewareMixin
+from .models import UserCompanyAssignment, AdminNotification
 
 @login_required
-def dashboard_view(request):
-    """
-    Vista principal del dashboard para usuarios autenticados
-    """
-    context = {
-        'user': request.user,
-        'company': request.user.company if hasattr(request.user, 'company') else None,
-        'title': _('Dashboard'),
-    }
-    return render(request, 'users/dashboard.html', context)
-
-
-class DashboardView(LoginRequiredMixin, TemplateView):
-    """
-    Vista basada en clase para el dashboard
-    """
-    template_name = 'users/dashboard.html'
+def waiting_room_view(request):
+    """Vista de sala de espera para usuarios no asignados"""
     
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context.update({
-            'user': self.request.user,
-            'company': getattr(self.request.user, 'company', None),
-            'title': _('Dashboard'),
-        })
-        return context
-
-
-@login_required
-def profile_view(request):
-    """
-    Vista del perfil del usuario
-    """
-    context = {
-        'user': request.user,
-        'profile': getattr(request.user, 'profile', None),
-        'title': _('User Profile'),
-    }
-    return render(request, 'users/profile.html', context)
-
-
-@login_required
-@require_http_methods(["GET", "POST"])
-def profile_update_view(request):
-    """
-    Vista para actualizar el perfil del usuario
-    """
-    if request.method == 'POST':
-        try:
-            # Aquí puedes agregar la lógica para actualizar el perfil
-            # Por ahora, solo mostramos un mensaje de éxito
-            messages.success(request, _('Profile updated successfully.'))
-            return JsonResponse({'success': True, 'message': str(_('Profile updated successfully.'))})
-        except Exception as e:
-            messages.error(request, _('Error updating profile.'))
-            return JsonResponse({'success': False, 'message': str(e)})
+    # Si es admin/staff, redirigir al admin
+    if request.user.is_staff or request.user.is_superuser:
+        return redirect('admin:index')
     
-    return profile_view(request)
-
-
-def login_view(request):
-    """
-    Vista personalizada de login (opcional, django-allauth maneja esto)
-    """
-    if request.user.is_authenticated:
-        return redirect('dashboard')
+    # Obtener o crear asignación del usuario
+    assignment, created = UserCompanyAssignment.objects.get_or_create(
+        user=request.user,
+        defaults={'status': 'waiting'}
+    )
     
+    # Si ya está asignado, redirigir al dashboard
+    if assignment.is_assigned():
+        return redirect('core:dashboard')
+    
+    # Si está rechazado, mostrar mensaje
+    if assignment.status == 'rejected':
+        context = {
+            'status': 'rejected',
+            'message': 'Tu solicitud de acceso ha sido rechazada.',
+            'notes': assignment.notes
+        }
+        return render(request, 'users/waiting_room.html', context)
+    
+    # Si está suspendido
+    if assignment.status == 'suspended':
+        context = {
+            'status': 'suspended',
+            'message': 'Tu cuenta ha sido suspendida.',
+            'notes': assignment.notes
+        }
+        return render(request, 'users/waiting_room.html', context)
+    
+    # Sala de espera normal
     context = {
-        'title': _('Login'),
+        'status': 'waiting',
+        'message': 'Tu solicitud está siendo procesada.',
+        'assignment': assignment,
+        'user': request.user
     }
-    return render(request, 'account/login.html', context)
+    
+    return render(request, 'users/waiting_room.html', context)
 
-
-def logout_view(request):
-    """
-    Vista personalizada de logout
-    """
-    logout(request)
-    messages.success(request, _('You have been logged out successfully.'))
-    return redirect('account_login')
-
-
-@login_required
-def settings_view(request):
-    """
-    Vista de configuraciones del usuario
-    """
-    context = {
-        'user': request.user,
-        'title': _('Settings'),
-    }
-    return render(request, 'users/settings.html', context)
-
-
-# Vista de API para obtener información del usuario (para AJAX)
 @login_required
 @require_http_methods(["GET"])
-def user_info_api(request):
-    """
-    API endpoint para obtener información del usuario actual
-    """
-    user_data = {
-        'id': request.user.id,
-        'email': request.user.email,
-        'full_name': request.user.get_full_name(),
-        'first_name': request.user.first_name,
-        'last_name': request.user.last_name,
-        'is_staff': request.user.is_staff,
-        'is_company_admin': getattr(request.user, 'is_company_admin', False),
-        'company': {
-            'id': request.user.company.id,
-            'name': request.user.company.business_name,
-            'ruc': request.user.company.ruc,
-        } if hasattr(request.user, 'company') and request.user.company else None,
-    }
+def check_assignment_status(request):
+    """API para verificar el estado de asignación (AJAX)"""
     
-    return JsonResponse(user_data)
+    if request.user.is_staff or request.user.is_superuser:
+        return JsonResponse({'status': 'admin', 'redirect': '/admin/'})
+    
+    try:
+        assignment = UserCompanyAssignment.objects.get(user=request.user)
+        
+        if assignment.is_assigned():
+            return JsonResponse({
+                'status': 'assigned',
+                'redirect': '/dashboard/',
+                'companies': [str(comp) for comp in assignment.get_assigned_companies()]
+            })
+        
+        return JsonResponse({
+            'status': assignment.status,
+            'message': assignment.notes if assignment.notes else None
+        })
+        
+    except UserCompanyAssignment.DoesNotExist:
+        # Crear asignación si no existe
+        UserCompanyAssignment.objects.create(user=request.user, status='waiting')
+        return JsonResponse({'status': 'waiting'})
 
 
-# Vista de inicio (redirect)
-def home_view(request):
-    """
-    Vista de inicio que redirige según el estado de autenticación
-    """
-    if request.user.is_authenticated:
-        return redirect('dashboard')
-    else:
-        return redirect('account_login')
+class CheckUserAccessMiddleware(MiddlewareMixin):
+    """Middleware para verificar acceso de usuarios"""
+    
+    def process_request(self, request):
+        # Rutas que no requieren verificación
+        exempt_paths = [
+            '/accounts/',
+            '/admin/',
+            '/users/waiting-room/',
+            '/users/api/check-assignment/',
+            '/health/',
+            '/static/',
+            '/media/',
+            '/__debug__/'
+        ]
+        
+        # Si la ruta está exenta, continuar
+        if any(request.path.startswith(path) for path in exempt_paths):
+            return None
+        
+        # Si no está autenticado, continuar (será manejado por @login_required)
+        if not request.user.is_authenticated:
+            return None
+        
+        # Si es admin/staff, continuar
+        if request.user.is_staff or request.user.is_superuser:
+            return None
+        
+        # Verificar asignación para usuarios normales
+        try:
+            assignment = UserCompanyAssignment.objects.get(user=request.user)
+            
+            # Si no está asignado, redirigir a sala de espera
+            if not assignment.is_assigned():
+                return redirect('users:waiting_room')
+                
+        except UserCompanyAssignment.DoesNotExist:
+            # Si no tiene asignación, crear una y redirigir a sala de espera
+            UserCompanyAssignment.objects.create(user=request.user, status='waiting')
+            return redirect('users:waiting_room')
+        
+        return None

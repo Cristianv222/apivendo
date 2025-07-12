@@ -73,6 +73,10 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # MIDDLEWARE CONFIGURATION
 # ==========================================
 
+# ==========================================
+# MIDDLEWARE CONFIGURATION
+# ==========================================
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -83,6 +87,8 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',  # Requerido para allauth
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # NUEVO: Middleware para control de acceso y sala de espera
+    'apps.users.views.CheckUserAccessMiddleware',
 ]
 
 ROOT_URLCONF = 'vendo_sri.urls'

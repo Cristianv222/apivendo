@@ -1,305 +1,311 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cuenta Pendiente - VENDO SRI</title>
+    <title>Sala de Espera - VENDO SRI</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
         
         .waiting-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
-            padding: 3rem;
-            max-width: 600px;
-            width: 100%;
-            margin: 20px;
-            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
         }
         
-        .waiting-icon {
+        .waiting-card {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .card-header-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .status-icon {
             font-size: 4rem;
-            color: #ffc107;
-            margin-bottom: 2rem;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .status-waiting .status-icon {
             animation: pulse 2s infinite;
         }
         
         @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
         }
         
-        .waiting-title {
-            color: #343a40;
-            margin-bottom: 1rem;
-            font-weight: 600;
+        .card-body-custom {
+            padding: 40px 30px;
         }
         
-        .waiting-message {
-            color: #6c757d;
-            margin-bottom: 2rem;
+        .status-message {
+            font-size: 1.1rem;
             line-height: 1.6;
+            margin-bottom: 30px;
         }
         
-        .info-card {
+        .user-info {
             background: #f8f9fa;
             border-radius: 10px;
-            padding: 1.5rem;
-            margin: 2rem 0;
-            text-align: left;
+            padding: 20px;
+            margin-bottom: 20px;
         }
         
-        .info-item {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.5rem;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #e9ecef;
+        .refresh-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 50px;
+            padding: 12px 30px;
+            color: white;
+            font-weight: 600;
+            transition: all 0.3s ease;
         }
         
-        .info-item:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
+        .refresh-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            color: white;
         }
         
-        .info-label {
-            font-weight: 500;
+        .logout-link {
+            color: #6c757d;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+        
+        .logout-link:hover {
             color: #495057;
         }
         
-        .info-value {
-            color: #6c757d;
+        .status-rejected {
+            border-left: 5px solid #dc3545;
         }
         
-        .contact-info {
-            background: #e3f2fd;
-            border-radius: 10px;
-            padding: 1.5rem;
-            margin-top: 2rem;
+        .status-suspended {
+            border-left: 5px solid #fd7e14;
         }
         
-        .btn-logout {
-            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
-            border: none;
-            border-radius: 10px;
-            padding: 12px 30px;
-            color: white;
-            text-decoration: none;
-            display: inline-block;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            margin-top: 1rem;
+        .admin-notes {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
         }
         
-        .btn-logout:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(220, 53, 69, 0.3);
-            color: white;
-            text-decoration: none;
+        .loading-dots::after {
+            content: '';
+            animation: dots 2s infinite;
         }
         
-        .progress-dots {
-            display: flex;
-            justify-content: center;
-            gap: 10px;
-            margin: 2rem 0;
-        }
-        
-        .dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #dee2e6;
-            animation: loading 1.4s infinite ease-in-out both;
-        }
-        
-        .dot:nth-child(1) { animation-delay: -0.32s; }
-        .dot:nth-child(2) { animation-delay: -0.16s; background: #ffc107; }
-        .dot:nth-child(3) { animation-delay: 0s; }
-        
-        @keyframes loading {
-            0%, 80%, 100% {
-                transform: scale(0);
-            } 40% {
-                transform: scale(1);
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .waiting-container {
-                padding: 2rem 1.5rem;
-                margin: 10px;
-            }
-            
-            .waiting-icon {
-                font-size: 3rem;
-            }
-            
-            .info-item {
-                flex-direction: column;
-                gap: 0.25rem;
-            }
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
         }
     </style>
 </head>
 <body>
     <div class="waiting-container">
-        <!-- Icono animado -->
-        <div class="waiting-icon">
-            <i class="fas fa-hourglass-half"></i>
-        </div>
-        
-        <!-- Título y mensaje principal -->
-        <h1 class="waiting-title">Tu cuenta está pendiente de aprobación</h1>
-        <p class="waiting-message">
-            Hemos recibido tu solicitud de registro y está siendo revisada por nuestro equipo. 
-            Te notificaremos por email cuando tu cuenta sea aprobada y puedas acceder al sistema.
-        </p>
-        
-        <!-- Dots de carga -->
-        <div class="progress-dots">
-            <div class="dot"></div>
-            <div class="dot"></div>
-            <div class="dot"></div>
-        </div>
-        
-        <!-- Información del usuario -->
-        <div class="info-card">
-            <h5 class="mb-3"><i class="fas fa-user-circle me-2 text-primary"></i>Información de tu cuenta</h5>
-            
-            <div class="info-item">
-                <span class="info-label">Nombre:</span>
-                <span class="info-value">{{ user.get_full_name }}</span>
+        <div class="waiting-card">
+            <!-- Header -->
+            <div class="card-header-custom">
+                {% if status == 'waiting' %}
+                    <div class="status-waiting">
+                        <div class="status-icon">
+                            <i class="fas fa-hourglass-half"></i>
+                        </div>
+                        <h2 class="mb-0">Sala de Espera</h2>
+                        <p class="mb-0 mt-2 opacity-75">VENDO SRI</p>
+                    </div>
+                {% elif status == 'rejected' %}
+                    <div class="status-icon">
+                        <i class="fas fa-times-circle"></i>
+                    </div>
+                    <h2 class="mb-0">Acceso Denegado</h2>
+                {% elif status == 'suspended' %}
+                    <div class="status-icon">
+                        <i class="fas fa-pause-circle"></i>
+                    </div>
+                    <h2 class="mb-0">Cuenta Suspendida</h2>
+                {% endif %}
             </div>
             
-            <div class="info-item">
-                <span class="info-label">Email:</span>
-                <span class="info-value">{{ user.email }}</span>
+            <!-- Body -->
+            <div class="card-body-custom">
+                {% if status == 'waiting' %}
+                    <div class="text-center">
+                        <h4 class="mb-4">¡Hola, {{ user.get_full_name|default:user.email }}!</h4>
+                        
+                        <div class="status-message">
+                            <p class="mb-3">
+                                <i class="fas fa-info-circle text-primary me-2"></i>
+                                Tu solicitud de acceso está siendo procesada por nuestro equipo.
+                            </p>
+                            <p class="mb-3">
+                                <i class="fas fa-clock text-warning me-2"></i>
+                                Pronto recibirás acceso a las empresas correspondientes.
+                            </p>
+                            <p class="text-muted">
+                                <small><span class="loading-dots">Verificando estado</span></small>
+                            </p>
+                        </div>
+                        
+                        <div class="user-info">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <strong>Email:</strong><br>
+                                    <small class="text-muted">{{ user.email }}</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Fecha de registro:</strong><br>
+                                    <small class="text-muted">{{ user.date_joined|date:"d/m/Y H:i" }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2 d-md-block">
+                            <button type="button" class="btn refresh-btn" onclick="checkStatus()">
+                                <span id="refresh-icon"><i class="fas fa-sync-alt me-2"></i></span>
+                                <span id="refresh-text">Verificar Estado</span>
+                            </button>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <a href="{% url 'account_logout' %}" class="logout-link">
+                                <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
+                            </a>
+                        </div>
+                    </div>
+                    
+                {% elif status == 'rejected' %}
+                    <div class="text-center status-rejected">
+                        <div class="status-message">
+                            <h4 class="text-danger mb-3">Solicitud Rechazada</h4>
+                            <p>{{ message }}</p>
+                            
+                            {% if notes %}
+                                <div class="admin-notes">
+                                    <strong>Comentarios del administrador:</strong><br>
+                                    <small>{{ notes }}</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mt-4">
+                            <a href="{% url 'account_logout' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
+                            </a>
+                        </div>
+                    </div>
+                    
+                {% elif status == 'suspended' %}
+                    <div class="text-center status-suspended">
+                        <div class="status-message">
+                            <h4 class="text-warning mb-3">Cuenta Suspendida</h4>
+                            <p>{{ message }}</p>
+                            
+                            {% if notes %}
+                                <div class="admin-notes">
+                                    <strong>Motivo de suspensión:</strong><br>
+                                    <small>{{ notes }}</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mt-4">
+                            <a href="{% url 'account_logout' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
+                            </a>
+                        </div>
+                    </div>
+                {% endif %}
             </div>
-            
-            <div class="info-item">
-                <span class="info-label">Fecha de registro:</span>
-                <span class="info-value">{{ created_at|date:"d/m/Y H:i" }}</span>
-            </div>
-            
-            <div class="info-item">
-                <span class="info-label">Tiempo en espera:</span>
-                <span class="info-value">
-                    {% if waiting_time.days > 0 %}
-                        {{ waiting_time.days }} día{{ waiting_time.days|pluralize }}
-                    {% else %}
-                        {% if waiting_time.seconds > 3600 %}
-                            {{ waiting_time.seconds|floatformat:0|mul:1|div:3600 }} hora{{ waiting_time.seconds|floatformat:0|mul:1|div:3600|pluralize }}
-                        {% else %}
-                            {{ waiting_time.seconds|floatformat:0|mul:1|div:60 }} minuto{{ waiting_time.seconds|floatformat:0|mul:1|div:60|pluralize }}
-                        {% endif %}
-                    {% endif %}
-                </span>
-            </div>
-            
-            <div class="info-item">
-                <span class="info-label">Estado:</span>
-                <span class="info-value">
-                    <span class="badge bg-warning text-dark">
-                        <i class="fas fa-clock me-1"></i>
-                        Pendiente de aprobación
-                    </span>
-                </span>
-            </div>
-        </div>
-        
-        <!-- Información de contacto -->
-        <div class="contact-info">
-            <h6 class="mb-2"><i class="fas fa-info-circle me-2 text-info"></i>¿Tienes alguna pregunta?</h6>
-            <p class="mb-2 small">
-                Si tienes alguna consulta sobre tu cuenta o necesitas ayuda, 
-                puedes contactarnos:
-            </p>
-            <p class="mb-0 small">
-                <i class="fas fa-envelope me-2"></i>
-                <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
-            </p>
-        </div>
-        
-        <!-- Botones de acción -->
-        <div class="mt-3">
-            <a href="{% url 'users:logout' %}" class="btn-logout">
-                <i class="fas fa-sign-out-alt me-2"></i>
-                Cerrar Sesión
-            </a>
-        </div>
-        
-        <!-- Información adicional -->
-        <div class="mt-4">
-            <small class="text-muted">
-                <i class="fas fa-shield-alt me-1"></i>
-                Por seguridad, todas las cuentas nuevas deben ser aprobadas antes del acceso completo.
-            </small>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    {% if status == 'waiting' %}
     <script>
-        // Auto-refresh cada 30 segundos para verificar si fue aprobado
-        setInterval(function() {
-            fetch('{% url "users:pending_count" %}', {
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                // Si hay cambios, recargar la página
-                if (data.success) {
-                    // Verificar si el usuario actual ya no está pendiente
-                    location.reload();
-                }
-            })
-            .catch(error => {
-                console.log('No se pudo verificar el estado');
-            });
-        }, 30000); // 30 segundos
+        let checkInterval;
         
-        // Mostrar tiempo transcurrido dinámicamente
-        let startTime = new Date('{{ created_at|date:"c" }}');
-        
-        function updateWaitingTime() {
-            let now = new Date();
-            let diff = now - startTime;
-            let seconds = Math.floor(diff / 1000);
-            let minutes = Math.floor(seconds / 60);
-            let hours = Math.floor(minutes / 60);
-            let days = Math.floor(hours / 24);
+        function checkStatus() {
+            const refreshIcon = document.getElementById('refresh-icon');
+            const refreshText = document.getElementById('refresh-text');
             
-            let timeString = '';
-            if (days > 0) {
-                timeString = days + ' día' + (days > 1 ? 's' : '');
-            } else if (hours > 0) {
-                timeString = hours + ' hora' + (hours > 1 ? 's' : '');
-            } else {
-                timeString = minutes + ' minuto' + (minutes > 1 ? 's' : '');
-            }
+            // Mostrar loading
+            refreshIcon.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>';
+            refreshText.textContent = 'Verificando...';
             
-            // Actualizar el DOM si existe el elemento
-            const waitingTimeElement = document.querySelector('.info-item:nth-child(4) .info-value');
-            if (waitingTimeElement) {
-                waitingTimeElement.textContent = timeString;
-            }
+            fetch('{% url "users:check_assignment" %}')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('Status:', data);
+                    
+                    if (data.status === 'assigned') {
+                        // Usuario asignado - redirigir al dashboard
+                        refreshText.textContent = 'Acceso aprobado!';
+                        refreshIcon.innerHTML = '<i class="fas fa-check me-2"></i>';
+                        
+                        setTimeout(() => {
+                            window.location.href = data.redirect;
+                        }, 1000);
+                        
+                    } else if (data.status === 'rejected' || data.status === 'suspended') {
+                        // Estado cambió - recargar página
+                        location.reload();
+                        
+                    } else {
+                        // Aún en espera
+                        refreshIcon.innerHTML = '<i class="fas fa-sync-alt me-2"></i>';
+                        refreshText.textContent = 'Verificar Estado';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    refreshIcon.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>';
+                    refreshText.textContent = 'Error - Reintentar';
+                });
         }
         
-        // Actualizar cada minuto
-        setInterval(updateWaitingTime, 60000);
+        // Verificar estado automáticamente cada 30 segundos
+        checkInterval = setInterval(checkStatus, 30000);
+        
+        // Verificar estado cuando la página se enfoque
+        window.addEventListener('focus', checkStatus);
+        
+        // Limpiar interval cuando se salga de la página
+        window.addEventListener('beforeunload', () => {
+            if (checkInterval) {
+                clearInterval(checkInterval);
+            }
+        });
     </script>
+    {% endif %}
 </body>
 </html>

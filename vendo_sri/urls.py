@@ -7,20 +7,20 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 
 # ==========================================
-# VISTAS TEMPORALES BÁSICAS
+# VISTAS PRINCIPALES
 # ==========================================
 
 def home_redirect(request):
     """Redirección inteligente desde la raíz"""
     if request.user.is_authenticated:
-        return redirect('dashboard')
+        return redirect('core:dashboard')  # Actualizado para usar el nuevo dashboard
     return redirect('account_login')
 
-def dashboard_view(request):
-    """Vista temporal básica del dashboard"""
+def dashboard_view_legacy(request):
+    """Vista temporal básica del dashboard (mantenida como backup)"""
     if not request.user.is_authenticated:
         return redirect('account_login')
     
@@ -49,6 +49,10 @@ def dashboard_view(request):
                         <h4>¡Sistema funcionando correctamente!</h4>
                         <p>Usuario: <strong>{request.user.email}</strong></p>
                         <p>Las migraciones y configuración están listas.</p>
+                        <div class="mt-3">
+                            <a href="/dashboard/" class="btn btn-primary me-2">Nuevo Dashboard</a>
+                            <a href="/admin/" class="btn btn-secondary">Admin</a>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -86,7 +90,12 @@ def dashboard_view(request):
 
 def health_check(request):
     """Endpoint de salud para monitoreo"""
-    return HttpResponse("OK - VENDO_SRI", content_type='text/plain')
+    return JsonResponse({
+        'status': 'ok',
+        'service': 'VENDO_SRI',
+        'database': 'connected',
+        'authenticated_user': request.user.is_authenticated
+    })
 
 # ==========================================
 # CONFIGURACIÓN DE URLs
@@ -104,9 +113,14 @@ urlpatterns = [
     path('', home_redirect, name='home'),
     
     # ==========================================
-    # DASHBOARD
+    # DASHBOARD - NUEVO SISTEMA COMPLETO
     # ==========================================
-    path('dashboard/', dashboard_view, name='dashboard'),
+    
+    # Dashboard principal y funcionalidades completas
+    path('dashboard/', include('apps.core.urls')),
+    
+    # Dashboard legacy (temporal) - puedes eliminarlo después
+    path('dashboard-legacy/', dashboard_view_legacy, name='dashboard_legacy'),
     
     # ==========================================
     # AUTENTICACIÓN (ALLAUTH)
@@ -115,15 +129,23 @@ urlpatterns = [
     # URLs de allauth (incluye OAuth con Google)
     path('accounts/', include('allauth.urls')),
     
-    # URLs personalizadas de users (comentadas por ahora)
-    # path('accounts/', include('apps.users.urls')),
+    # URLs personalizadas de users (cuando las necesites)
+    path('users/', include('apps.users.urls')),
     
     # ==========================================
-    # APLICACIONES LOCALES (COMENTADAS POR AHORA)
+    # APLICACIONES LOCALES - ACTIVADAS GRADUALMENTE
     # ==========================================
+    
+    # API - Ya puedes activar esto
     # path('api/', include('apps.api.urls')),
+    
+    # Empresas - Necesario para el dashboard
     # path('companies/', include('apps.companies.urls')),
+    
+    # Facturación - Necesario para el dashboard
     # path('invoicing/', include('apps.invoicing.urls')),
+    
+    # Otras apps (activar según necesites)
     # path('certificates/', include('apps.certificates.urls')),
     # path('notifications/', include('apps.notifications.urls')),
     # path('settings/', include('apps.settings.urls')),
@@ -200,6 +222,8 @@ print(f"URLs de API: {api_urls}")
 if settings.DEBUG:
     print("Endpoints de desarrollo disponibles:")
     print("  - /health/ (health check)")
+    print("  - /dashboard/ (nuevo dashboard completo)")
+    print("  - /dashboard-legacy/ (dashboard temporal)")
     if 'debug_toolbar' in settings.INSTALLED_APPS:
         print("  - /__debug__/ (Django Debug Toolbar)")
 
