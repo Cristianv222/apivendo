@@ -292,6 +292,28 @@ class FileUpload(BaseModel):
     def __str__(self):
         return f"{self.original_name} ({self.get_file_type_display()})"
     
+    def save(self, *args, **kwargs):
+        """Guarda el archivo calculando automáticamente el tamaño y otros metadatos"""
+        if self.file and not self.file_size:
+            self.file_size = self.file.size
+        
+        if self.file and not self.mime_type:
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(self.file.name)
+            if mime_type:
+                self.mime_type = mime_type
+        
+        if self.file and not self.checksum:
+            import hashlib
+            self.file.seek(0)
+            file_hash = hashlib.md5()
+            for chunk in iter(lambda: self.file.read(4096), b""):
+                file_hash.update(chunk)
+            self.checksum = file_hash.hexdigest()
+            self.file.seek(0)
+        
+        super().save(*args, **kwargs)
+    
     @property
     def file_size_human(self):
         """Devuelve el tamaño del archivo en formato legible"""

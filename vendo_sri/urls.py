@@ -8,6 +8,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
 from django.http import HttpResponse, JsonResponse
+from django.contrib.auth.views import LoginView
+from django.contrib.auth import logout
 
 # ==========================================
 # VISTAS PRINCIPALES
@@ -18,6 +20,19 @@ def home_redirect(request):
     if request.user.is_authenticated:
         return redirect('core:dashboard')  # Actualizado para usar el nuevo dashboard
     return redirect('account_login')
+
+class CustomLoginView(LoginView):
+    """Vista personalizada de login"""
+    template_name = 'users/login.html'
+    redirect_authenticated_user = True
+    
+    def get_success_url(self):
+        return '/dashboard/'
+
+def custom_logout(request):
+    """Logout directo sin página de confirmación"""
+    logout(request)
+    return redirect('account_login')  # Redirige a tu login personalizado
 
 def dashboard_view_legacy(request):
     """Vista temporal básica del dashboard (mantenida como backup)"""
@@ -97,6 +112,7 @@ def health_check(request):
         'authenticated_user': request.user.is_authenticated
     })
 
+
 # ==========================================
 # CONFIGURACIÓN DE URLs
 # ==========================================
@@ -113,6 +129,16 @@ urlpatterns = [
     path('', home_redirect, name='home'),
     
     # ==========================================
+    # AUTENTICACIÓN PERSONALIZADA (ANTES DE ALLAUTH)
+    # ==========================================
+    
+    # LOGIN PERSONALIZADO - USA templates/users/login.html
+    path('accounts/login/', CustomLoginView.as_view(), name='account_login'),
+    
+    # LOGOUT PERSONALIZADO - Sin página de confirmación
+    path('accounts/logout/', custom_logout, name='account_logout'),
+    
+    # ==========================================
     # DASHBOARD - NUEVO SISTEMA COMPLETO
     # ==========================================
     
@@ -123,7 +149,7 @@ urlpatterns = [
     path('dashboard-legacy/', dashboard_view_legacy, name='dashboard_legacy'),
     
     # ==========================================
-    # AUTENTICACIÓN (ALLAUTH)
+    # AUTENTICACIÓN (ALLAUTH) - DESPUÉS DEL LOGIN PERSONALIZADO
     # ==========================================
     
     # URLs de allauth (incluye OAuth con Google)
@@ -134,8 +160,6 @@ urlpatterns = [
     
     # ==========================================
     # APLICACIONES LOCALES - ACTIVADAS GRADUALMENTE
-    # ==========================================
-    
     # API - Ya puedes activar esto
     # path('api/', include('apps.api.urls')),
     
@@ -237,7 +261,7 @@ if settings.DEBUG:
 print("✅ CONFIGURACIÓN DE URLs COMPLETA")
 
 print("\n=== RUTAS DE AUTENTICACIÓN DISPONIBLES ===")
-print("📧 Login con email: /accounts/login/")
+print("📧 Login PERSONALIZADO: /accounts/login/ -> ¡USANDO templates/users/login.html!")
 print("🔗 Login con Google: /accounts/google/login/")
 print("🚪 Logout: /accounts/logout/")
 print("🏠 Dashboard: /dashboard/")
@@ -245,3 +269,5 @@ print("🔧 Admin: /admin/")
 print("💚 Health check: /health/")
 print("===============================================")
 admin.site.index_title = 'Panel de Administración'
+print("===============================================")
+
