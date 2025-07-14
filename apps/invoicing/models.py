@@ -1,6 +1,3 @@
-<<<<<<< Updated upstream
-﻿
-=======
 ﻿# -*- coding: utf-8 -*-
 """
 Models for invoicing app
@@ -469,4 +466,3 @@ class PaymentMethod(BaseModel):
     
     def __str__(self):
         return self.name
->>>>>>> Stashed changes

@@ -135,7 +135,6 @@ urlpatterns = [
     # ==========================================
     # APLICACIONES LOCALES - ACTIVADAS GRADUALMENTE
     # ==========================================
-<<<<<<< Updated upstream
     
     # API - Ya puedes activar esto
     # path('api/', include('apps.api.urls')),
@@ -151,7 +150,6 @@ urlpatterns = [
     # path('notifications/', include('apps.notifications.urls')),
     # path('settings/', include('apps.settings.urls')),
     # path('sri/', include('apps.sri_integration.urls')),
-=======
     path('api/', include('apps.api.urls')),
     path('companies/', include('apps.companies.urls')),
     path('invoicing/', include('apps.invoicing.urls')),
@@ -159,7 +157,6 @@ urlpatterns = [
     path('notifications/', include('apps.notifications.urls')),
     path('settings/', include('apps.settings.urls')),
     path('sri/', include('apps.sri_integration.urls')),
->>>>>>> Stashed changes
     
     # ==========================================
     # UTILIDADES
@@ -213,7 +210,6 @@ else:  # if not settings.DEBUG
 
 admin.site.site_header = 'VENDO_SRI - Administración'
 admin.site.site_title = 'VENDO_SRI Admin'
-<<<<<<< Updated upstream
 admin.site.index_title = 'Panel de Administración'
 
 # ==========================================
@@ -248,6 +244,4 @@ print("🏠 Dashboard: /dashboard/")
 print("🔧 Admin: /admin/")
 print("💚 Health check: /health/")
 print("===============================================")
-=======
 admin.site.index_title = 'Panel de Administración'
->>>>>>> Stashed changes

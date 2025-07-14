@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Gestor de certificados digitales para firma electrónica - VERSIÓN SEGURA
-SIN dependencias problemáticas de SignXML
+Gestor de certificados digitales para firma electrónica - VERSIÓN CORREGIDA
+SIN dependencias problemáticas de SignXML y SIN strip_whitespace
 """
 
 import os
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class CertificateManager:
     """
-    Gestor de certificados digitales P12 - VERSIÓN SEGURA
+    Gestor de certificados digitales P12 - VERSIÓN CORREGIDA
     Implementación propia de firma XML sin dependencias externas problemáticas
     """
     
@@ -113,10 +113,10 @@ class CertificateManager:
             raise ValueError(f"Error signing XML: {str(e)}")
     
     def _sign_xml_custom(self, xml_content):
-        """Implementación propia de firma XML XAdES-BES"""
+        """Implementación propia de firma XML XAdES-BES - CORREGIDA"""
         try:
-            # Parsear el XML
-            parser = etree.XMLParser(strip_whitespace=False)
+            # Parsear el XML - SIN strip_whitespace para evitar problemas
+            parser = etree.XMLParser(remove_blank_text=False)
             root = etree.fromstring(xml_content.encode('utf-8'), parser)
             
             # Canonicalizar el documento para calcular el hash
@@ -406,4 +406,4 @@ class CertificateManager:
         """
         Retorna el método de firma que se está usando
         """
-        return "Custom XAdES-BES Implementation (SHA-256)"
+        return "Custom XAdES-BES Implementation (SHA-256) - Fixed Version"
