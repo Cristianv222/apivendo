@@ -9,6 +9,7 @@ from django.conf.urls.static import static
 from django.shortcuts import redirect
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.views import LoginView
+from django.contrib.auth import logout
 
 # ==========================================
 # VISTAS PRINCIPALES
@@ -27,6 +28,11 @@ class CustomLoginView(LoginView):
     
     def get_success_url(self):
         return '/dashboard/'
+
+def custom_logout(request):
+    """Logout directo sin página de confirmación"""
+    logout(request)
+    return redirect('account_login')  # Redirige a tu login personalizado
 
 def dashboard_view_legacy(request):
     """Vista temporal básica del dashboard (mantenida como backup)"""
@@ -106,6 +112,7 @@ def health_check(request):
         'authenticated_user': request.user.is_authenticated
     })
 
+
 # ==========================================
 # CONFIGURACIÓN DE URLs
 # ==========================================
@@ -127,6 +134,9 @@ urlpatterns = [
     
     # LOGIN PERSONALIZADO - USA templates/users/login.html
     path('accounts/login/', CustomLoginView.as_view(), name='account_login'),
+    
+    # LOGOUT PERSONALIZADO - Sin página de confirmación
+    path('accounts/logout/', custom_logout, name='account_logout'),
     
     # ==========================================
     # DASHBOARD - NUEVO SISTEMA COMPLETO
