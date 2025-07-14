@@ -113,8 +113,8 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # URLs de autenticación
-LOGIN_URL = '/accounts/login/'
-LOGIN_REDIRECT_URL = '/'
+LOGIN_URL = '/users/login/'
+LOGIN_REDIRECT_URL = '/accounts/login/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
 # ==========================================

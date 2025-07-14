@@ -8,6 +8,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.shortcuts import redirect
 from django.http import HttpResponse, JsonResponse
+from django.contrib.auth.views import LoginView
 
 # ==========================================
 # VISTAS PRINCIPALES
@@ -18,6 +19,14 @@ def home_redirect(request):
     if request.user.is_authenticated:
         return redirect('core:dashboard')  # Actualizado para usar el nuevo dashboard
     return redirect('account_login')
+
+class CustomLoginView(LoginView):
+    """Vista personalizada de login"""
+    template_name = 'users/login.html'
+    redirect_authenticated_user = True
+    
+    def get_success_url(self):
+        return '/dashboard/'
 
 def dashboard_view_legacy(request):
     """Vista temporal básica del dashboard (mantenida como backup)"""
@@ -113,6 +122,13 @@ urlpatterns = [
     path('', home_redirect, name='home'),
     
     # ==========================================
+    # AUTENTICACIÓN PERSONALIZADA (ANTES DE ALLAUTH)
+    # ==========================================
+    
+    # LOGIN PERSONALIZADO - USA templates/users/login.html
+    path('accounts/login/', CustomLoginView.as_view(), name='account_login'),
+    
+    # ==========================================
     # DASHBOARD - NUEVO SISTEMA COMPLETO
     # ==========================================
     
@@ -123,7 +139,7 @@ urlpatterns = [
     path('dashboard-legacy/', dashboard_view_legacy, name='dashboard_legacy'),
     
     # ==========================================
-    # AUTENTICACIÓN (ALLAUTH)
+    # AUTENTICACIÓN (ALLAUTH) - DESPUÉS DEL LOGIN PERSONALIZADO
     # ==========================================
     
     # URLs de allauth (incluye OAuth con Google)
@@ -134,9 +150,7 @@ urlpatterns = [
     
     # ==========================================
     # APLICACIONES LOCALES - ACTIVADAS GRADUALMENTE
-    # ==========================================
-<<<<<<< Updated upstream
-    
+    # ========================================== 
     # API - Ya puedes activar esto
     # path('api/', include('apps.api.urls')),
     
@@ -151,7 +165,6 @@ urlpatterns = [
     # path('notifications/', include('apps.notifications.urls')),
     # path('settings/', include('apps.settings.urls')),
     # path('sri/', include('apps.sri_integration.urls')),
-=======
     path('api/', include('apps.api.urls')),
     path('companies/', include('apps.companies.urls')),
     path('invoicing/', include('apps.invoicing.urls')),
@@ -159,7 +172,6 @@ urlpatterns = [
     path('notifications/', include('apps.notifications.urls')),
     path('settings/', include('apps.settings.urls')),
     path('sri/', include('apps.sri_integration.urls')),
->>>>>>> Stashed changes
     
     # ==========================================
     # UTILIDADES
@@ -213,7 +225,6 @@ else:  # if not settings.DEBUG
 
 admin.site.site_header = 'VENDO_SRI - Administración'
 admin.site.site_title = 'VENDO_SRI Admin'
-<<<<<<< Updated upstream
 admin.site.index_title = 'Panel de Administración'
 
 # ==========================================
@@ -241,13 +252,10 @@ if settings.DEBUG:
 print("✅ CONFIGURACIÓN DE URLs COMPLETA")
 
 print("\n=== RUTAS DE AUTENTICACIÓN DISPONIBLES ===")
-print("📧 Login con email: /accounts/login/")
+print("📧 Login PERSONALIZADO: /accounts/login/ -> ¡USANDO templates/users/login.html!")
 print("🔗 Login con Google: /accounts/google/login/")
 print("🚪 Logout: /accounts/logout/")
 print("🏠 Dashboard: /dashboard/")
 print("🔧 Admin: /admin/")
 print("💚 Health check: /health/")
 print("===============================================")
-=======
-admin.site.index_title = 'Panel de Administración'
->>>>>>> Stashed changes
