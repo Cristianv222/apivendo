@@ -424,8 +424,13 @@ class ElectronicDocument(BaseModel):
             emission_point = sri_config.emission_point.zfill(3)
             environment = '1' if sri_config.environment == 'TEST' else '2'
         
-        # 1. FECHA DE EMISIÓN (8 dígitos): ddmmyyyy
-        date_str = self.issue_date.strftime('%d%m%Y')
+        # 1. FECHA DE EMISIÓN (8 dígitos): ddmmyyyy - ✅ CORREGIDO
+        # Manejar tanto string como objeto date
+        if isinstance(self.issue_date, str):
+            date_obj = datetime.strptime(self.issue_date, '%Y-%m-%d').date()
+            date_str = date_obj.strftime('%d%m%Y')
+        else:
+            date_str = self.issue_date.strftime('%d%m%Y')
         
         # 2. TIPO DE COMPROBANTE (2 dígitos)
         doc_type_map = {
@@ -784,7 +789,7 @@ class SRIResponse(BaseModel):
 
 class CreditNote(BaseModel):
     """
-    Nota de Crédito - Documento que anula o corrige una factura
+    Nota de Crédito - Documento que anula o corrige una factura - VERSIÓN CORREGIDA
     """
     CREDIT_NOTE_REASONS = [
         ('01', _('Devolución de bienes')),
@@ -794,6 +799,16 @@ class CreditNote(BaseModel):
         ('05', _('Devolución en compras')),
         ('06', _('Descuento por pronto pago')),
         ('07', _('Otros')),
+    ]
+    
+    STATUS_CHOICES = [
+        ('DRAFT', _('Draft')),
+        ('GENERATED', _('Generated')),
+        ('SIGNED', _('Signed')),
+        ('SENT', _('Sent to SRI')),
+        ('AUTHORIZED', _('Authorized')),
+        ('REJECTED', _('Rejected')),
+        ('ERROR', _('Error')),
     ]
     
     company = models.ForeignKey(
@@ -853,7 +868,7 @@ class CreditNote(BaseModel):
     total_amount = models.DecimalField(_('total amount'), max_digits=12, decimal_places=2, default=0)
     
     # Status y archivos
-    status = models.CharField(_('status'), max_length=20, choices=ElectronicDocument.STATUS_CHOICES, default='DRAFT')
+    status = models.CharField(_('status'), max_length=20, choices=STATUS_CHOICES, default='DRAFT')
     xml_file = models.FileField(_('XML file'), upload_to='credit_notes/xml/', blank=True)
     signed_xml_file = models.FileField(_('signed XML file'), upload_to='credit_notes/xml/', blank=True)
     pdf_file = models.FileField(_('PDF file'), upload_to='credit_notes/pdf/', blank=True)
@@ -869,6 +884,123 @@ class CreditNote(BaseModel):
     
     def __str__(self):
         return f"Credit Note {self.document_number} - {self.company.business_name}"
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save method to ensure proper saving of CreditNote - CORREGIDO
+        """
+        from django.utils import timezone
+        
+        # Generar número de documento si no existe
+        if not self.document_number:
+            try:
+                sri_config = self.company.sri_configuration
+                sequence = sri_config.get_next_sequence("CREDIT_NOTE")
+                self.document_number = f"{sri_config.establishment_code}-{sri_config.emission_point}-{sequence:09d}"
+            except Exception as e:
+                # Si no hay configuración SRI, usar valores por defecto
+                from datetime import datetime
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                self.document_number = f"001-001-{timestamp[-9:]}"
+        
+        # Generar clave de acceso si no existe
+        if not self.access_key:
+            self.access_key = self._generate_access_key()
+        
+        # Establecer fecha de emisión si no existe
+        if not self.issue_date:
+            self.issue_date = timezone.now().date()
+        
+        # ✅ LLAMADA SEGURA AL SAVE DEL PADRE
+        try:
+            # Usar directamente models.Model.save() para evitar problemas con BaseModel
+            models.Model.save(self, *args, **kwargs)
+            print(f"✅ CreditNote {self.id} saved with status: {self.status}")
+        except Exception as e:
+            print(f"❌ Error saving CreditNote: {e}")
+            # Intentar con super() como backup
+            super().save(*args, **kwargs)
+    
+    def _generate_access_key(self):
+        """Genera la clave de acceso de 49 dígitos para nota de crédito - ✅ CORREGIDO"""
+        from datetime import datetime
+        
+        # Obtener configuración SRI de la empresa
+        try:
+            sri_config = self.company.sri_configuration
+            establishment = sri_config.establishment_code.zfill(3)
+            emission_point = sri_config.emission_point.zfill(3)
+            environment = "1" if sri_config.environment == "TEST" else "2"
+        except:
+            establishment = "001"
+            emission_point = "001"
+            environment = "1"  # Pruebas por defecto
+        
+        # 1. FECHA DE EMISIÓN (8 dígitos): ddmmyyyy - ✅ CORREGIDO
+        # Manejar tanto string como objeto date
+        if isinstance(self.issue_date, str):
+            date_obj = datetime.strptime(self.issue_date, '%Y-%m-%d').date()
+            date_str = date_obj.strftime("%d%m%Y")
+        else:
+            date_str = self.issue_date.strftime("%d%m%Y")
+        
+        # 2. TIPO DE COMPROBANTE (2 dígitos) - 04 para nota de crédito
+        doc_type_code = "04"
+        
+        # 3. RUC (13 dígitos)
+        ruc = self.company.ruc.zfill(13)
+        
+        # 4. AMBIENTE (1 dígito): ya definido arriba
+        
+        # 5. SERIE (6 dígitos): establecimiento + punto emisión
+        serie = f"{establishment}{emission_point}"
+        
+        # 6. SECUENCIAL (9 dígitos)
+        if self.document_number and "-" in self.document_number:
+            sequence = self.document_number.split("-")[-1].zfill(9)
+        else:
+            # Generar secuencial temporal
+            import random
+            sequence = str(random.randint(1, 999999999)).zfill(9)
+        
+        # 7. CÓDIGO NUMÉRICO (8 dígitos)
+        numeric_code = "12345678"
+        
+        # 8. TIPO DE EMISIÓN (1 dígito): 1=normal
+        emission_type = "1"
+        
+        # Construir clave sin dígito verificador (48 dígitos)
+        partial_key = f"{date_str}{doc_type_code}{ruc}{environment}{serie}{sequence}{numeric_code}{emission_type}"
+        
+        # Verificar longitud
+        if len(partial_key) != 48:
+            raise ValueError(f"Clave parcial debe tener 48 dígitos, tiene {len(partial_key)}: {partial_key}")
+        
+        # 9. DÍGITO VERIFICADOR
+        check_digit = self._calculate_check_digit(partial_key)
+        
+        return f"{partial_key}{check_digit}"
+    
+    def _calculate_check_digit(self, partial_key):
+        """Calcula el dígito verificador usando algoritmo módulo 11"""
+        # Factores de multiplicación para módulo 11
+        factors = [2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 
+                   2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7]
+        
+        # Invertir la clave para multiplicar de derecha a izquierda
+        reversed_key = partial_key[::-1]
+        
+        # Calcular suma de productos
+        total = sum(int(digit) * factor for digit, factor in zip(reversed_key, factors))
+        
+        # Calcular residuo
+        remainder = total % 11
+        
+        # Determinar dígito verificador
+        if remainder < 2:
+            return remainder
+        else:
+            return 11 - remainder
 
 
 class DebitNote(BaseModel):
