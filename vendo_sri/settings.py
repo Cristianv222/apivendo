@@ -73,10 +73,6 @@ INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
 # MIDDLEWARE CONFIGURATION
 # ==========================================
 
-# ==========================================
-# MIDDLEWARE CONFIGURATION
-# ==========================================
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'corsheaders.middleware.CorsMiddleware',
@@ -87,8 +83,9 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',  # Requerido para allauth
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # NUEVO: Middleware para control de acceso y sala de espera
-    'apps.users.views.CheckUserAccessMiddleware',
+    # SOLO ESTOS DOS:
+    'apps.users.views.SimpleSessionTimeoutMiddleware',  # Para timeout
+    'apps.users.views.CheckUserAccessMiddleware',       # Para sala de espera
 ]
 
 ROOT_URLCONF = 'vendo_sri.urls'
@@ -113,7 +110,7 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # URLs de autenticación
-LOGIN_URL = '/users/login/'
+LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/accounts/login/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 
@@ -280,33 +277,33 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # REST FRAMEWORK CONFIGURATION
 # ==========================================
 
-REST_FRAMEWORK = {\
-    "DEFAULT_AUTHENTICATION_CLASSES": [\
-        "rest_framework.authentication.SessionAuthentication",\
-        "rest_framework.authentication.TokenAuthentication",\
-    ],\
-    "DEFAULT_PERMISSION_CLASSES": [\
-        "rest_framework.permissions.IsAuthenticated",\
-    ],\
-    "DEFAULT_RENDERER_CLASSES": [\
-        "rest_framework.renderers.JSONRenderer",\
-        "rest_framework.renderers.BrowsableAPIRenderer",\
-    ],\
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",\
-    "PAGE_SIZE": 25,\
-    "DEFAULT_FILTER_BACKENDS": [\
-        "django_filters.rest_framework.DjangoFilterBackend",\
-        "rest_framework.filters.SearchFilter",\
-        "rest_framework.filters.OrderingFilter",\
-    ],\
-    "DEFAULT_THROTTLE_CLASSES": [\
-        "rest_framework.throttling.AnonRateThrottle",\
-        "rest_framework.throttling.UserRateThrottle"\
-    ],\
-    "DEFAULT_THROTTLE_RATES": {\
-        "anon": "100/day",\
-        "user": "1000/day"\
-    }\
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+        "rest_framework.authentication.TokenAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 25,
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle"
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/day",
+        "user": "1000/day"
+    }
 }
 
 # ==========================================
@@ -375,6 +372,33 @@ SRI_URLS = {
 }
 
 # ==========================================
+# SESSION CONFIGURATION - Cierre por inactividad
+# ==========================================
+
+# Duración de la sesión en segundos (1 hora = 3600 segundos)
+SESSION_COOKIE_AGE = 3600  # 1 hora
+
+# La sesión expira al cerrar el navegador
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# Guardar la sesión en cada request (actualiza el tiempo de expiración)
+SESSION_SAVE_EVERY_REQUEST = True
+
+# Nombre de la cookie de sesión
+SESSION_COOKIE_NAME = 'vendo_sri_sessionid'
+
+# Seguridad de cookies
+SESSION_COOKIE_SECURE = not DEBUG  # HTTPS en producción
+SESSION_COOKIE_HTTPONLY = True  # No accesible via JavaScript
+SESSION_COOKIE_SAMESITE = 'Lax'
+
+# Tiempo de advertencia antes del cierre (en segundos)
+SESSION_TIMEOUT_WARNING = 300  # 5 minutos antes
+
+# Backend de sesiones (usar base de datos para mayor control)
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
+# ==========================================
 # DEVELOPMENT SETTINGS
 # ==========================================
 
@@ -436,7 +460,8 @@ LOGGING = {
 import os
 os.makedirs(BASE_DIR / 'logs', exist_ok=True)
 
-print("✅ Settings VENDO_SRI configurado con OAuth")
+print("✅ Settings VENDO_SRI configurado con OAuth y Session Timeout")
 print(f"DEBUG: {DEBUG}")
 print(f"SITE_ID: {SITE_ID}")
 print(f"AUTH_USER_MODEL: {AUTH_USER_MODEL}")
+print(f"SESSION_TIMEOUT: {SESSION_COOKIE_AGE} segundos ({SESSION_COOKIE_AGE // 60} minutos)")

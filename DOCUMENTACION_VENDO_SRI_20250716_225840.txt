@@ -5,7 +5,7 @@
 
 INFORMACIÓN GENERAL
 -------------------
-Fecha de generación: 2025-07-14 14:32:02
+Fecha de generación: 2025-07-16 22:58:40
 Ubicación: /app
 Python Version: Python 3.11.13
 Pip Version: pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)
@@ -17,7 +17,7 @@ Usuario: Desconocido
                             ESTRUCTURA DEL PROYECTO
 ================================================================================
 
-├── .env (269B)
+├── .env (760B)
 ├── .gitignore (4.0KB)
 ├── apps/ (11 elementos)
 │   ├── __init__.py (0B)
@@ -35,7 +35,7 @@ Usuario: Desconocido
 │   │   ├── migrations/ (2 elementos)
 │   │   │   ├── __init__.py (0B)
 │   │   │   └── __pycache__/ (excluido)
-│   │   ├── models.py (94B)
+│   │   ├── models.py (97B)
 │   │   ├── permissions.py (3.5KB)
 │   │   ├── serializers/ (6 elementos)
 │   │   │   ├── __init__.py (540B)
@@ -43,10 +43,10 @@ Usuario: Desconocido
 │   │   │   ├── certificate_serializers.py (3.2KB)
 │   │   │   ├── company_serializers.py (1.9KB)
 │   │   │   ├── invoicing_serializers.py (8.0KB)
-│   │   │   └── sri_serializers.py (12.0KB)
+│   │   │   └── sri_serializers.py (40.6KB)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
-│   │   ├── urls.py (8.9KB)
+│   │   ├── urls.py (21.2KB)
 │   │   ├── v1/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── v2/ (1 elementos)
@@ -56,9 +56,9 @@ Usuario: Desconocido
 │   │   │   ├── __pycache__/ (excluido)
 │   │   │   ├── certificate_views.py (9.8KB)
 │   │   │   ├── company_views.py (6.1KB)
-│   │   │   └── sri_views.py (12.0KB)
+│   │   │   └── sri_views.py (79.6KB)
 │   │   └── views.py (0B)
-│   ├── certificates/ (14 elementos)
+│   ├── certificates/ (13 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (24.0KB)
@@ -75,15 +75,15 @@ Usuario: Desconocido
 │   │   │   └── __pycache__/ (excluido)
 │   │   ├── models.py (8.9KB)
 │   │   ├── serializers.py (10.1KB)
-│   │   ├── services/ (2 elementos)
+│   │   ├── services/ (3 elementos)
 │   │   │   ├── __init__.py (20B)
+│   │   │   ├── __pycache__/ (excluido)
 │   │   │   └── certificate_reader.py (1.3KB)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (503B)
-│   │   ├── views.py (10.4KB)
-│   │   └── views.py.backup (10.4KB)
-│   ├── companies/ (12 elementos)
+│   │   └── views.py (10.7KB)
+│   ├── companies/ (11 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (3.7KB)
@@ -91,24 +91,24 @@ Usuario: Desconocido
 │   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
 │   │   │   ├── __pycache__/ (excluido)
-│   │   │   └── commands/ (2 elementos)
+│   │   │   └── commands/ (3 elementos)
 │   │   │       ├── __init__.py (0B)
+│   │   │       ├── __pycache__/ (excluido)
 │   │   │       └── create_test_data.py (13.3KB)
 │   │   ├── migrations/ (3 elementos)
 │   │   │   ├── 0001_initial.py (1.8KB)
 │   │   │   ├── __init__.py (0B)
 │   │   │   └── __pycache__/ (excluido)
-│   │   ├── models.py (2.4KB)
+│   │   ├── models.py (2.5KB)
 │   │   ├── serializers.py (684B)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (395B)
-│   │   ├── views.py (1.6KB)
-│   │   └── views.py.backup (1.6KB)
+│   │   └── views.py (1.7KB)
 │   ├── core/ (10 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
-│   │   ├── admin.py (4.6KB)
+│   │   ├── admin.py (3.7KB)
 │   │   ├── apps.py (0B)
 │   │   ├── management/ (3 elementos)
 │   │   │   ├── __init__.py (0B)
@@ -116,16 +116,16 @@ Usuario: Desconocido
 │   │   │   └── commands/ (1 elementos)
 │   │   │       └── __init__.py (0B)
 │   │   ├── migrations/ (4 elementos)
-│   │   │   ├── 0001_initial.py (6.4KB)
+│   │   │   ├── 0001_initial.py (6.5KB)
 │   │   │   ├── 0002_initial.py (3.3KB)
 │   │   │   ├── __init__.py (0B)
 │   │   │   └── __pycache__/ (excluido)
-│   │   ├── models.py (8.0KB)
+│   │   ├── models.py (8.9KB)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (597B)
 │   │   └── views.py (14.2KB)
-│   ├── invoicing/ (12 elementos)
+│   ├── invoicing/ (11 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (5.9KB)
@@ -144,8 +144,7 @@ Usuario: Desconocido
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (752B)
-│   │   ├── views.py (2.6KB)
-│   │   └── views.py.backup (2.5KB)
+│   │   └── views.py (2.6KB)
 │   ├── notifications/ (11 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
@@ -186,7 +185,7 @@ Usuario: Desconocido
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (393B)
 │   │   └── views.py (1.1KB)
-│   ├── sri_integration/ (15 elementos)
+│   ├── sri_integration/ (12 elementos)
 │   │   ├── __init__.py (0B)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── admin.py (10.4KB)
@@ -198,13 +197,14 @@ Usuario: Desconocido
 │   │   │       ├── __init__.py (0B)
 │   │   │       ├── __pycache__/ (excluido)
 │   │   │       └── process_invoices.py (11.6KB)
-│   │   ├── migrations/ (3 elementos)
+│   │   ├── migrations/ (5 elementos)
 │   │   │   ├── 0001_initial.py (17.2KB)
+│   │   │   ├── 0002_sriconfiguration_purchase_settlement_sequence_and_more.py (21.3KB)
+│   │   │   ├── 0003_alter_sriconfiguration_is_active.py (526B)
 │   │   │   ├── __init__.py (0B)
 │   │   │   └── __pycache__/ (excluido)
-│   │   ├── models.py (19.1KB)
-│   │   ├── serializers.py (3.8KB)
-│   │   ├── serializers.py.backup (3.6KB)
+│   │   ├── models.py (48.9KB)
+│   │   ├── serializers.py (4.0KB)
 │   │   ├── services/ (11 elementos)
 │   │   │   ├── __init__.py (548B)
 │   │   │   ├── __pycache__/ (excluido)
@@ -213,16 +213,14 @@ Usuario: Desconocido
 │   │   │   ├── document_processor.py (12.1KB)
 │   │   │   ├── email_service.py (10.2KB)
 │   │   │   ├── pdf_generator.py (17.2KB)
-│   │   │   ├── simple_xml_signer.py (2.7KB)
-│   │   │   ├── soap_client.py (18.3KB)
+│   │   │   ├── simple_xml_signer.py (2.8KB)
+│   │   │   ├── soap_client.py (26.0KB)
 │   │   │   ├── sri_processor.py (20.0KB)
-│   │   │   └── xml_generator.py (15.2KB)
+│   │   │   └── xml_generator.py (52.9KB)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── urls.py (659B)
-│   │   ├── views.py (19.4KB)
-│   │   ├── views.py.backup (19.4KB)
-│   │   └── views.py.backup_iva_12 (19.4KB)
+│   │   └── views.py (30.7KB)
 │   └── users/ (12 elementos)
 │       ├── __init__.py (0B)
 │       ├── __pycache__/ (excluido)
@@ -236,7 +234,7 @@ Usuario: Desconocido
 │       │       ├── __init__.py (0B)
 │       │       └── setup_oauth.py (10.9KB)
 │       ├── migrations/ (4 elementos)
-│       │   ├── 0001_initial.py (4.6KB)
+│       │   ├── 0001_initial.py (4.7KB)
 │       │   ├── 0002_add_waiting_room_models.py (4.0KB)
 │       │   ├── __init__.py (0B)
 │       │   └── __pycache__/ (excluido)
@@ -246,6 +244,9 @@ Usuario: Desconocido
 │       │   └── __init__.py (0B)
 │       ├── urls.py (453B)
 │       └── views.py (4.5KB)
+├── debug_invoice.py (5.5KB)
+├── diag.py (5.2KB)
+├── diag_fixed.py (2.7KB)
 ├── docker-compose.yml (1.1KB)
 ├── dockerfile (605B)
 ├── docs/ (5 elementos)
@@ -256,16 +257,19 @@ Usuario: Desconocido
 │   └── sri_integration/ (1 elementos)
 ├── fixtures/ (1 elementos)
 ├── generar_documentacion.py (22.7KB)
+├── invoices (1.0KB)
 ├── locale/ (2 elementos)
 │   ├── en/ (1 elementos)
 │   │   └── LC_MESSAGES/ (1 elementos)
 │   └── es/ (1 elementos)
 │       └── LC_MESSAGES/ (1 elementos)
 ├── logs/ (1 elementos)
-│   └── vendo_sri.log (208.2KB)
+│   └── vendo_sri.log (368.5KB)
 ├── manage.py (687B)
 ├── prueba_de_flujo_facturas.py (23.7KB)
-├── prueba_end_point.py (33.0KB)
+├── prueba_end_point.py (31.8KB)
+├── prueba_end_point_backup.py (62.0KB)
+├── replace_method.py (1.6KB)
 ├── requirements.txt (1.1KB)
 ├── scripts/ (1 elementos)
 ├── services/ (1 elementos)
@@ -276,58 +280,35 @@ Usuario: Desconocido
 │   │   ├── img/ (1 elementos)
 │   │   └── js/ (1 elementos)
 │   └── api_docs/ (1 elementos)
-├── storage/ (6 elementos)
-│   ├── backups/ (1 elementos)
-│   ├── certificates/ (4 elementos)
-│   │   ├── 1234567890001/ (1 elementos)
-│   │   │   └── 14929055_1003269840.p12 (3.9KB)
-│   │   ├── encrypted/ (0 elementos)
-│   │   └── temp/ (0 elementos)
-│   ├── invoices/ (4 elementos)
-│   │   ├── pdf/ (15 elementos)
-│   │   │   ├── 130720250112345678900010010010000010051234567814.pdf (4.0KB)
-│   │   │   ├── 130720250112345678900010010010000010051234567814_dmPbfaW.pdf (4.0KB)
-│   │   │   ├── 140720250112345678900010010010000010071234567818.pdf (4.0KB)
-│   │   │   ├── 140720250112345678900010010010000010071234567818_xj0g286.pdf (4.0KB)
-│   │   │   ├── 140720250112345678900010010010000010081234567812.pdf (4.1KB)
-│   │   │   ├── 140720250112345678900010010010000010091234567817.pdf (4.1KB)
-│   │   │   ├── 140720250112345678900010010010000010101234567811.pdf (4.1KB)
-│   │   │   ├── 140720250112345678900010010010000010111234567814.pdf (4.1KB)
-│   │   │   ├── 140720250112345678900010010010000010121234567819.pdf (3.9KB)
-│   │   │   ├── 140720250112345678900010010010000010121234567819_0ZwoyGd.pdf (3.9KB)
-│   │   │   ├── 1407202501123456789000110010010000010161234567816.pdf (3.9KB)
-│   │   │   ├── 1407202501123456789000110010010000010161234567816_4VlZ4rp.pdf (3.9KB)
-│   │   │   ├── 1407202501123456789000110010010000010201234567818.pdf (4.1KB)
-│   │   │   └── factura_001_001_000000003.pdf (2.2KB)
-│   │   ├── sent/ (1 elementos)
-│   │   └── xml/ (17 elementos)
-│   │       ├── 001_001_000000001_original.xml (1.2KB)
-│   │       ├── 001_001_000000001_signed.xml (5.7KB)
-│   │       ├── 001_001_000000999_original.xml (1.3KB)
-│   │       ├── 001_001_000000999_signed.xml (5.8KB)
-│   │       ├── 130720250112345678900010010010000010051234567814.xml (2.8KB)
-│   │       ├── 140720250112345678900010010010000010031234567811.xml (2.8KB)
-│   │       ├── 140720250112345678900010010010000010071234567818.xml (2.9KB)
-│   │       ├── 140720250112345678900010010010000010071234567818_H1pNRrw.xml (2.9KB)
-│   │       ├── 140720250112345678900010010010000010081234567812_signed.xml (8.5KB)
-│   │       ├── 140720250112345678900010010010000010091234567817_signed.xml (8.5KB)
-│   │       ├── 140720250112345678900010010010000010101234567811_signed.xml (8.5KB)
-│   │       ├── 140720250112345678900010010010000010111234567814_signed.xml (8.5KB)
-│   │       ├── 140720250112345678900010010010000010121234567819_signed.xml (7.2KB)
-│   │       ├── 1407202501123456789000110010010000010161234567816_signed.xml (7.2KB)
-│   │       ├── 1407202501123456789000110010010000010201234567818_signed.xml (8.5KB)
-│   │       └── factura_001_001_000000003.xml (2.7KB)
-│   ├── logs/ (2 elementos)
-│   │   └── vendo_sri.log (657B)
-│   └── storage/ (1 elementos)
-│       └── invoices/ (2 elementos)
-│           ├── sent/ (1 elementos)
-│           │   └── 2025-07/ (1 elementos)
-│           └── xml/ (4 elementos)
-│               ├── 001_001_000000001_original.xml (1.2KB)
-│               ├── 001_001_000000001_signed.xml (5.7KB)
-│               ├── 001_001_000000999_original.xml (1.3KB)
-│               └── 001_001_000000999_signed.xml (5.8KB)
+├── storage/ (7 elementos)
+│   ├── certificates/ (1 elementos)
+│   │   └── 1234567890001/ (1 elementos)
+│   │       └── 14929055_1003269840.p12 (3.9KB)
+│   ├── logs/ (1 elementos)
+│   │   └── vendo_sri.log (462B)
+│   ├── retentions/ (2 elementos)
+│   │   ├── pdf/ (3 elementos)
+│   │   │   ├── 001-001-000000015_autorizado.pdf (2.8KB)
+│   │   │   ├── 001-001-000000016_autorizado.pdf (2.8KB)
+│   │   │   └── 001-001-000000017_autorizado.pdf (2.8KB)
+│   │   └── xml/ (2 elementos)
+│   │       ├── 001_001_000000001_original.xml (1.6KB)
+│   │       └── 001_001_000000001_signed.xml (6.2KB)
+│   ├── settlements/ (1 elementos)
+│   │   └── xml/ (1 elementos)
+│   │       └── 001_001_000000004_original.xml (2.7KB)
+│   ├── storage/ (2 elementos)
+│   │   ├── retentions/ (1 elementos)
+│   │   │   └── xml/ (2 elementos)
+│   │   │       ├── 001_001_000000001_original.xml (1.6KB)
+│   │   │       └── 001_001_000000001_signed.xml (6.2KB)
+│   │   └── settlements/ (1 elementos)
+│   │       └── xml/ (1 elementos)
+│   │           └── 001_001_000000004_original.xml (2.7KB)
+│   └── uploads/ (1 elementos)
+│       └── 2025/ (1 elementos)
+│           └── 07/ (1 elementos)
+│               └── 13/ (1 elementos)
 ├── templates/ (7 elementos)
 │   ├── admin/ (1 elementos)
 │   │   └── custom/ (1 elementos)
@@ -341,8 +322,10 @@ Usuario: Desconocido
 │   │   └── authentication_error.html (13.3KB)
 │   └── users/ (3 elementos)
 │       ├── account_rejected.html (10.7KB)
-│       ├── login.html (17.2KB)
+│       ├── login.html (26.3KB)
 │       └── waiting_room.html (12.0KB)
+├── test_credit_note_flow.py (21.4KB)
+├── test_individual_docs.py (22.0KB)
 ├── tests/ (2 elementos)
 │   ├── __init__.py (0B)
 │   └── fixtures/ (1 elementos)
@@ -353,7 +336,7 @@ Usuario: Desconocido
 │   ├── __pycache__/ (excluido)
 │   ├── asgi.py (425B)
 │   ├── settings.py (13.1KB)
-│   ├── urls.py (9.6KB)
+│   ├── urls.py (10.6KB)
 │   └── wsgi.py (425B)
 └── venv/ (excluido)
 
@@ -373,21 +356,21 @@ docker-compose.yml      ✅ Existe
 
 ESTADÍSTICAS POR EXTENSIÓN
 --------------------------
-.py                   149 archivos ( 64.5%)
-(sin extensión)        28 archivos ( 12.1%)
-.xml                   21 archivos (  9.1%)
-.pdf                   14 archivos (  6.1%)
-.html                   7 archivos (  3.0%)
-.backup                 6 archivos (  2.6%)
-.log                    2 archivos (  0.9%)
-.yml                    1 archivos (  0.4%)
-.txt                    1 archivos (  0.4%)
-.backup_iva_12          1 archivos (  0.4%)
+.py                   158 archivos ( 77.8%)
+(sin extensión)        22 archivos ( 10.8%)
+.html                   7 archivos (  3.4%)
+.xml                    6 archivos (  3.0%)
+.pdf                    3 archivos (  1.5%)
+.log                    2 archivos (  1.0%)
+.backup                 1 archivos (  0.5%)
+.yml                    1 archivos (  0.5%)
+.txt                    1 archivos (  0.5%)
+.p12                    1 archivos (  0.5%)
 
 TOTALES
 -------
-Total de archivos: 231
-Total de directorios: 3665
+Total de archivos: 203
+Total de directorios: 3740
 
 ================================================================================
                            APLICACIONES DJANGO
@@ -399,13 +382,13 @@ App                  Estado     Básicos    Total      Archivos Existentes
 --------------------------------------------------------------------------------
 __pycache__          Vacía      0/5        2          Ninguno
 api                  Completa   5/5        7          models.py, views.py, urls...
-certificates         Completa   5/5        9          models.py, views.py, urls...
-companies            Completa   5/5        8          models.py, views.py, urls...
+certificates         Completa   5/5        8          models.py, views.py, urls...
+companies            Completa   5/5        7          models.py, views.py, urls...
 core                 Completa   5/5        6          models.py, views.py, urls...
-invoicing            Completa   5/5        8          models.py, views.py, urls...
+invoicing            Completa   5/5        7          models.py, views.py, urls...
 notifications        Completa   5/5        7          models.py, views.py, urls...
 settings             Completa   5/5        7          models.py, views.py, urls...
-sri_integration      Completa   5/5        10         models.py, views.py, urls...
+sri_integration      Completa   5/5        7          models.py, views.py, urls...
 users                Completa   5/5        8          models.py, views.py, urls...
 
 DETALLE POR APP
@@ -524,9 +507,9 @@ psycopg2-binary           ✅ Instalado     2.9.10          (Req: 2.9.7)
 python-decouple           ✅ Instalado     3.8             (Req: 3.8)
 celery                    ❌ Faltante      No instalado    (Req: 5.3.4)
 redis                     ❌ Faltante      No instalado    (Req: 5.0.1)
-cryptography              ✅ Instalado     41.0.7          (Req: 41.0.7)
-lxml                      ✅ Instalado     4.9.4           (Req: 4.9.3)
-zeep                      ✅ Instalado     4.2.1           (Req: 4.2.1)
+cryptography              ✅ Instalado     45.0.4          (Req: 41.0.7)
+lxml                      ✅ Instalado     5.4.0           (Req: 4.9.3)
+zeep                      ✅ Instalado     4.3.1           (Req: 4.2.1)
 reportlab                 ✅ Instalado     4.4.2           (Req: 4.0.7)
 Pillow                    ✅ Instalado     11.2.1          (Req: 10.1.0)
 drf-spectacular           ❌ Faltante      No instalado    (Req: 0.26.5)
@@ -540,7 +523,7 @@ certifi==2025.6.15
 cffi==1.17.1
 charset-normalizer==3.4.2
 crispy-bootstrap5==2025.6
-cryptography==41.0.7
+cryptography==45.0.4
 Django==5.2.3
 django-allauth==65.9.0
 django-cors-headers==4.7.0
@@ -552,7 +535,7 @@ djangorestframework==3.16.0
 et_xmlfile==2.0.0
 idna==3.10
 isodate==0.7.2
-lxml==4.9.4
+lxml==5.4.0
 oauthlib==3.3.1
 openpyxl==3.1.5
 pillow==11.2.1
@@ -560,26 +543,21 @@ platformdirs==4.3.8
 psycopg2-binary==2.9.10
 pycparser==2.22
 PyJWT==2.10.1
-pyOpenSSL==23.3.0
-pypng==0.20220715.0
 python-dateutil==2.9.0.post0
 python-decouple==3.8
 pytz==2025.2
-qrcode==7.4.2
+qrcode==8.2
 reportlab==4.4.2
 requests==2.32.4
 requests-file==2.1.0
 requests-oauthlib==2.0.0
 requests-toolbelt==1.0.0
-signxml==3.2.2
 six==1.17.0
 sqlparse==0.5.3
-typing_extensions==4.14.1
 tzdata==2025.2
 urllib3==2.5.0
-xmlsec==1.3.13
 xmltodict==0.14.2
-zeep==4.2.1
+zeep==4.3.1
 
 ================================================================================
                     ESTRUCTURA DE ALMACENAMIENTO SEGURO
@@ -587,13 +565,13 @@ zeep==4.2.1
 
 DIRECTORIOS DE STORAGE
 ----------------------
-storage/certificates/encrypted/     ✅ Certificados .p12 encriptados
-storage/certificates/temp/          ✅ Temporal para procesamiento
-storage/invoices/xml/               ✅ Facturas XML firmadas
-storage/invoices/pdf/               ✅ Facturas PDF generadas
-storage/invoices/sent/              ✅ Facturas enviadas al SRI
+storage/certificates/encrypted/     ❌ Certificados .p12 encriptados
+storage/certificates/temp/          ❌ Temporal para procesamiento
+storage/invoices/xml/               ❌ Facturas XML firmadas
+storage/invoices/pdf/               ❌ Facturas PDF generadas
+storage/invoices/sent/              ❌ Facturas enviadas al SRI
 storage/logs/                       ✅ Logs del sistema
-storage/backups/                    ✅ Respaldos de BD
+storage/backups/                    ❌ Respaldos de BD
 
 ================================================================================
                          ANÁLISIS Y PRÓXIMOS PASOS
