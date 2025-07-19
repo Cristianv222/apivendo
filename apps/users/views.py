@@ -182,8 +182,8 @@ class SimpleSessionTimeoutMiddleware(MiddlewareMixin):
                     
                     print(f"[SESSION DEBUG] Segundos desde última actividad: {seconds_since}")
                     
-                    # Verificar si excedió el tiempo (10 segundos para prueba)
-                    if seconds_since > 10:  # 10 segundos
+                    # Verificar si excedió el tiempo
+                    if seconds_since > 3600:
                         print("[SESSION DEBUG] ¡SESIÓN EXPIRADA! Cerrando sesión...")
                         
                         # Cerrar sesión
