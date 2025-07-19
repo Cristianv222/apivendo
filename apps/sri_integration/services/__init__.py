@@ -10,6 +10,7 @@ from .certificate_manager import CertificateManager
 from .document_processor import DocumentProcessor
 from .email_service import EmailService
 from .digital_signer import DigitalSigner
+from .global_certificate_manager import GlobalCertificateManager, get_certificate_manager
 
 __all__ = [
     'SRISOAPClient',
@@ -17,6 +18,8 @@ __all__ = [
     'PDFGenerator',
     'CertificateManager',
     'DocumentProcessor',
-    'EmailService'
-    'DigitalSigner'
+    'EmailService',
+    'DigitalSigner',
+    'GlobalCertificateManager',
+    'get_certificate_manager'
 ]

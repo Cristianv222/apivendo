@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-Views completas para SRI integration - SISTEMA COMPLETO CON FIRMA REAL
-apps/api/views/sri_views.py - ECOSISTEMA PERFECTO CON COMPONENTES REALES
-VERSION FINAL CORREGIDA - USANDO DocumentProcessor REAL
+Views completas para SRI integration - VERSIÓN ACTUALIZADA CON GlobalCertificateManager
+apps/api/views/sri_views.py - ECOSISTEMA PERFECTO SIN PASSWORDS MANUALES
+VERSION FINAL - USANDO GlobalCertificateManager para máximo rendimiento
 """
 
 from rest_framework import viewsets, filters, status, permissions
@@ -29,6 +29,7 @@ from apps.api.serializers.sri_serializers import (
     DebitNoteResponseSerializer, RetentionResponseSerializer, PurchaseSettlementResponseSerializer,
     DocumentProcessRequestSerializer, DocumentStatusSerializer
 )
+from apps.sri_integration.services.global_certificate_manager import get_certificate_manager
 
 logger = logging.getLogger(__name__)
 
@@ -144,11 +145,37 @@ def find_document_by_id(pk):
     return document, document_type, electronic_doc
 
 
+def validate_company_certificate(company_id):
+    """
+    Valida que la empresa tenga certificado disponible en el GlobalCertificateManager
+    """
+    try:
+        cert_manager = get_certificate_manager()
+        cert_data = cert_manager.get_certificate(company_id)
+        
+        if not cert_data:
+            return False, "Certificate not available in GlobalCertificateManager. Please configure certificate."
+        
+        is_valid, message = cert_manager.validate_certificate(company_id)
+        if not is_valid:
+            return False, f"Certificate validation failed: {message}"
+        
+        if "expires in" in message:
+            logger.warning(f"Certificate warning for company {company_id}: {message}")
+        
+        return True, "Certificate is available and valid"
+        
+    except Exception as e:
+        logger.error(f"Error validating certificate for company {company_id}: {str(e)}")
+        return False, f"Error validating certificate: {str(e)}"
+
+
 # ========== CLASE PRINCIPAL ==========
 
 class SRIDocumentViewSet(viewsets.ModelViewSet):
     """
-    ViewSet principal para todos los documentos SRI - VERSIÓN FINAL COMPLETA
+    ViewSet principal para todos los documentos SRI - VERSIÓN ACTUALIZADA
+    SIN REQUERIMIENTO DE PASSWORDS - Usando GlobalCertificateManager
     """
     queryset = ElectronicDocument.objects.all()
     serializer_class = ElectronicDocumentSerializer
@@ -251,6 +278,18 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         status=status.HTTP_404_NOT_FOUND
                     )
                 
+                # Verificar certificado en GlobalCertificateManager
+                cert_valid, cert_message = validate_company_certificate(company.id)
+                if not cert_valid:
+                    return Response(
+                        {
+                            'error': 'CERTIFICATE_NOT_AVAILABLE',
+                            'message': cert_message,
+                            'suggestion': 'Please configure digital certificate for this company'
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
                 # Verificar configuración SRI
                 try:
                     sri_config = company.sri_configuration
@@ -333,7 +372,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 electronic_doc.status = 'GENERATED'
                 electronic_doc.save()
                 
-                logger.info(f'Invoice ElectronicDocument {electronic_doc.id} created successfully')
+                logger.info(f'🎉 Invoice ElectronicDocument {electronic_doc.id} created successfully')
                 
                 # Respuesta con datos de la factura
                 response_data = {
@@ -357,7 +396,9 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                     'sri_authorization_code': electronic_doc.sri_authorization_code,
                     'sri_authorization_date': electronic_doc.sri_authorization_date,
                     'created_at': electronic_doc.created_at,
-                    'updated_at': electronic_doc.updated_at
+                    'updated_at': electronic_doc.updated_at,
+                    'certificate_ready': True,
+                    'processing_method': 'GlobalCertificateManager'
                 }
                 
                 return Response(response_data, status=status.HTTP_201_CREATED)
@@ -407,6 +448,17 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                             'message': f"Company with ID {validated_data['company']} not found"
                         },
                         status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Verificar certificado
+                cert_valid, cert_message = validate_company_certificate(company.id)
+                if not cert_valid:
+                    return Response(
+                        {
+                            'error': 'CERTIFICATE_NOT_AVAILABLE',
+                            'message': cert_message
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Verificar factura original
@@ -500,7 +552,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 electronic_doc = sync_document_to_electronic_document(credit_note, 'CREDIT_NOTE')
                 
                 if electronic_doc:
-                    logger.info(f'CreditNote {credit_note.id} synced with ElectronicDocument {electronic_doc.id}')
+                    logger.info(f'🎉 CreditNote {credit_note.id} synced with ElectronicDocument {electronic_doc.id}')
                 
                 response_serializer = CreditNoteResponseSerializer(credit_note)
                 return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -549,6 +601,17 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                             'message': f"Company with ID {validated_data['company']} not found"
                         },
                         status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Verificar certificado
+                cert_valid, cert_message = validate_company_certificate(company.id)
+                if not cert_valid:
+                    return Response(
+                        {
+                            'error': 'CERTIFICATE_NOT_AVAILABLE',
+                            'message': cert_message
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Verificar factura original
@@ -631,7 +694,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 electronic_doc = sync_document_to_electronic_document(debit_note, 'DEBIT_NOTE')
                 
                 if electronic_doc:
-                    logger.info(f'DebitNote {debit_note.id} synced with ElectronicDocument {electronic_doc.id}')
+                    logger.info(f'🎉 DebitNote {debit_note.id} synced with ElectronicDocument {electronic_doc.id}')
                 
                 response_serializer = DebitNoteResponseSerializer(debit_note)
                 return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -681,6 +744,17 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                             'message': f"Company with ID {validated_data['company']} not found"
                         },
                         status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Verificar certificado
+                cert_valid, cert_message = validate_company_certificate(company.id)
+                if not cert_valid:
+                    return Response(
+                        {
+                            'error': 'CERTIFICATE_NOT_AVAILABLE',
+                            'message': cert_message
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Verificar configuración SRI
@@ -765,7 +839,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 electronic_doc = sync_document_to_electronic_document(retention, 'RETENTION')
                 
                 if electronic_doc:
-                    logger.info(f'Retention {retention.id} synced with ElectronicDocument {electronic_doc.id}')
+                    logger.info(f'🎉 Retention {retention.id} synced with ElectronicDocument {electronic_doc.id}')
                 
                 response_serializer = RetentionResponseSerializer(retention)
                 return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -815,6 +889,17 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                             'message': f"Company with ID {validated_data['company']} not found"
                         },
                         status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                # Verificar certificado
+                cert_valid, cert_message = validate_company_certificate(company.id)
+                if not cert_valid:
+                    return Response(
+                        {
+                            'error': 'CERTIFICATE_NOT_AVAILABLE',
+                            'message': cert_message
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
                     )
                 
                 # Verificar configuración SRI
@@ -908,7 +993,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 electronic_doc = sync_document_to_electronic_document(settlement, 'PURCHASE_SETTLEMENT')
                 
                 if electronic_doc:
-                    logger.info(f'PurchaseSettlement {settlement.id} synced with ElectronicDocument {electronic_doc.id}')
+                    logger.info(f'🎉 PurchaseSettlement {settlement.id} synced with ElectronicDocument {electronic_doc.id}')
                 
                 response_serializer = PurchaseSettlementResponseSerializer(settlement)
                 return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -923,14 +1008,14 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
-    # ========== PROCESAMIENTO CON COMPONENTES REALES ==========
+    # ========== PROCESAMIENTO CON GlobalCertificateManager (SIN PASSWORDS) ==========
     
     @action(detail=True, methods=['post'])
     def generate_xml(self, request, pk=None):
         """
-        Generar XML del documento usando TU XMLGenerator REAL
+        Generar XML del documento usando XMLGenerator REAL
         """
-        logger.info(f"Generando XML para documento ID: {pk}")
+        logger.info(f"🚀 Generando XML para documento ID: {pk}")
         
         # Buscar documento en todas las tablas
         document, document_type, electronic_doc = find_document_by_id(pk)
@@ -944,10 +1029,16 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # Verificar certificado disponible
+        cert_valid, cert_message = validate_company_certificate(document.company.id)
+        if not cert_valid:
+            logger.warning(f"Certificate not ready for company {document.company.id}: {cert_message}")
+            # No bloqueamos la generación de XML por el certificado
+        
         try:
             from apps.sri_integration.services.document_processor import DocumentProcessor
             
-            # Usar TU procesador real
+            # Usar DocumentProcessor real
             processor = DocumentProcessor(document.company)
             success, result = processor._generate_xml(electronic_doc or document)
             
@@ -966,11 +1057,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             if electronic_doc:
                 electronic_doc.status = 'GENERATED'
                 electronic_doc.save()
-                logger.info(f'ElectronicDocument {electronic_doc.id} updated with XML')
+                logger.info(f'✅ ElectronicDocument {electronic_doc.id} updated with XML')
             
             document.status = 'GENERATED'
             document.save()
-            logger.info(f'{document_type} {document.id} status updated to GENERATED')
+            logger.info(f'✅ {document_type} {document.id} status updated to GENERATED')
             
             return Response(
                 {
@@ -982,14 +1073,15 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'xml_size': len(xml_content),
                         'xml_file': str(electronic_doc.xml_file) if electronic_doc and electronic_doc.xml_file else None,
                         'access_key': document.access_key,
-                        'status': document.status
+                        'status': document.status,
+                        'ready_for_signing': cert_valid
                     }
                 },
                 status=status.HTTP_200_OK
             )
             
         except Exception as e:
-            logger.error(f"Error generating XML for document {pk}: {str(e)}")
+            logger.error(f"❌ Error generating XML for document {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'XML_GENERATION_ERROR',
@@ -1001,9 +1093,9 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def sign_document(self, request, pk=None):
         """
-        Firmar documento usando TU CertificateManager REAL
+        Firmar documento usando GlobalCertificateManager (SIN PASSWORD REQUERIDO)
         """
-        logger.info(f"Firmando documento ID: {pk}")
+        logger.info(f"🔐 Firmando documento ID: {pk}")
         
         # Buscar documento en todas las tablas
         document, document_type, electronic_doc = find_document_by_id(pk)
@@ -1036,29 +1128,18 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Obtener contraseña del certificado
-        certificate_password = request.data.get('certificate_password') or request.data.get('password')
-        
-        if not certificate_password:
-            # Intentar obtener contraseña automáticamente
-            certificate = document.company.digital_certificate
-            known_passwords = ['Jheymie10', '123456', document.company.ruc]
-            
-            for password in known_passwords:
-                try:
-                    if certificate.verify_password(password):
-                        certificate_password = password
-                        logger.info(f'Using automatic certificate password for company {document.company.id}')
-                        break
-                except Exception:
-                    continue
-            
-            if not certificate_password:
-                return Response({
-                    'error': 'CERTIFICATE_PASSWORD_REQUIRED',
-                    'message': 'Certificate password is required for signing',
-                    'company_id': document.company.id
-                }, status=status.HTTP_400_BAD_REQUEST)
+        # Verificar certificado en GlobalCertificateManager
+        cert_valid, cert_message = validate_company_certificate(document.company.id)
+        if not cert_valid:
+            return Response(
+                {
+                    'error': 'CERTIFICATE_NOT_AVAILABLE',
+                    'message': cert_message,
+                    'company_id': document.company.id,
+                    'suggestion': 'Please configure digital certificate for this company'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         try:
             from apps.sri_integration.services.document_processor import DocumentProcessor
@@ -1067,9 +1148,9 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             with open(electronic_doc.xml_file.path, 'r', encoding='utf-8') as f:
                 xml_content = f.read()
             
-            # Usar TU procesador real para firmar
+            # Usar DocumentProcessor ACTUALIZADO (sin password)
             processor = DocumentProcessor(document.company)
-            success, result = processor._sign_xml(electronic_doc, xml_content, certificate_password)
+            success, result = processor._sign_xml_with_global_manager(electronic_doc, xml_content)
             
             if not success:
                 return Response(
@@ -1085,37 +1166,32 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             # Actualizar documento original también
             document.status = 'SIGNED'
             document.save()
-            logger.info(f'{document_type} {document.id} signed successfully')
+            logger.info(f'✅ {document_type} {document.id} signed successfully using GlobalCertificateManager')
             
-            # Información del certificado real
-            certificate = document.company.digital_certificate
-            cert_info = {
-                'serial_number': certificate.serial_number,
-                'subject_name': certificate.subject_name,
-                'issuer_name': certificate.issuer_name,
-                'valid_until': certificate.valid_to.isoformat() if certificate.valid_to else None,
-                'environment': certificate.environment
-            }
+            # Información del certificado del gestor global
+            cert_manager = get_certificate_manager()
+            cert_info = cert_manager.get_company_certificate_info(document.company.id)
             
             return Response(
                 {
                     'success': True,
-                    'message': 'Document signed successfully with real certificate and CertificateManager',
+                    'message': 'Document signed successfully with GlobalCertificateManager (NO PASSWORD REQUIRED)',
                     'data': {
                         'document_number': document.document_number,
                         'document_type': document_type,
                         'certificate_info': cert_info,
-                        'signature_method': 'XAdES-BES with real P12 certificate',
+                        'signature_method': 'GlobalCertificateManager with XAdES-BES',
                         'status': electronic_doc.status,
                         'signed_xml_file': str(electronic_doc.signed_xml_file) if electronic_doc.signed_xml_file else None,
-                        'ecosystem_ready': True
+                        'processing_method': 'Automatic Certificate Management',
+                        'password_required': False
                     }
                 },
                 status=status.HTTP_200_OK
             )
             
         except Exception as e:
-            logger.error(f"Error signing {document_type} {pk}: {str(e)}")
+            logger.error(f"❌ Error signing {document_type} {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'SIGNING_ERROR',
@@ -1127,9 +1203,9 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def send_to_sri(self, request, pk=None):
         """
-        Enviar documento al SRI usando TU SRISOAPClient REAL
+        Enviar documento al SRI usando SRISOAPClient REAL
         """
-        logger.info(f"Enviando documento ID: {pk} al SRI")
+        logger.info(f"📤 Enviando documento ID: {pk} al SRI")
         
         # Buscar documento en todas las tablas
         document, document_type, electronic_doc = find_document_by_id(pk)
@@ -1159,7 +1235,8 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                     'error': 'DOCUMENT_NOT_SIGNED',
                     'message': 'Document must be signed before sending to SRI',
                     'current_status': electronic_doc.status,
-                    'has_signed_file': bool(electronic_doc.signed_xml_file)
+                    'has_signed_file': bool(electronic_doc.signed_xml_file),
+                    'suggestion': 'Call sign_document endpoint first'
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
@@ -1171,7 +1248,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             with open(electronic_doc.signed_xml_file.path, 'r', encoding='utf-8') as f:
                 signed_xml = f.read()
             
-            # Usar TU procesador real para envío al SRI
+            # Usar DocumentProcessor real para envío al SRI
             processor = DocumentProcessor(document.company)
             
             # Enviar al SRI
@@ -1193,7 +1270,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             document.status = electronic_doc.status
             document.save()
             
-            logger.info(f"{document_type} {pk} sent to SRI successfully")
+            logger.info(f"✅ {document_type} {pk} sent to SRI successfully")
             
             return Response(
                 {
@@ -1208,14 +1285,15 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'authorization_date': electronic_doc.sri_authorization_date,
                         'access_key': electronic_doc.access_key,
                         'status': electronic_doc.status,
-                        'authorized': auth_success
+                        'authorized': auth_success,
+                        'processing_method': 'GlobalCertificateManager + Real SOAP Client'
                     }
                 },
                 status=status.HTTP_200_OK
             )
             
         except Exception as e:
-            logger.error(f"Error sending {document_type} {pk} to SRI: {str(e)}")
+            logger.error(f"❌ Error sending {document_type} {pk} to SRI: {str(e)}")
             return Response(
                 {
                     'error': 'SRI_SUBMISSION_ERROR',
@@ -1227,9 +1305,10 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def process_complete(self, request, pk=None):
         """
-        Proceso completo usando TU DocumentProcessor REAL con SOAP SRI
+        Proceso completo usando DocumentProcessor ACTUALIZADO con GlobalCertificateManager
+        ¡SIN REQUERIR PASSWORD!
         """
-        logger.info(f"Procesamiento completo para documento ID: {pk}")
+        logger.info(f"🚀 Procesamiento completo para documento ID: {pk}")
         
         # Buscar documento
         document, document_type, electronic_doc = find_document_by_id(pk)
@@ -1252,37 +1331,28 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # Obtener contraseña del certificado
-        certificate_password = request.data.get('certificate_password') or request.data.get('password')
-        send_email = request.data.get('send_email', True)
+        # Verificar certificado en GlobalCertificateManager
+        cert_valid, cert_message = validate_company_certificate(document.company.id)
+        if not cert_valid:
+            return Response(
+                {
+                    'error': 'CERTIFICATE_NOT_AVAILABLE',
+                    'message': cert_message,
+                    'company_id': document.company.id,
+                    'suggestion': 'Please configure digital certificate for this company'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        if not certificate_password:
-            # Intentar obtener contraseña automáticamente
-            certificate = document.company.digital_certificate
-            known_passwords = ['Jheymie10', '123456', document.company.ruc]
-            
-            for password in known_passwords:
-                try:
-                    if certificate.verify_password(password):
-                        certificate_password = password
-                        logger.info(f'Using automatic certificate password for company {document.company.id}')
-                        break
-                except Exception:
-                    continue
-            
-            if not certificate_password:
-                return Response({
-                    'error': 'CERTIFICATE_PASSWORD_REQUIRED',
-                    'message': 'Certificate password is required for complete processing',
-                    'company_id': document.company.id
-                }, status=status.HTTP_400_BAD_REQUEST)
+        # Obtener parámetros opcionales
+        send_email = request.data.get('send_email', True)
         
         try:
             from apps.sri_integration.services.document_processor import DocumentProcessor
             
-            # Usar TU procesador REAL para proceso completo
+            # Usar DocumentProcessor ACTUALIZADO (SIN password requerido)
             processor = DocumentProcessor(document.company)
-            success, message = processor.process_document(electronic_doc, certificate_password, send_email)
+            success, message = processor.process_document(electronic_doc, send_email)
             
             # Actualizar documento original también
             document.status = electronic_doc.status
@@ -1295,10 +1365,13 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': True,
-                        'message': 'Document processed completely using real SRI integration with SOAP',
+                        'message': 'Document processed completely using GlobalCertificateManager with real SRI integration',
+                        'password_required': False,
+                        'processing_method': 'GlobalCertificateManager',
                         'steps_completed': [
+                            'CERTIFICATE_LOADED_FROM_CACHE',
                             'XML_GENERATED',
-                            'DOCUMENT_SIGNED', 
+                            'DOCUMENT_SIGNED_AUTOMATICALLY', 
                             'SENT_TO_SRI',
                             'AUTHORIZATION_CHECKED'
                         ],
@@ -1312,7 +1385,9 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                             'has_pdf': bool(electronic_doc.pdf_file),
                             'email_sent': electronic_doc.email_sent,
                             'authorization_code': electronic_doc.sri_authorization_code,
-                            'authorization_date': electronic_doc.sri_authorization_date
+                            'authorization_date': electronic_doc.sri_authorization_date,
+                            'certificate_cached': True,
+                            'user_friendly': True
                         }
                     },
                     status=status.HTTP_200_OK
@@ -1333,7 +1408,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
             
         except Exception as e:
-            logger.error(f"Error in complete process for document {pk}: {str(e)}")
+            logger.error(f"❌ Error in complete process for document {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'PROCESS_ERROR',
@@ -1345,9 +1420,9 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def reprocess_document(self, request, pk=None):
         """
-        Reprocesar un documento que falló usando TU DocumentProcessor REAL
+        Reprocesar un documento que falló anteriormente usando DocumentProcessor ACTUALIZADO
         """
-        logger.info(f"Reprocesando documento ID: {pk}")
+        logger.info(f"🔄 Reprocesando documento ID: {pk}")
         
         # Buscar documento
         document, document_type, electronic_doc = find_document_by_id(pk)
@@ -1370,22 +1445,24 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # Obtener contraseña del certificado
-        certificate_password = request.data.get('certificate_password') or request.data.get('password')
-        
-        if not certificate_password:
-            return Response({
-                'error': 'CERTIFICATE_PASSWORD_REQUIRED',
-                'message': 'Certificate password is required for reprocessing',
-                'company_id': document.company.id
-            }, status=status.HTTP_400_BAD_REQUEST)
+        # Verificar certificado
+        cert_valid, cert_message = validate_company_certificate(document.company.id)
+        if not cert_valid:
+            return Response(
+                {
+                    'error': 'CERTIFICATE_NOT_AVAILABLE',
+                    'message': cert_message,
+                    'company_id': document.company.id
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         try:
             from apps.sri_integration.services.document_processor import DocumentProcessor
             
-            # Usar TU procesador REAL para reprocesar
+            # Usar DocumentProcessor ACTUALIZADO (sin password)
             processor = DocumentProcessor(document.company)
-            success, message = processor.reprocess_document(electronic_doc, certificate_password)
+            success, message = processor.reprocess_document(electronic_doc)
             
             # Actualizar documento original también
             document.status = electronic_doc.status
@@ -1397,12 +1474,14 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': True,
-                        'message': 'Document reprocessed successfully',
+                        'message': 'Document reprocessed successfully using GlobalCertificateManager',
+                        'password_required': False,
                         'data': {
                             'document_id': pk,
                             'document_type': document_type,
                             'final_status': electronic_doc.status,
-                            'status_info': status_info
+                            'status_info': status_info,
+                            'processing_method': 'GlobalCertificateManager'
                         }
                     },
                     status=status.HTTP_200_OK
@@ -1421,11 +1500,184 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
             
         except Exception as e:
-            logger.error(f"Error reprocessing document {pk}: {str(e)}")
+            logger.error(f"❌ Error reprocessing document {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'REPROCESS_ERROR',
                     'message': f'Error reprocessing document: {str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    # ========== GESTIÓN DEL GlobalCertificateManager ==========
+    
+    @action(detail=False, methods=['get'])
+    def certificate_manager_status(self, request):
+        """
+        Estado del GlobalCertificateManager
+        """
+        try:
+            cert_manager = get_certificate_manager()
+            stats = cert_manager.get_stats()
+            
+            # Agregar información adicional
+            stats['endpoints_info'] = {
+                'password_required': False,
+                'automatic_certificate_loading': True,
+                'cache_enabled': True,
+                'multi_company_support': True
+            }
+            
+            return Response(stats, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Error getting certificate manager status: {str(e)}")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def preload_certificates(self, request):
+        """
+        Precarga certificados en el GlobalCertificateManager
+        """
+        try:
+            cert_manager = get_certificate_manager()
+            company_ids = request.data.get('company_ids', None)
+            
+            result = cert_manager.preload_certificates(company_ids)
+            
+            return Response(
+                {
+                    'success': True,
+                    'message': 'Certificate preloading completed',
+                    'result': result
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f"Error preloading certificates: {str(e)}")
+            return Response(
+                {
+                    'error': 'PRELOAD_ERROR',
+                    'message': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def reload_company_certificate(self, request):
+        """
+        Recarga certificado de una empresa específica
+        """
+        try:
+            company_id = request.data.get('company_id')
+            
+            if not company_id:
+                return Response(
+                    {
+                        'error': 'VALIDATION_ERROR',
+                        'message': 'company_id is required'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            cert_manager = get_certificate_manager()
+            success = cert_manager.reload_certificate(company_id)
+            
+            if success:
+                return Response(
+                    {
+                        'success': True,
+                        'message': f'Certificate reloaded for company {company_id}'
+                    },
+                    status=status.HTTP_200_OK
+                )
+            else:
+                return Response(
+                    {
+                        'success': False,
+                        'message': f'Failed to reload certificate for company {company_id}'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+        except Exception as e:
+            logger.error(f"Error reloading certificate: {str(e)}")
+            return Response(
+                {
+                    'error': 'RELOAD_ERROR',
+                    'message': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'])
+    def clear_certificate_cache(self, request):
+        """
+        Limpia el cache de certificados
+        """
+        try:
+            cert_manager = get_certificate_manager()
+            cleared_count = cert_manager.clear_cache()
+            
+            return Response(
+                {
+                    'success': True,
+                    'message': f'Certificate cache cleared: {cleared_count} certificates removed'
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f"Error clearing certificate cache: {str(e)}")
+            return Response(
+                {
+                    'error': 'CLEAR_CACHE_ERROR',
+                    'message': str(e)
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def company_certificate_info(self, request):
+        """
+        Información del certificado de una empresa
+        """
+        try:
+            company_id = request.query_params.get('company_id')
+            
+            if not company_id:
+                return Response(
+                    {
+                        'error': 'VALIDATION_ERROR',
+                        'message': 'company_id parameter is required'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            cert_manager = get_certificate_manager()
+            cert_info = cert_manager.get_company_certificate_info(int(company_id))
+            
+            if cert_info:
+                return Response(cert_info, status=status.HTTP_200_OK)
+            else:
+                return Response(
+                    {
+                        'error': 'CERTIFICATE_NOT_FOUND',
+                        'message': f'Certificate not found for company {company_id}'
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+        except Exception as e:
+            logger.error(f"Error getting company certificate info: {str(e)}")
+            return Response(
+                {
+                    'error': 'CERTIFICATE_INFO_ERROR',
+                    'message': str(e)
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1468,7 +1720,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             processor = DocumentProcessor(document.company)
             success, message = processor._send_email(electronic_doc or document)
             
-            logger.info(f"Email sent for {document_type} {pk}")
+            logger.info(f"📧 Email sent for {document_type} {pk}")
             
             return Response({
                 'success': success,
@@ -1482,7 +1734,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_200_OK if success else status.HTTP_500_INTERNAL_SERVER_ERROR)
             
         except Exception as e:
-            logger.error(f"Error sending email for {document_type} {pk}: {str(e)}")
+            logger.error(f"❌ Error sending email for {document_type} {pk}: {str(e)}")
             return Response({
                 'success': False,
                 'message': str(e)
@@ -1526,12 +1778,22 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                     'total_amount': str(getattr(document, 'total_amount', 'N/A')),
                     'created_at': document.created_at,
                     'updated_at': document.updated_at,
+                    'processing_method': 'GlobalCertificateManager',
+                    'password_required': False
                 }
+            
+            # Agregar información del certificado
+            cert_valid, cert_message = validate_company_certificate(document.company.id)
+            status_info['certificate_status'] = {
+                'available': cert_valid,
+                'message': cert_message,
+                'cached': cert_valid
+            }
             
             return Response(status_info, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error getting document status {pk}: {str(e)}")
+            logger.error(f"❌ Error getting document status {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'STATUS_CHECK_ERROR',
@@ -1543,10 +1805,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def dashboard(self, request):
         """
-        Dashboard con estadísticas de documentos
+        Dashboard con estadísticas de documentos y GlobalCertificateManager
         """
         try:
             queryset = self.get_queryset()
+            cert_manager = get_certificate_manager()
             
             # Estadísticas por estado
             status_stats = {}
@@ -1578,7 +1841,13 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 'with_signed_xml': queryset.exclude(signed_xml_file='').count(),
                 'with_pdf': queryset.exclude(pdf_file='').count(),
                 'email_sent': queryset.filter(email_sent=True).count(),
+                'processing_method': 'GlobalCertificateManager',
+                'password_required': False,
+                'automatic_processing': True
             }
+            
+            # Estadísticas del gestor de certificados
+            cert_stats = cert_manager.get_stats()
             
             # Documentos recientes
             recent_documents = queryset.order_by('-created_at')[:10]
@@ -1592,12 +1861,20 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 'status_stats': status_stats,
                 'type_stats': type_stats,
                 'ecosystem_stats': ecosystem_stats,
+                'certificate_manager_stats': cert_stats,
                 'recent_documents': recent_serializer.data,
-                'total_documents': queryset.count()
+                'total_documents': queryset.count(),
+                'system_info': {
+                    'version': 'GlobalCertificateManager v1.0',
+                    'password_required': False,
+                    'multi_company_support': True,
+                    'certificate_caching': True,
+                    'automatic_processing': True
+                }
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            logger.error(f"Error getting dashboard data: {str(e)}")
+            logger.error(f"❌ Error getting dashboard data: {str(e)}")
             return Response({
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -1605,7 +1882,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def generate_pdf(self, request, pk=None):
         """
-        Generar PDF del documento usando TU PDFGenerator REAL
+        Generar PDF del documento usando PDFGenerator REAL
         """
         # Buscar documento
         document, document_type, electronic_doc = find_document_by_id(pk)
@@ -1657,11 +1934,126 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
             
         except Exception as e:
-            logger.error(f"Error generating PDF for {document_type} {pk}: {str(e)}")
+            logger.error(f"❌ Error generating PDF for {document_type} {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'PDF_GENERATION_ERROR',
                     'message': f'Failed to generate PDF: {str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    # ========== VALIDACIONES Y CONFIGURACIÓN ==========
+    
+    @action(detail=False, methods=['post'])
+    def validate_company_setup(self, request):
+        """
+        Valida la configuración completa de una empresa
+        """
+        try:
+            company_id = request.data.get('company_id')
+            
+            if not company_id:
+                return Response(
+                    {
+                        'error': 'VALIDATION_ERROR',
+                        'message': 'company_id is required'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            from apps.companies.models import Company
+            
+            try:
+                company = Company.objects.get(id=company_id)
+            except Company.DoesNotExist:
+                return Response(
+                    {
+                        'error': 'COMPANY_NOT_FOUND',
+                        'message': f'Company with ID {company_id} not found'
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            from apps.sri_integration.services.document_processor import DocumentProcessor
+            
+            processor = DocumentProcessor(company)
+            is_valid, validation_result = processor.validate_company_setup()
+            
+            # Verificar certificado en GlobalCertificateManager
+            cert_valid, cert_message = validate_company_certificate(company_id)
+            
+            return Response(
+                {
+                    'company_id': company_id,
+                    'company_name': company.business_name,
+                    'is_valid': is_valid and cert_valid,
+                    'sri_configuration': {
+                        'valid': is_valid,
+                        'details': validation_result
+                    },
+                    'certificate_manager': {
+                        'valid': cert_valid,
+                        'message': cert_message,
+                        'method': 'GlobalCertificateManager'
+                    },
+                    'ready_for_processing': is_valid and cert_valid,
+                    'password_required': False
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error validating company setup: {str(e)}")
+            return Response(
+                {
+                    'error': 'VALIDATION_ERROR',
+                    'message': f'Error validating company setup: {str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['get'])
+    def processing_stats(self, request):
+        """
+        Estadísticas de procesamiento por empresa
+        """
+        try:
+            company_id = request.query_params.get('company_id')
+            
+            if company_id:
+                from apps.companies.models import Company
+                company = Company.objects.get(id=company_id)
+                from apps.sri_integration.services.document_processor import DocumentProcessor
+                
+                processor = DocumentProcessor(company)
+                stats = processor.get_processing_stats()
+                
+                return Response(stats, status=status.HTTP_200_OK)
+            else:
+                # Estadísticas globales
+                cert_manager = get_certificate_manager()
+                global_stats = cert_manager.get_stats()
+                
+                # Agregar estadísticas de documentos
+                total_docs = ElectronicDocument.objects.count()
+                authorized_docs = ElectronicDocument.objects.filter(status='AUTHORIZED').count()
+                
+                global_stats['global_document_stats'] = {
+                    'total_documents': total_docs,
+                    'authorized_documents': authorized_docs,
+                    'success_rate': (authorized_docs / total_docs * 100) if total_docs > 0 else 0,
+                    'processing_method': 'GlobalCertificateManager'
+                }
+                
+                return Response(global_stats, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting processing stats: {str(e)}")
+            return Response(
+                {
+                    'error': 'STATS_ERROR',
+                    'message': str(e)
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1691,6 +2083,81 @@ class SRIResponseViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['created_at']
     ordering = ['-created_at']
     permission_classes = [permissions.AllowAny]
+
+
+# ========== DOCUMENTACIÓN DE LA API ==========
+
+class DocumentationViewSet(viewsets.ViewSet):
+    """
+    Documentación de la API actualizada con GlobalCertificateManager
+    """
+    permission_classes = [permissions.AllowAny]
+    
+    @action(detail=False, methods=['get'])
+    def api_info(self, request):
+        """
+        Información general de la API
+        """
+        return Response({
+            'api_name': 'SRI Integration API v2.0',
+            'description': 'API completa para integración con SRI Ecuador',
+            'version': '2.0.0',
+            'certificate_manager': 'GlobalCertificateManager',
+            'password_required': False,
+            'features': [
+                'Automatic certificate management',
+                'Multi-company support',
+                'Certificate caching',
+                'Real-time SRI integration',
+                'Automatic document processing',
+                'PDF generation',
+                'Email notifications'
+            ],
+            'endpoints': {
+                'document_creation': [
+                    'POST /api/sri/documents/create_invoice/',
+                    'POST /api/sri/documents/create_credit_note/',
+                    'POST /api/sri/documents/create_debit_note/',
+                    'POST /api/sri/documents/create_retention/',
+                    'POST /api/sri/documents/create_purchase_settlement/'
+                ],
+                'document_processing': [
+                    'POST /api/sri/documents/{id}/generate_xml/',
+                    'POST /api/sri/documents/{id}/sign_document/',
+                    'POST /api/sri/documents/{id}/send_to_sri/',
+                    'POST /api/sri/documents/{id}/process_complete/',
+                    'POST /api/sri/documents/{id}/reprocess_document/'
+                ],
+                'certificate_management': [
+                    'GET /api/sri/documents/certificate_manager_status/',
+                    'POST /api/sri/documents/preload_certificates/',
+                    'POST /api/sri/documents/reload_company_certificate/',
+                    'POST /api/sri/documents/clear_certificate_cache/',
+                    'GET /api/sri/documents/company_certificate_info/'
+                ],
+                'utilities': [
+                    'GET /api/sri/documents/{id}/status_check/',
+                    'GET /api/sri/documents/dashboard/',
+                    'GET /api/sri/documents/{id}/generate_pdf/',
+                    'POST /api/sri/documents/{id}/send_email/',
+                    'POST /api/sri/documents/validate_company_setup/',
+                    'GET /api/sri/documents/processing_stats/'
+                ]
+            },
+            'migration_notes': {
+                'breaking_changes': [
+                    'certificate_password parameter is now optional',
+                    'Automatic certificate loading from GlobalCertificateManager',
+                    'process_complete endpoint no longer requires password'
+                ],
+                'improvements': [
+                    'Faster processing with certificate caching',
+                    'Better error handling and validation',
+                    'Multi-company certificate management',
+                    'Real-time certificate status monitoring'
+                ]
+            }
+        })
 
 
 # ========== FUNCIONES AUXILIARES ADICIONALES ==========
@@ -1746,14 +2213,6 @@ def validate_company_sri_config(company):
         
         if not sri_config.emission_point:
             return False, "Emission point not configured"
-        
-        # Validar certificado digital
-        try:
-            certificate = company.digital_certificate
-            if not certificate or not certificate.status == 'ACTIVE':
-                return False, "Digital certificate not valid"
-        except:
-            return False, "Digital certificate not found"
         
         return True, "Configuration is valid"
         
@@ -1841,6 +2300,8 @@ def log_document_creation(document, document_type, user=None):
     User: {user.username if user else 'System'}
     Created At: {timezone.now()}
     Status: {document.status}
+    Processing Method: GlobalCertificateManager
+    Password Required: False
     ==========================================
     """)
 
@@ -1849,7 +2310,7 @@ def handle_document_error(document, error_message, document_type):
     """
     Manejo centralizado de errores de documentos
     """
-    logger.error(f"Error in {document_type} {document.id}: {error_message}")
+    logger.error(f"❌ Error in {document_type} {document.id}: {error_message}")
     
     # Actualizar estado del documento
     document.status = 'ERROR'
@@ -1867,5 +2328,6 @@ def handle_document_error(document, error_message, document_type):
         'error': 'DOCUMENT_ERROR',
         'message': error_message,
         'document_id': document.id,
-        'document_type': document_type
+        'document_type': document_type,
+        'processing_method': 'GlobalCertificateManager'
     }

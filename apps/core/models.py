@@ -70,18 +70,76 @@ class AuditLog(BaseModel):
     Registro de auditoría para cambios importantes en el sistema
     """
     
+    # OPCIONES DE ACCIONES COMPLETAS PARA SRI Y SISTEMA
     ACTION_CHOICES = [
+        # Acciones básicas de CRUD
         ('CREATE', _('Create')),
         ('UPDATE', _('Update')),
         ('DELETE', _('Delete')),
+        ('VIEW', _('View')),
+        
+        # Acciones de autenticación
         ('LOGIN', _('Login')),
         ('LOGOUT', _('Logout')),
+        ('LOGIN_FAILED', _('Login Failed')),
+        
+        # Acciones de archivos
         ('EXPORT', _('Export')),
         ('IMPORT', _('Import')),
+        ('UPLOAD', _('Upload')),
+        ('DOWNLOAD', _('Download')),
+        
+        # Acciones de comunicación
         ('SEND', _('Send')),
         ('RECEIVE', _('Receive')),
+        
+        # Acciones de autorización
         ('AUTHORIZE', _('Authorize')),
         ('REJECT', _('Reject')),
+        ('APPROVE', _('Approve')),
+        ('DENY', _('Deny')),
+        
+        # Acciones específicas del SRI
+        ('SRI_RESPONSE', _('SRI Response')),
+        ('SRI_SENT', _('SRI Sent')),
+        ('SRI_RECEIVED', _('SRI Received')),
+        ('SRI_AUTHORIZED', _('SRI Authorized')),
+        ('SRI_REJECTED', _('SRI Rejected')),
+        ('SRI_ERROR', _('SRI Error')),
+        ('SRI_TIMEOUT', _('SRI Timeout')),
+        ('SRI_VALIDATION', _('SRI Validation')),
+        
+        # Acciones de documentos electrónicos
+        ('DOCUMENT_GENERATED', _('Document Generated')),
+        ('DOCUMENT_SIGNED', _('Document Signed')),
+        ('DOCUMENT_VALIDATED', _('Document Validated')),
+        ('DOCUMENT_CANCELLED', _('Document Cancelled')),
+        
+        # Acciones de XML
+        ('XML_GENERATED', _('XML Generated')),
+        ('XML_SIGNED', _('XML Signed')),
+        ('XML_VALIDATED', _('XML Validated')),
+        ('XML_ERROR', _('XML Error')),
+        
+        # Acciones de certificados
+        ('CERTIFICATE_LOADED', _('Certificate Loaded')),
+        ('CERTIFICATE_EXPIRED', _('Certificate Expired')),
+        ('CERTIFICATE_ERROR', _('Certificate Error')),
+        
+        # Acciones de sistema
+        ('SYSTEM_START', _('System Start')),
+        ('SYSTEM_STOP', _('System Stop')),
+        ('BACKUP_CREATED', _('Backup Created')),
+        ('BACKUP_RESTORED', _('Backup Restored')),
+        
+        # Acciones de configuración
+        ('CONFIG_CHANGED', _('Configuration Changed')),
+        ('SETTINGS_UPDATED', _('Settings Updated')),
+        
+        # Acciones de errores
+        ('ERROR_OCCURRED', _('Error Occurred')),
+        ('WARNING_ISSUED', _('Warning Issued')),
+        ('EXCEPTION_CAUGHT', _('Exception Caught')),
     ]
     
     user = models.ForeignKey(
@@ -96,7 +154,7 @@ class AuditLog(BaseModel):
     
     action = models.CharField(
         _('action'),
-        max_length=20,
+        max_length=50,  # Aumentado para acciones más largas
         choices=ACTION_CHOICES,
         help_text=_('Type of action performed.')
     )
@@ -156,6 +214,7 @@ class AuditLog(BaseModel):
             models.Index(fields=['user', 'created_at']),
             models.Index(fields=['action', 'created_at']),
             models.Index(fields=['model_name', 'object_id']),
+            models.Index(fields=['action', 'model_name']),
         ]
     
     def __str__(self):
