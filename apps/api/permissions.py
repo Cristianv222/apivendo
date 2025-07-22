@@ -1,14 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-Custom permissions for API
+Custom permissions for API - VERSIÓN MEJORADA
+apps/api/permissions.py
 """
 
 from rest_framework import permissions
+from rest_framework.response import Response
+from rest_framework import status
+from functools import wraps
+import logging
+from django.utils import timezone
+from django.utils.deprecation import MiddlewareMixin
+
+logger = logging.getLogger(__name__)
 
 
 class IsCompanyOwnerOrAdmin(permissions.BasePermission):
     """
     Permiso que permite acceso solo a propietarios de empresa o administradores
+    MEJORADO: Con mejor logging y validación
     """
     
     def has_permission(self, request, view):
@@ -17,14 +27,22 @@ class IsCompanyOwnerOrAdmin(permissions.BasePermission):
         """
         # Los usuarios deben estar autenticados
         if not request.user or not request.user.is_authenticated:
+            logger.warning("Access denied: User not authenticated")
             return False
         
         # Los superusuarios tienen acceso total
         if request.user.is_superuser:
+            logger.info(f"Superuser {request.user.username} granted access")
             return True
         
         # Los usuarios regulares deben tener al menos una empresa
-        return request.user.companies.filter(is_active=True).exists()
+        has_companies = request.user.companies.filter(is_active=True).exists()
+        if not has_companies:
+            logger.warning(f"User {request.user.username} has no active companies")
+            return False
+        
+        logger.info(f"User {request.user.username} has active companies")
+        return True
     
     def has_object_permission(self, request, view, obj):
         """
@@ -38,21 +56,29 @@ class IsCompanyOwnerOrAdmin(permissions.BasePermission):
         company = self._get_related_company(obj)
         
         if not company:
+            logger.warning(f"No related company found for object {type(obj).__name__}")
             return False
         
         # Verificar si el usuario tiene acceso a la empresa
-        return company in request.user.companies.filter(is_active=True)
+        has_access = company in request.user.companies.filter(is_active=True)
+        
+        if not has_access:
+            logger.warning(f"User {request.user.username} denied access to company {company.id}")
+        else:
+            logger.info(f"User {request.user.username} granted access to company {company.id}")
+        
+        return has_access
     
     def _get_related_company(self, obj):
         """
-        Obtiene la empresa relacionada con el objeto
+        Obtiene la empresa relacionada con el objeto - MEJORADO
         """
         # Si el objeto tiene directamente una empresa
         if hasattr(obj, 'company'):
             return obj.company
         
         # Si el objeto es una empresa
-        if hasattr(obj, 'ruc'):  # Asumiendo que es Company
+        if hasattr(obj, 'ruc') and hasattr(obj, 'business_name'):  # Más específico
             return obj
         
         # Si el objeto tiene un documento relacionado
@@ -63,21 +89,40 @@ class IsCompanyOwnerOrAdmin(permissions.BasePermission):
         if hasattr(obj, 'certificate') and hasattr(obj.certificate, 'company'):
             return obj.certificate.company
         
+        # ✅ NUEVO: Para ElectronicDocument y modelos SRI
+        if hasattr(obj, 'original_document') and hasattr(obj.original_document, 'company'):
+            return obj.original_document.company
+        
+        # ✅ NUEVO: Para items de documentos
+        if hasattr(obj, 'settlement') and hasattr(obj.settlement, 'company'):
+            return obj.settlement.company
+        
+        # ✅ NUEVO: Para detalles de retención
+        if hasattr(obj, 'retention') and hasattr(obj.retention, 'company'):
+            return obj.retention.company
+        
         return None
 
 
 class IsAdminUser(permissions.BasePermission):
     """
-    Permiso solo para administradores
+    Permiso solo para administradores - MEJORADO
     """
     
     def has_permission(self, request, view):
-        return request.user and request.user.is_superuser
+        is_admin = request.user and request.user.is_superuser
+        
+        if not is_admin:
+            logger.warning(f"Admin access denied for user: {getattr(request.user, 'username', 'Anonymous')}")
+        else:
+            logger.info(f"Admin access granted for user: {request.user.username}")
+        
+        return is_admin
 
 
 class IsOwnerOrReadOnly(permissions.BasePermission):
     """
-    Permiso que permite edición solo al propietario, lectura para otros
+    Permiso que permite edición solo al propietario, lectura para otros - MEJORADO
     """
     
     def has_object_permission(self, request, view, obj):
@@ -85,28 +130,370 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             return True
         
-        # Permisos de escritura solo para el propietario
-        return obj.created_by == request.user
+        # ✅ MEJORADO: Verificar diferentes campos de propietario
+        owner_fields = ['created_by', 'user', 'owner']
+        
+        for field in owner_fields:
+            if hasattr(obj, field):
+                owner = getattr(obj, field)
+                is_owner = owner == request.user
+                
+                if not is_owner:
+                    logger.warning(f"User {request.user.username} denied edit access to {type(obj).__name__}")
+                
+                return is_owner
+        
+        # Si no hay campo de propietario, denegar
+        logger.warning(f"No owner field found for {type(obj).__name__}")
+        return False
 
 
 class IsCompanyMember(permissions.BasePermission):
     """
-    Permiso para miembros de la empresa
+    Permiso para miembros de la empresa - MEJORADO CON VALIDACIÓN ESTRICTA
     """
     
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        # Obtener company_id de los parámetros
-        company_id = request.data.get('company') or request.query_params.get('company')
+        # ✅ MEJORADO: Múltiples formas de obtener company_id
+        company_id = self._extract_company_id(request, view)
         
         if not company_id:
-            return True  # Será validado a nivel de objeto
+            return True  # Será validado a nivel de objeto o endpoint
+        
+        # ✅ NUEVO: Validación estricta
+        return self._validate_company_access(request.user, company_id)
+    
+    def _extract_company_id(self, request, view):
+        """
+        Extrae company_id de múltiples fuentes
+        """
+        # Del body (POST/PUT/PATCH)
+        if hasattr(request, 'data') and request.data:
+            company_id = request.data.get('company') or request.data.get('company_id')
+            if company_id:
+                return company_id
+        
+        # De query params (GET)
+        company_id = request.query_params.get('company') or request.query_params.get('company_id')
+        if company_id:
+            return company_id
+        
+        # Del path (si es un detail view)
+        if hasattr(view, 'get_object'):
+            try:
+                obj = view.get_object()
+                if hasattr(obj, 'company'):
+                    return obj.company.id
+            except:
+                pass
+        
+        return None
+    
+    def _validate_company_access(self, user, company_id):
+        """
+        Valida acceso del usuario a la empresa
+        """
+        try:
+            company_id = int(company_id)
+            
+            # Superuser tiene acceso total
+            if user.is_superuser:
+                return True
+            
+            # Verificar relación usuario-empresa
+            from apps.companies.models import Company
+            try:
+                company = Company.objects.get(id=company_id, is_active=True)
+                has_access = company in user.companies.filter(is_active=True)
+                
+                if not has_access:
+                    logger.warning(f"User {user.username} denied access to company {company_id}")
+                
+                return has_access
+                
+            except Company.DoesNotExist:
+                logger.error(f"Company {company_id} does not exist")
+                return False
+                
+        except (ValueError, TypeError):
+            logger.error(f"Invalid company_id format: {company_id}")
+            return False
+
+
+# ========== NUEVOS PERMISOS ESPECÍFICOS PARA SRI ==========
+
+class SRIDocumentPermission(permissions.BasePermission):
+    """
+    Permiso específico para documentos SRI
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Para creación de documentos, validar company_id
+        if request.method == 'POST':
+            company_id = request.data.get('company')
+            if company_id:
+                return self._validate_company_access(request.user, company_id)
+        
+        return True  # Validación a nivel de objeto
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_superuser:
+            return True
+        
+        # Obtener empresa del documento
+        company = None
+        if hasattr(obj, 'company'):
+            company = obj.company
+        elif hasattr(obj, 'document') and hasattr(obj.document, 'company'):
+            company = obj.document.company
+        
+        if not company:
+            return False
+        
+        return company in request.user.companies.filter(is_active=True)
+    
+    def _validate_company_access(self, user, company_id):
+        """Misma validación que IsCompanyMember"""
+        try:
+            company_id = int(company_id)
+            
+            if user.is_superuser:
+                return True
+            
+            from apps.companies.models import Company
+            try:
+                company = Company.objects.get(id=company_id, is_active=True)
+                return company in user.companies.filter(is_active=True)
+            except Company.DoesNotExist:
+                return False
+        except (ValueError, TypeError):
+            return False
+
+
+class CertificatePermission(permissions.BasePermission):
+    """
+    Permiso específico para certificados digitales
+    """
+    
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        
+        # Solo superuser y usuarios con empresas pueden gestionar certificados
+        if request.user.is_superuser:
+            return True
+        
+        return request.user.companies.filter(is_active=True).exists()
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_superuser:
+            return True
+        
+        # Solo el propietario de la empresa puede gestionar sus certificados
+        if hasattr(obj, 'company'):
+            return obj.company in request.user.companies.filter(is_active=True)
+        
+        return False
+
+
+# ========== DECORADORES MEJORADOS ==========
+
+def require_company_access(func):
+    """
+    Decorador que valida acceso a empresa - MEJORADO
+    """
+    @wraps(func)
+    def wrapper(self, request, *args, **kwargs):
+        # Extraer company_id de múltiples fuentes
+        company_id = None
+        
+        if request.method in ['POST', 'PUT', 'PATCH']:
+            company_id = request.data.get('company_id') or request.data.get('company')
+        elif request.method == 'GET':
+            company_id = request.query_params.get('company_id') or request.query_params.get('company')
+        
+        if not company_id:
+            return Response({
+                'error': 'VALIDATION_ERROR',
+                'message': 'company_id is required',
+                'code': 'MISSING_COMPANY_ID'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Validar acceso con logging mejorado
+        if not _validate_user_company_access_with_logging(request.user, company_id):
+            return Response({
+                'error': 'COMPANY_ACCESS_DENIED',
+                'message': 'You do not have permission to access this company',
+                'code': 'FORBIDDEN_COMPANY_ACCESS',
+                'company_id': str(company_id),
+                'user': request.user.username if request.user else None,
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        return func(self, request, *args, **kwargs)
+    return wrapper
+
+
+def require_admin_access(func):
+    """
+    Decorador que requiere acceso de administrador
+    """
+    @wraps(func)
+    def wrapper(self, request, *args, **kwargs):
+        if not request.user or not request.user.is_superuser:
+            logger.warning(f"Admin access denied for user: {getattr(request.user, 'username', 'Anonymous')}")
+            return Response({
+                'error': 'ADMIN_ACCESS_REQUIRED',
+                'message': 'This action requires administrator privileges',
+                'code': 'FORBIDDEN_ADMIN_ONLY'
+            }, status=status.HTTP_403_FORBIDDEN)
+        
+        logger.info(f"Admin access granted for user: {request.user.username}")
+        return func(self, request, *args, **kwargs)
+    return wrapper
+
+
+# ========== FUNCIONES AUXILIARES MEJORADAS ==========
+
+def _validate_user_company_access_with_logging(user, company_id):
+    """
+    Validación con logging detallado
+    """
+    if not user or not user.is_authenticated:
+        logger.warning("Access denied: User not authenticated")
+        return False
+    
+    try:
+        company_id = int(company_id)
+        
+        # Superuser tiene acceso completo
+        if user.is_superuser:
+            logger.info(f"Superuser {user.username} accessing company {company_id}")
+            return True
+        
+        # Validar relación usuario-empresa
+        if hasattr(user, 'companies'):
+            from apps.companies.models import Company
+            try:
+                company = Company.objects.get(id=company_id, is_active=True)
+                has_access = company in user.companies.filter(is_active=True)
+                
+                if has_access:
+                    logger.info(f"User {user.username} granted access to company {company_id}")
+                else:
+                    logger.warning(f"User {user.username} denied access to company {company_id}")
+                
+                return has_access
+                
+            except Company.DoesNotExist:
+                logger.error(f"Company {company_id} does not exist")
+                return False
+        
+        logger.warning(f"User {user.username} has no company relationships")
+        return False
+        
+    except (ValueError, TypeError):
+        logger.error(f"Invalid company_id format: {company_id}")
+        return False
+
+
+def get_user_accessible_companies(user):
+    """
+    Obtiene las empresas accesibles para el usuario
+    """
+    if not user or not user.is_authenticated:
+        return []
+    
+    if user.is_superuser:
+        from apps.companies.models import Company
+        return Company.objects.filter(is_active=True)
+    
+    if hasattr(user, 'companies'):
+        return user.companies.filter(is_active=True)
+    
+    return []
+
+
+def check_company_permission(user, company_id, action='access'):
+    """
+    Verificación centralizada de permisos de empresa
+    """
+    if not user or not user.is_authenticated:
+        return False, "User not authenticated"
+    
+    if user.is_superuser:
+        return True, "Superuser access granted"
+    
+    try:
+        company_id = int(company_id)
+        from apps.companies.models import Company
         
         try:
-            from apps.companies.models import Company
             company = Company.objects.get(id=company_id, is_active=True)
-            return company in request.user.companies.all()
         except Company.DoesNotExist:
+            return False, f"Company {company_id} does not exist"
+        
+        if hasattr(user, 'companies'):
+            has_access = company in user.companies.filter(is_active=True)
+            if has_access:
+                return True, f"User has {action} permission for company {company_id}"
+            else:
+                return False, f"User does not have {action} permission for company {company_id}"
+        
+        return False, "User has no company relationships"
+        
+    except (ValueError, TypeError):
+        return False, f"Invalid company_id format: {company_id}"
+
+
+# ========== CLASE DE PERMISOS COMBINADOS ==========
+
+class VendoSRIPermission(permissions.BasePermission):
+    """
+    Permiso combinado para todo el sistema VENDO SRI
+    """
+    
+    def has_permission(self, request, view):
+        # Autenticación requerida
+        if not request.user or not request.user.is_authenticated:
             return False
+        
+        # Superuser tiene acceso total
+        if request.user.is_superuser:
+            return True
+        
+        # Para acciones que requieren empresa específica
+        company_id = self._extract_company_id(request, view)
+        if company_id:
+            is_valid, message = check_company_permission(request.user, company_id)
+            if not is_valid:
+                logger.warning(f"Permission denied: {message}")
+            return is_valid
+        
+        # Para listados generales, verificar que tenga al menos una empresa
+        return request.user.companies.filter(is_active=True).exists()
+    
+    def has_object_permission(self, request, view, obj):
+        if request.user.is_superuser:
+            return True
+        
+        # Usar el permiso existente IsCompanyOwnerOrAdmin
+        company_permission = IsCompanyOwnerOrAdmin()
+        return company_permission.has_object_permission(request, view, obj)
+    
+    def _extract_company_id(self, request, view):
+        """Extrae company_id usando la misma lógica de IsCompanyMember"""
+        member_permission = IsCompanyMember()
+        return member_permission._extract_company_id(request, view)
+    
+class CompanySecurityMiddleware(MiddlewareMixin):
+    def process_request(self, request):
+        return None
+    def process_response(self, request, response):
+        return response

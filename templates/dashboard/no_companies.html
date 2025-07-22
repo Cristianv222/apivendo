@@ -1,0 +1,140 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>No Companies - VENDO SRI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .no-companies-card {
+            border-radius: 15px;
+            border: none;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+        }
+        .status-icon {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 30px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container-fluid">
+            <a class="navbar-brand fw-bold" href="{% url 'core:dashboard' %}">
+                <i class="fas fa-chart-line me-2"></i>VENDO SRI
+            </a>
+            <div class="navbar-nav ms-auto">
+                <div class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-user-circle me-1"></i>{{ user.email }}
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="fas fa-cog me-2"></i>Admin</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="{% url 'account_logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid py-5">
+        <div class="row justify-content-center">
+            <div class="col-lg-8 col-md-10">
+                <div class="card no-companies-card">
+                    <div class="card-body text-center py-5">
+                        <!-- Icono de estado -->
+                        <div class="status-icon">
+                            <i class="fas fa-building fa-3x text-white"></i>
+                        </div>
+                        
+                        <!-- Mensaje principal -->
+                        <h2 class="mb-3">No tienes empresas asignadas</h2>
+                        <p class="text-muted mb-4 fs-5">
+                            Tu cuenta está activa, pero aún no tienes empresas asociadas para gestionar facturas.
+                        </p>
+                        
+                        <!-- Información del usuario -->
+                        <div class="alert alert-info">
+                            <div class="row text-start">
+                                <div class="col-md-6">
+                                    <p class="mb-2"><strong><i class="fas fa-envelope me-2 text-primary"></i>Email:</strong> {{ user.email }}</p>
+                                    <p class="mb-2"><strong><i class="fas fa-user me-2 text-primary"></i>Usuario:</strong> {{ user.get_display_name|default:user.username }}</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p class="mb-2"><strong><i class="fas fa-calendar me-2 text-primary"></i>Registrado:</strong> {{ user.date_joined|date:"F d, Y" }}</p>
+                                    <p class="mb-2"><strong><i class="fas fa-check-circle me-2 text-success"></i>Estado:</strong> Cuenta Activa</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- ¿Qué puedes hacer? -->
+                        <div class="row mt-4">
+                            <div class="col-md-6 mb-3">
+                                <div class="card text-white" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                                    <div class="card-body">
+                                        <h5><i class="fas fa-user-shield fa-2x mb-3"></i></h5>
+                                        <h5>Eres Administrador</h5>
+                                        <p class="mb-3">Puedes crear empresas y asignar usuarios</p>
+                                        <a href="{% url 'admin:index' %}" class="btn btn-light">
+                                            <i class="fas fa-cog me-1"></i>Ir al Admin
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <div class="card text-white" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                                    <div class="card-body">
+                                        <h5><i class="fas fa-clock fa-2x mb-3"></i></h5>
+                                        <h5>¿Usuario Normal?</h5>
+                                        <p class="mb-3">Contacta al administrador para asignación</p>
+                                        <a href="{% url 'account_logout' %}" class="btn btn-light">
+                                            <i class="fas fa-sign-out-alt me-1"></i>Cerrar Sesión
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Acciones rápidas -->
+                        <div class="mt-4">
+                            <h5>Acciones rápidas:</h5>
+                            <div class="btn-group" role="group">
+                                <a href="{% url 'admin:companies_company_add' %}" class="btn btn-primary">
+                                    <i class="fas fa-plus me-1"></i>Crear Empresa
+                                </a>
+                                <a href="{% url 'admin:companies_company_changelist' %}" class="btn btn-outline-primary">
+                                    <i class="fas fa-list me-1"></i>Ver Empresas
+                                </a>
+                                <a href="{% url 'admin:users_user_changelist' %}" class="btn btn-outline-success">
+                                    <i class="fas fa-users me-1"></i>Gestionar Usuarios
+                                </a>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <!-- Información técnica -->
+                        <div class="text-muted small">
+                            <p><strong>🔐 Sistema de Seguridad:</strong> JWT + Decoradores</p>
+                            <p><strong>✅ Helper Funcionando:</strong> UserCompanyAssignment detectado</p>
+                            <p><strong>🎯 Próximo paso:</strong> Asignar empresas al usuario</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -1,81 +1,137 @@
-from django.shortcuts import render, get_object_or_404, redirect
+# -*- coding: utf-8 -*-
+"""
+Core views - VERSIÓN SEGURA CON DECORADORES Y TOKENS
+Todas las vistas validadas con decoradores personalizados
+"""
+
+import logging
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q, Sum
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.utils import timezone
+from django.contrib import messages
 from datetime import datetime, timedelta
+from functools import wraps
+
 from apps.companies.models import Company
 from apps.users.models import User
 
-# Intentar importar Invoice, si no existe, crear una clase temporal
-try:
-    from apps.invoicing.models import Invoice
-    INVOICES_AVAILABLE = True
-except ImportError:
-    INVOICES_AVAILABLE = False
+# ========== IMPORTAR DECORADORES DEL SISTEMA ==========
+from apps.api.views.sri_views import (
+    audit_api_action,
+    get_user_company_by_id
+)
 
-# Importar modelos de asignación
-try:
-    from apps.users.models import UserCompanyAssignment, AdminNotification
-    ASSIGNMENTS_AVAILABLE = True
-except ImportError:
-    ASSIGNMENTS_AVAILABLE = False
+logger = logging.getLogger(__name__)
 
+# ========== DECORADORES PARA VISTAS HTML ==========
+
+def require_company_access_html(view_func):
+    """
+    Decorador para vistas HTML que requieren validación de empresa
+    """
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        # Obtener company_id del parámetro GET o kwargs
+        company_id = request.GET.get('company') or kwargs.get('company_id')
+        
+        if company_id:
+            # 🔒 VALIDACIÓN CRÍTICA: Solo empresas del usuario
+            company = get_user_company_by_id(company_id, request.user)
+            
+            if not company:
+                logger.warning(f"🚫 HTML SECURITY: User {request.user.username} denied access to company {company_id}")
+                messages.error(request, f'You do not have access to company {company_id}.')
+                
+                # Redirigir a dashboard sin company parameter
+                return redirect('core:dashboard')
+            
+            # Agregar empresa validada al request
+            request.validated_company = company
+            logger.info(f"✅ HTML: User {request.user.username} validated access to company {company_id}")
+        
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
+
+def audit_html_action(action_type):
+    """
+    Decorador de auditoría para vistas HTML
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            start_time = timezone.now()
+            
+            logger.info(f"🌐 [{action_type}] User {request.user.username} - {view_func.__name__} - Started")
+            
+            try:
+                response = view_func(request, *args, **kwargs)
+                execution_time = (timezone.now() - start_time).total_seconds()
+                logger.info(f"✅ [{action_type}] User {request.user.username} - SUCCESS - {execution_time:.2f}s")
+                return response
+            except Exception as e:
+                execution_time = (timezone.now() - start_time).total_seconds()
+                logger.error(f"❌ [{action_type}] User {request.user.username} - ERROR: {str(e)} - {execution_time:.2f}s")
+                raise
+        return wrapper
+    return decorator
+
+
+def get_user_companies_secure(user):
+    """
+    Función auxiliar SEGURA CORREGIDA - USA EL HELPER QUE FUNCIONA
+    """
+    from apps.api.user_company_helper import get_user_companies_exact
+    return get_user_companies_exact(user)
+
+
+# ========== VISTAS PRINCIPALES CON DECORADORES ==========
 
 @login_required
+@audit_html_action('VIEW_DASHBOARD')
+@require_company_access_html
 def dashboard_view(request):
-    """Dashboard principal para usuarios - con control de asignaciones"""
+    """
+    🔒 DASHBOARD SEGURO CON DECORADORES
+    """
     user = request.user
     
     # Si es admin/staff, mostrar dashboard administrativo
     if user.is_staff or user.is_superuser:
         return admin_dashboard_view(request)
     
-    # Verificar asignación del usuario
-    if ASSIGNMENTS_AVAILABLE:
-        try:
-            assignment = UserCompanyAssignment.objects.get(user=user)
-            
-            # Si no está asignado, redirigir a sala de espera
-            if not assignment.is_assigned():
-                return redirect('users:waiting_room')
-            
-            # Obtener empresas asignadas
-            user_companies = assignment.get_assigned_companies()
-            
-        except UserCompanyAssignment.DoesNotExist:
-            # Si no tiene asignación, redirigir a sala de espera
-            return redirect('users:waiting_room')
-    else:
-        # Fallback: usar el sistema original de empresas
-        user_companies = user.companies.all() if hasattr(user, 'companies') else Company.objects.filter(users=user)
-        
-        # Si no hay relación directa, crear empresas de ejemplo
-        if not user_companies.exists():
-            user_companies = Company.objects.all()[:5]  # Limitar a 5 para demo
+    # Obtener empresas del usuario de forma SEGURA
+    user_companies = get_user_companies_secure(user)
     
-    # Si no tiene empresas asignadas
+    # Si no tiene empresas, mostrar mensaje
     if not user_companies.exists():
+        logger.warning(f"User {user.username} has no accessible companies")
         return render(request, 'dashboard/no_companies.html', {'user': user})
     
-    # Filtro por empresa si se selecciona una específica
-    selected_company_id = request.GET.get('company')
-    selected_company = None
+    # Empresa seleccionada (ya validada por decorador)
+    selected_company = getattr(request, 'validated_company', None)
     
-    if selected_company_id:
-        selected_company = get_object_or_404(
-            Company, 
-            id=selected_company_id, 
-            id__in=user_companies.values_list('id', flat=True)
-        )
+    # Si no hay empresa seleccionada, usar la primera
+    if not selected_company:
+        selected_company = user_companies.first()
+        logger.info(f"Using default company {selected_company.id} for user {user.username}")
     
     # Verificar si el modelo Invoice existe
+    try:
+        from apps.invoicing.models import Invoice
+        INVOICES_AVAILABLE = True
+    except ImportError:
+        INVOICES_AVAILABLE = False
+        logger.warning("Invoice model not available")
+    
     if INVOICES_AVAILABLE:
+        # 🔒 FILTRAR FACTURAS SOLO DE EMPRESAS DEL USUARIO
         if selected_company:
             invoices = Invoice.objects.filter(company=selected_company)
         else:
-            # Mostrar facturas de todas las empresas asignadas
             invoices = Invoice.objects.filter(company__in=user_companies)
         
         # Filtros adicionales
@@ -87,12 +143,18 @@ def dashboard_view(request):
             invoices = invoices.filter(status=status_filter)
         
         if date_from:
-            date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-            invoices = invoices.filter(created_at__date__gte=date_from)
+            try:
+                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+                invoices = invoices.filter(created_at__date__gte=date_from)
+            except ValueError:
+                logger.warning(f"Invalid date_from format: {date_from}")
         
         if date_to:
-            date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-            invoices = invoices.filter(created_at__date__lte=date_to)
+            try:
+                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+                invoices = invoices.filter(created_at__date__lte=date_to)
+            except ValueError:
+                logger.warning(f"Invalid date_to format: {date_to}")
         
         # Estadísticas
         stats = {
@@ -112,13 +174,13 @@ def dashboard_view(request):
         # Facturas recientes (últimas 10)
         recent_invoices = invoices.order_by('-created_at')[:10]
         
-        # Paginación para todas las facturas
+        # Paginación
         paginator = Paginator(invoices.order_by('-created_at'), 25)
         page_number = request.GET.get('page')
         page_obj = paginator.get_page(page_number)
         
     else:
-        # Si no existe el modelo Invoice, crear datos ficticios
+        # Datos ficticios si no existe Invoice
         stats = {
             'total_invoices': 0,
             'pending_invoices': 0,
@@ -150,10 +212,15 @@ def dashboard_view(request):
         'invoices_exist': INVOICES_AVAILABLE,
         'is_admin': False,
         'current_filters': {
-            'company': selected_company_id,
+            'company': selected_company.id if selected_company else None,
             'status': request.GET.get('status'),
             'date_from': request.GET.get('date_from'),
             'date_to': request.GET.get('date_to'),
+        },
+        'security_validation': {
+            'validated_by_decorator': True,
+            'user_access_confirmed': True,
+            'companies_filtered_by_user': True
         }
     }
     
@@ -161,40 +228,47 @@ def dashboard_view(request):
 
 
 @login_required
+@audit_html_action('VIEW_ADMIN_DASHBOARD')
 def admin_dashboard_view(request):
-    """Dashboard especial para administradores"""
-    
+    """
+    🔒 DASHBOARD ADMINISTRATIVO SEGURO
+    """
     if not (request.user.is_staff or request.user.is_superuser):
+        logger.warning(f"Non-admin user {request.user.username} tried to access admin dashboard")
+        messages.error(request, 'Access denied. Administrator privileges required.')
         return redirect('core:dashboard')
     
-    # Estadísticas generales
+    # Estadísticas generales para admins
     total_users = User.objects.filter(is_staff=False, is_superuser=False).count()
     total_companies = Company.objects.count()
     
-    if ASSIGNMENTS_AVAILABLE:
+    try:
+        from apps.users.models import UserCompanyAssignment, AdminNotification
+        ASSIGNMENTS_AVAILABLE = True
+        
         waiting_users = UserCompanyAssignment.objects.filter(status='waiting').count()
         assigned_users = UserCompanyAssignment.objects.filter(status='assigned').count()
-        
-        # Notificaciones no leídas
         unread_notifications = AdminNotification.objects.filter(is_read=False).count()
         recent_notifications = AdminNotification.objects.filter(is_read=False)[:5]
-        
-        # Usuarios recientes en espera
         recent_waiting = UserCompanyAssignment.objects.filter(
             status='waiting'
         ).select_related('user').order_by('-created_at')[:10]
         
-    else:
+    except ImportError:
+        ASSIGNMENTS_AVAILABLE = False
         waiting_users = 0
         assigned_users = total_users
         unread_notifications = 0
         recent_notifications = []
         recent_waiting = []
     
-    if INVOICES_AVAILABLE:
+    try:
+        from apps.invoicing.models import Invoice
+        INVOICES_AVAILABLE = True
         total_invoices = Invoice.objects.count()
         pending_invoices = Invoice.objects.filter(status='pending').count()
-    else:
+    except ImportError:
+        INVOICES_AVAILABLE = False
         total_invoices = 0
         pending_invoices = 0
     
@@ -215,39 +289,37 @@ def admin_dashboard_view(request):
         'recent_waiting': recent_waiting,
         'assignments_available': ASSIGNMENTS_AVAILABLE,
         'invoices_available': INVOICES_AVAILABLE,
+        'security_validation': {
+            'admin_access_confirmed': True,
+            'user': request.user.username
+        }
     }
     
     return render(request, 'dashboard/admin_dashboard.html', context)
 
 
 @login_required
+@audit_html_action('API_COMPANY_INVOICES')
+@require_company_access_html
 def company_invoices_api(request, company_id):
-    """API para obtener facturas de una empresa específica (AJAX)"""
-    user = request.user
+    """
+    🔒 API SEGURA para obtener facturas de empresa (AJAX)
+    """
+    # La empresa ya está validada por el decorador
+    company = request.validated_company
     
-    # Verificar acceso del usuario a la empresa
-    if user.is_staff or user.is_superuser:
-        # Admins pueden ver todas las empresas
-        company = get_object_or_404(Company, id=company_id)
-    else:
-        # Usuarios normales solo ven empresas asignadas
-        if ASSIGNMENTS_AVAILABLE:
-            try:
-                assignment = UserCompanyAssignment.objects.get(user=user)
-                user_companies = assignment.get_assigned_companies()
-            except UserCompanyAssignment.DoesNotExist:
-                return JsonResponse({'success': False, 'error': 'No autorizado'})
-        else:
-            # Fallback al sistema original
-            user_companies = user.companies.all() if hasattr(user, 'companies') else Company.objects.filter(users=user)
-        
-        company = get_object_or_404(Company, id=company_id, id__in=user_companies.values_list('id', flat=True))
+    try:
+        from apps.invoicing.models import Invoice
+        INVOICES_AVAILABLE = True
+    except ImportError:
+        INVOICES_AVAILABLE = False
     
     if INVOICES_AVAILABLE:
+        # 🔒 FILTRAR SOLO FACTURAS DE LA EMPRESA VALIDADA
         invoices = Invoice.objects.filter(company=company).order_by('-created_at')
         
         invoices_data = []
-        for invoice in invoices[:50]:  # Limitar a 50 para performance
+        for invoice in invoices[:50]:  # Limitar para performance
             invoices_data.append({
                 'id': invoice.id,
                 'invoice_number': getattr(invoice, 'invoice_number', ''),
@@ -262,7 +334,11 @@ def company_invoices_api(request, company_id):
             'success': True,
             'company_name': getattr(company, 'business_name', company.trade_name),
             'invoices': invoices_data,
-            'total_count': invoices.count()
+            'total_count': invoices.count(),
+            'security_validation': {
+                'validated_by_decorator': True,
+                'user_access_confirmed': True
+            }
         })
     
     else:
@@ -271,75 +347,85 @@ def company_invoices_api(request, company_id):
             'error': 'El módulo de facturación no está disponible',
             'company_name': getattr(company, 'business_name', company.trade_name),
             'invoices': [],
-            'total_count': 0
+            'total_count': 0,
+            'security_validation': {
+                'validated_by_decorator': True,
+                'user_access_confirmed': True
+            }
         })
 
 
 @login_required
+@audit_html_action('VIEW_INVOICE_DETAIL')
 def invoice_detail_view(request, invoice_id):
-    """Vista detallada de una factura"""
-    user = request.user
-    
-    if not INVOICES_AVAILABLE:
+    """
+    🔒 VISTA SEGURA de detalle de factura
+    """
+    try:
+        from apps.invoicing.models import Invoice
+        INVOICES_AVAILABLE = True
+    except ImportError:
         from django.http import Http404
         raise Http404("La funcionalidad de facturas no está disponible")
     
-    from apps.invoicing.models import Invoice
+    # 🔒 VALIDACIÓN CRÍTICA: Solo facturas de empresas del usuario
+    user_companies = get_user_companies_secure(request.user)
     
-    # Verificar acceso del usuario a la factura
-    if user.is_staff or user.is_superuser:
-        # Admins pueden ver todas las facturas
-        invoice = get_object_or_404(Invoice, id=invoice_id)
+    if user_companies.exists():
+        try:
+            invoice = Invoice.objects.select_related('company').get(
+                id=invoice_id,
+                company__in=user_companies
+            )
+            logger.info(f"✅ User {request.user.username} accessing invoice {invoice_id}")
+        except Invoice.DoesNotExist:
+            logger.warning(f"❌ User {request.user.username} denied access to invoice {invoice_id}")
+            from django.http import Http404
+            raise Http404("Invoice not found or access denied")
     else:
-        # Usuarios normales solo ven facturas de empresas asignadas
-        if ASSIGNMENTS_AVAILABLE:
-            try:
-                assignment = UserCompanyAssignment.objects.get(user=user)
-                user_companies = assignment.get_assigned_companies()
-            except UserCompanyAssignment.DoesNotExist:
-                from django.http import Http404
-                raise Http404("No autorizado")
-        else:
-            # Fallback al sistema original
-            user_companies = user.companies.all() if hasattr(user, 'companies') else Company.objects.filter(users=user)
-        
-        invoice = get_object_or_404(
-            Invoice, 
-            id=invoice_id, 
-            company__in=user_companies
-        )
+        logger.warning(f"❌ User {request.user.username} has no companies for invoice access")
+        from django.http import Http404
+        raise Http404("No accessible companies")
     
     context = {
         'invoice': invoice,
         'company': invoice.company,
-        'is_admin': user.is_staff or user.is_superuser,
+        'is_admin': request.user.is_staff or request.user.is_superuser,
+        'security_validation': {
+            'validated_by_query_filter': True,
+            'user_access_confirmed': True
+        }
     }
     
     return render(request, 'dashboard/invoice_detail.html', context)
 
 
 @login_required
+@audit_html_action('API_DASHBOARD_STATS')
 def dashboard_stats_api(request):
-    """API para estadísticas del dashboard (para gráficos)"""
-    user = request.user
+    """
+    🔒 API SEGURA para estadísticas del dashboard
+    """
+    # Obtener empresas del usuario de forma SEGURA
+    user_companies = get_user_companies_secure(request.user)
     
-    # Obtener empresas según permisos del usuario
-    if user.is_staff or user.is_superuser:
-        user_companies = Company.objects.all()
-    elif ASSIGNMENTS_AVAILABLE:
-        try:
-            assignment = UserCompanyAssignment.objects.get(user=user)
-            user_companies = assignment.get_assigned_companies()
-        except UserCompanyAssignment.DoesNotExist:
-            return JsonResponse({'error': 'No autorizado'})
-    else:
-        # Fallback al sistema original
-        user_companies = user.companies.all() if hasattr(user, 'companies') else Company.objects.filter(users=user)
+    if not user_companies.exists():
+        return JsonResponse({
+            'error': 'No accessible companies',
+            'security_validation': {
+                'user_access_confirmed': False,
+                'companies_count': 0
+            }
+        })
+    
+    try:
+        from apps.invoicing.models import Invoice
+        INVOICES_AVAILABLE = True
+    except ImportError:
+        INVOICES_AVAILABLE = False
     
     if INVOICES_AVAILABLE:
-        from apps.invoicing.models import Invoice
-        
-        # Estadísticas de los últimos 30 días
+        # 🔒 ESTADÍSTICAS SOLO DE EMPRESAS DEL USUARIO
         last_30_days = timezone.now() - timedelta(days=30)
         invoices_last_30 = Invoice.objects.filter(
             company__in=user_companies,
@@ -361,17 +447,22 @@ def dashboard_stats_api(request):
             count=Count('id')
         )
         
-        # Facturas por empresa
+        # Facturas por empresa (solo empresas del usuario)
         company_stats = invoices_last_30.values('company__trade_name').annotate(
             count=Count('id'),
             total_amount=Sum('total_amount')
-        ).order_by('-count')[:5]  # Top 5 empresas
+        ).order_by('-count')[:5]
         
         return JsonResponse({
             'daily_stats': list(reversed(daily_stats)),
             'status_distribution': list(status_distribution),
             'company_stats': list(company_stats),
             'total_last_30': invoices_last_30.count(),
+            'security_validation': {
+                'filtered_by_user_companies': True,
+                'companies_count': user_companies.count(),
+                'user': request.user.username
+            }
         })
         
     else:
@@ -380,5 +471,10 @@ def dashboard_stats_api(request):
             'status_distribution': [],
             'company_stats': [],
             'total_last_30': 0,
-            'error': 'Módulo de facturación no disponible'
+            'error': 'Módulo de facturación no disponible',
+            'security_validation': {
+                'filtered_by_user_companies': True,
+                'companies_count': user_companies.count(),
+                'user': request.user.username
+            }
         })

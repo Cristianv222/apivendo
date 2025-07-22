@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-URLs for API app - Versión completa con integración SRI
+URLs for API app - VERSIÓN NUCLEAR CORREGIDA CON SEGURIDAD
 apps/api/urls.py
 """
 from django.urls import path, include
@@ -23,14 +23,18 @@ except ImportError:
     SRI_AVAILABLE = False
     print("SRI views not available - basic API only")
 
+# 🔥🔥🔥 IMPORTAR VIEWSET NUCLEAR CORRECTO 🔥🔥🔥
+from apps.api.views.company_views import CompanyViewSet as NuclearCompanyViewSet
+
 
 def api_status(request):
     """Status de la API"""
     return JsonResponse({
         'status': 'OK', 
-        'message': 'VENDO_SRI API funcionando',
-        'version': 'v1',
-        'sri_enabled': SRI_AVAILABLE
+        'message': 'VENDO_SRI API funcionando con SEGURIDAD NUCLEAR',
+        'version': 'v1-nuclear',
+        'sri_enabled': SRI_AVAILABLE,
+        'security_level': 'NUCLEAR_MAXIMUM'
     })
 
 
@@ -58,135 +62,16 @@ def api_root(request):
         })
     
     return JsonResponse({
-        'message': 'VENDO_SRI API v1',
+        'message': 'VENDO_SRI API v1 - NUCLEAR SECURITY ENABLED',
         'sri_integration': SRI_AVAILABLE,
+        'security_method': 'UserCompanyAssignment + Nuclear Protection',
         'endpoints': endpoints
     })
 
 
-class CompanyViewSet(viewsets.ViewSet):
-    """ViewSet simple para empresas"""
-    permission_classes = [IsAuthenticated]
-    
-    def list(self, request):
-        """Listar empresas"""
-        try:
-            from apps.companies.models import Company
-            companies = Company.objects.filter(is_active=True)
-            
-            data = []
-            for company in companies:
-                company_data = {
-                    'id': company.id,
-                    'ruc': company.ruc,
-                    'business_name': company.business_name,
-                    'trade_name': company.trade_name,
-                    'display_name': company.trade_name or company.business_name,
-                    'email': company.email,
-                    'phone': company.phone,
-                    'address': company.address,
-                    'is_active': company.is_active,
-                    'created_at': company.created_at.isoformat() if company.created_at else None,
-                    'updated_at': company.updated_at.isoformat() if company.updated_at else None
-                }
-                
-                # Agregar información SRI si está disponible
-                if SRI_AVAILABLE:
-                    try:
-                        sri_config = company.sri_configuration
-                        company_data['sri_configured'] = True
-                        company_data['sri_environment'] = sri_config.environment
-                    except:
-                        company_data['sri_configured'] = False
-                        company_data['sri_environment'] = None
-                
-                data.append(company_data)
-            
-            return Response(data)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
-    
-    def retrieve(self, request, pk=None):
-        """Obtener empresa específica"""
-        try:
-            from apps.companies.models import Company
-            company = Company.objects.get(id=pk, is_active=True)
-            
-            data = {
-                'id': company.id,
-                'ruc': company.ruc,
-                'business_name': company.business_name,
-                'trade_name': company.trade_name,
-                'display_name': company.trade_name or company.business_name,
-                'email': company.email,
-                'phone': company.phone,
-                'address': company.address,
-                'is_active': company.is_active,
-                'created_at': company.created_at.isoformat() if company.created_at else None,
-                'updated_at': company.updated_at.isoformat() if company.updated_at else None
-            }
-            
-            # Agregar información detallada SRI
-            if SRI_AVAILABLE:
-                try:
-                    sri_config = company.sri_configuration
-                    data['sri_configuration'] = {
-                        'configured': True,
-                        'environment': sri_config.environment,
-                        'establishment_code': sri_config.establishment_code,
-                        'emission_point': sri_config.emission_point,
-                        'special_taxpayer': sri_config.special_taxpayer,
-                        'accounting_required': sri_config.accounting_required
-                    }
-                except:
-                    data['sri_configuration'] = {
-                        'configured': False
-                    }
-            
-            return Response(data)
-        except Exception as e:
-            return Response({'error': str(e)}, status=404)
-    
-    @action(detail=False, methods=['get'])
-    def my_companies(self, request):
-        """Empresas del usuario - endpoint principal"""
-        try:
-            from apps.companies.models import Company
-            
-            # Por ahora devolver todas las empresas activas
-            # TODO: Filtrar por usuario cuando configures la relación
-            companies = Company.objects.filter(is_active=True)
-            
-            data = []
-            for company in companies:
-                company_data = {
-                    'id': company.id,
-                    'ruc': company.ruc,
-                    'business_name': company.business_name,
-                    'trade_name': company.trade_name,
-                    'display_name': company.trade_name or company.business_name,
-                    'email': company.email,
-                    'phone': company.phone,
-                    'address': company.address,
-                    'is_active': company.is_active,
-                    'created_at': company.created_at.isoformat() if company.created_at else None,
-                    'updated_at': company.updated_at.isoformat() if company.updated_at else None
-                }
-                
-                # Agregar estado SRI
-                if SRI_AVAILABLE:
-                    try:
-                        sri_config = company.sri_configuration
-                        company_data['sri_configured'] = True
-                        company_data['sri_environment'] = sri_config.environment
-                    except:
-                        company_data['sri_configured'] = False
-                
-                data.append(company_data)
-            
-            return Response(data)
-        except Exception as e:
-            return Response({'error': str(e)}, status=500)
+# 🔥🔥🔥 NOTA: CompanyViewSet REMOVIDO - AHORA USAMOS EL NUCLEAR 🔥🔥🔥
+# El CompanyViewSet original que estaba aquí ha sido reemplazado por
+# el ViewSet nuclear con seguridad máxima desde apps.api.views.company_views
 
 
 class CustomerViewSet(viewsets.ViewSet):
@@ -381,8 +266,8 @@ class ProductViewSet(viewsets.ViewSet):
 # Router principal
 router = DefaultRouter()
 
-# Registrar ViewSets básicos
-router.register(r'companies', CompanyViewSet, basename='company')
+# 🔥🔥🔥 REGISTRAR VIEWSET NUCLEAR CON SEGURIDAD MÁXIMA 🔥🔥🔥
+router.register(r'companies', NuclearCompanyViewSet, basename='company')
 router.register(r'customers', CustomerViewSet, basename='customer')
 router.register(r'products', ProductViewSet, basename='product')
 
@@ -480,17 +365,17 @@ urlpatterns = [
     path('auth/', include('rest_framework.urls')),
 ]
 
-# ========== DOCUMENTACIÓN DE ENDPOINTS ==========
+# ========== DOCUMENTACIÓN DE ENDPOINTS NUCLEAR ==========
 
 """
-ENDPOINTS DISPONIBLES:
+ENDPOINTS DISPONIBLES CON SEGURIDAD NUCLEAR:
 
-=== BÁSICOS ===
-GET  /api/                                        # Info de la API
-GET  /api/status/                                 # Estado de la API
-GET  /api/companies/                              # Listar empresas
-GET  /api/companies/{id}/                         # Obtener empresa
-GET  /api/companies/my_companies/                 # Empresas del usuario
+=== BÁSICOS CON SEGURIDAD NUCLEAR ===
+GET  /api/                                        # Info de la API (Nuclear)
+GET  /api/status/                                 # Estado de la API (Nuclear)
+GET  /api/companies/                              # Listar empresas (SOLO del usuario)
+GET  /api/companies/{id}/                         # Obtener empresa (CON BLOQUEO NUCLEAR)
+GET  /api/companies/my_companies/                 # Empresas del usuario (SEGURO)
 GET  /api/customers/                              # Listar clientes
 POST /api/customers/                              # Crear cliente
 GET  /api/products/                               # Listar productos
@@ -515,17 +400,27 @@ GET  /api/sri/documents/                          # Listar documentos
 GET  /api/sri/configuration/                      # Configuraciones SRI
 GET  /api/sri/responses/                          # Respuestas del SRI
 
-=== PARÁMETROS DE CONSULTA ===
-?company={id}      # Filtrar por empresa
-?limit={number}    # Limitar resultados
-?document_type=    # Filtrar por tipo de documento (SRI)
-?status=           # Filtrar por estado (SRI)
+=== SEGURIDAD NUCLEAR IMPLEMENTADA ===
+🔥 SOLO empresas asignadas via UserCompanyAssignment
+🔥 Bloqueo NUCLEAR de acceso no autorizado (403 NUCLEAR_BLOCK)
+🔥 Logs de seguridad 🔥🔥🔥 NUCLEAR en cada request
+🔥 Sin bypass de permisos - seguridad máxima
+🔥 Validación estricta de acceso en cada endpoint
 
-=== CÓDIGOS DE RESPUESTA ===
-200 OK                     - Operación exitosa
-201 Created               - Recurso creado
-400 Bad Request           - Datos inválidos
+=== CÓDIGOS DE RESPUESTA NUCLEAR ===
+200 OK                     - Operación exitosa y autorizada
+201 Created               - Recurso creado exitosamente
+400 Bad Request           - Datos inválidos en el request
+403 NUCLEAR_BLOCK         - ⚠️  ACCESO NUCLEAR BLOQUEADO ⚠️
 404 Not Found             - Recurso no encontrado
-422 Unprocessable Entity  - Error de validación
-500 Internal Server Error - Error del servidor
+422 Unprocessable Entity  - Error de validación de datos
+500 Internal Server Error - Error interno del servidor
+
+=== CAMBIOS APLICADOS ===
+✅ CompanyViewSet original REMOVIDO de urls.py
+✅ NuclearCompanyViewSet importado desde views/company_views.py
+✅ Todos los imports de DRF agregados correctamente
+✅ Seguridad nuclear aplicada SOLO a companies endpoint
+✅ Otros endpoints (customers, products, SRI) mantienen funcionalidad original
+✅ Logs nucleares 🔥🔥🔥 activos para detectar accesos no autorizados
 """
