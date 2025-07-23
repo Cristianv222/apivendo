@@ -57,6 +57,21 @@
             margin-bottom: 20px;
             border: 1px solid #e9ecef;
         }
+        .token-selector {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .token-info {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 6px;
+            padding: 10px;
+            margin-top: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.8em;
+        }
         .no-invoices-placeholder {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -64,6 +79,16 @@
             text-align: center;
             border-radius: 15px;
             margin: 20px 0;
+        }
+        .company-option {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .token-display {
+            font-family: 'Courier New', monospace;
+            font-size: 0.7em;
+            opacity: 0.8;
         }
     </style>
 </head>
@@ -73,6 +98,9 @@
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="{% url 'core:dashboard' %}">
                 <i class="fas fa-chart-line me-2"></i>VENDO SRI
+                {% if token_mode %}
+                    <span class="badge bg-warning text-dark ms-2">🔑 TOKEN</span>
+                {% endif %}
             </a>
             <div class="navbar-nav ms-auto">
                 <div class="nav-item dropdown">
@@ -80,6 +108,7 @@
                         <i class="fas fa-user-circle me-1"></i>{{ user.email }}
                     </a>
                     <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{% url 'core:company_tokens' %}"><i class="fas fa-key me-2"></i>Gestionar Tokens</a></li>
                         <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="fas fa-cog me-2"></i>Admin</a></li>
                         <li><hr class="dropdown-divider"></li>
                         <li><a class="dropdown-item" href="{% url 'account_logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión</a></li>
@@ -93,9 +122,42 @@
         <div class="row">
             <!-- Sidebar -->
             <div class="col-lg-3 mb-4">
-                <!-- Selector de empresa -->
+                <!-- Selector de empresa CON TOKENS -->
+                {% if token_mode %}
+                <div class="token-selector">
+                    <h6 class="fw-bold mb-3"><i class="fas fa-key me-2"></i>Token de Empresa</h6>
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div>
+                            <strong>{{ selected_company.business_name|default:selected_company.trade_name }}</strong>
+                            <br><small>Acceso por token</small>
+                        </div>
+                        <i class="fas fa-shield-alt fa-2x opacity-75"></i>
+                    </div>
+                    {% if current_filters.token %}
+                    <div class="token-info">
+                        <small>Token: {{ current_filters.token|slice:":20" }}...</small>
+                    </div>
+                    {% endif %}
+                    <div class="mt-3">
+                        <select class="form-select form-select-sm" onchange="switchCompanyToken(this.value)">
+                            <option value="">Cambiar empresa...</option>
+                            {% for company_data in available_companies_with_tokens %}
+                                <option value="{{ company_data.token.key }}" 
+                                        {% if company_data.is_selected %}selected{% endif %}>
+                                    {{ company_data.company.business_name|default:company_data.company.trade_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% else %}
+                <!-- Selector tradicional de empresa (LEGACY) -->
                 <div class="company-selector">
                     <h6 class="fw-bold mb-3"><i class="fas fa-building me-2"></i>Seleccionar Empresa</h6>
+                    <div class="alert alert-info alert-sm">
+                        <small><i class="fas fa-info-circle me-1"></i>Usando modo compatibilidad. 
+                        <a href="{% url 'core:company_tokens' %}" class="alert-link">Cambiar a tokens</a></small>
+                    </div>
                     <form method="get" id="companyForm">
                         <select name="company" class="form-select" onchange="this.form.submit()">
                             <option value="">Todas las empresas</option>
@@ -106,19 +168,22 @@
                             {% endfor %}
                         </select>
                         {% for key, value in current_filters.items %}
-                            {% if key != 'company' and value %}
+                            {% if key != 'company' and key != 'token' and value %}
                                 <input type="hidden" name="{{ key }}" value="{{ value }}">
                             {% endif %}
                         {% endfor %}
                     </form>
                 </div>
+                {% endif %}
 
                 <!-- Filtros -->
                 {% if invoices_exist %}
                 <div class="filters-section">
                     <h6 class="fw-bold mb-3"><i class="fas fa-filter me-2"></i>Filtros</h6>
                     <form method="get">
-                        {% if current_filters.company %}
+                        {% if current_filters.token %}
+                            <input type="hidden" name="token" value="{{ current_filters.token }}">
+                        {% elif current_filters.company %}
                             <input type="hidden" name="company" value="{{ current_filters.company }}">
                         {% endif %}
                         
@@ -150,7 +215,7 @@
                             <button type="submit" class="btn btn-primary btn-sm">
                                 <i class="fas fa-search me-1"></i>Filtrar
                             </button>
-                            <a href="{% url 'core:dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                            <a href="{% if token_mode %}{% url 'core:dashboard' %}?token={{ current_filters.token }}{% else %}{% url 'core:dashboard' %}{% endif %}" class="btn btn-outline-secondary btn-sm">
                                 <i class="fas fa-times me-1"></i>Limpiar
                             </a>
                         </div>
@@ -169,8 +234,18 @@
                             {% if selected_company %}
                                 - {{ selected_company.business_name|default:selected_company.trade_name }}
                             {% endif %}
+                            {% if token_mode %}
+                                <span class="badge bg-success ms-2">🔑 Modo Token</span>
+                            {% endif %}
                         </h2>
-                        <p class="text-muted">Resumen de todas tus facturas electrónicas</p>
+                        <p class="text-muted">
+                            Resumen de todas tus facturas electrónicas
+                            {% if token_mode and selected_token %}
+                                <br><small class="text-info">
+                                    <i class="fas fa-shield-alt me-1"></i>Acceso seguro con token de empresa
+                                </small>
+                            {% endif %}
+                        </p>
                     </div>
                 </div>
 
@@ -184,13 +259,17 @@
                             <ul class="text-start">
                                 <li>✅ Las migraciones están aplicadas</li>
                                 <li>✅ Los modelos están configurados</li>
+                                <li>✅ Sistema de tokens implementado</li>
                                 <li>⚠️ Necesitas crear algunas facturas de prueba</li>
                             </ul>
                         </div>
                         <div class="col-md-4 text-center">
                             <i class="fas fa-chart-line fa-5x mb-3 opacity-75"></i>
                             <div>
-                                <a href="{% url 'admin:index' %}" class="btn btn-light me-2">
+                                <a href="{% url 'core:company_tokens' %}" class="btn btn-warning me-2">
+                                    <i class="fas fa-key me-1"></i>Ver Tokens
+                                </a>
+                                <a href="{% url 'admin:index' %}" class="btn btn-light">
                                     <i class="fas fa-cog me-1"></i>Ir al Admin
                                 </a>
                             </div>
@@ -279,7 +358,7 @@
                                                     </td>
                                                     <td>{{ invoice.created_at|date:"d/m/Y H:i" }}</td>
                                                     <td>
-                                                        <a href="#" class="btn btn-sm btn-outline-primary" title="Ver detalles">
+                                                        <a href="{% url 'core:invoice_detail' invoice.id %}" class="btn btn-sm btn-outline-primary" title="Ver detalles">
                                                             <i class="fas fa-eye"></i>
                                                         </a>
                                                     </td>
@@ -379,7 +458,7 @@
                                             </td>
                                             <td>{{ invoice.created_at|date:"d/m/Y H:i" }}</td>
                                             <td>
-                                                <a href="#" class="btn btn-sm btn-outline-primary me-1" title="Ver detalles">
+                                                <a href="{% url 'core:invoice_detail' invoice.id %}" class="btn btn-sm btn-outline-primary me-1" title="Ver detalles">
                                                     <i class="fas fa-eye"></i>
                                                 </a>
                                                 <a href="#" class="btn btn-sm btn-outline-success" title="Descargar PDF">
@@ -392,7 +471,7 @@
                                 </table>
                             </div>
 
-                            <!-- Paginación -->
+                            <!-- Paginación con tokens -->
                             {% if page_obj.has_other_pages %}
                             <nav aria-label="Paginación">
                                 <ul class="pagination justify-content-center">
@@ -442,21 +521,66 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
+    <!-- SCRIPT PARA TOKENS - SIN TEMPLATE TAGS -->
+    <script>
+    // Funciones para manejo de tokens
+    function switchCompanyToken(token) {
+        if (token) {
+            console.log('Cambiando a empresa con token');
+            window.location.href = '/dashboard/?token=' + token;
+        }
+    }
+
+    function copyToken(token) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(token).then(function() {
+                // Crear notificación de éxito
+                var toast = document.createElement('div');
+                toast.className = 'position-fixed top-0 end-0 m-3 alert alert-success alert-dismissible fade show';
+                toast.innerHTML = '<i class="fas fa-check-circle me-2"></i>Token copiado al portapapeles <button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+                document.body.appendChild(toast);
+                
+                // Auto eliminar después de 3 segundos
+                setTimeout(function() {
+                    if (toast.parentNode) {
+                        toast.remove();
+                    }
+                }, 3000);
+            }).catch(function(err) {
+                alert('Error al copiar token: ' + err);
+            });
+        } else {
+            // Fallback para navegadores sin soporte de clipboard
+            var textArea = document.createElement('textarea');
+            textArea.value = token;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('Token copiado al portapapeles');
+        }
+    }
+
+    // Inicialización completada
+    console.log('Dashboard con sistema de tokens cargado correctamente');
+    console.log('Funciones disponibles: switchCompanyToken(), copyToken()');
+    </script>
+    
     <!-- AUTO-LOGOUT SCRIPT -->
     <script>
     // Sistema de auto-logout - Cierre automático después de 1 hora de inactividad
     (function() {
         console.log("=== AUTO-LOGOUT ACTIVADO ===");
         
-const SESSION_TIMEOUT = 3600000; // 1 hora
-const CHECK_INTERVAL = 60000;    // 1 minuto  
-const WARNING_TIME = 300000;     // 5 minutos
+        var SESSION_TIMEOUT = 3600000; // 1 hora
+        var CHECK_INTERVAL = 60000;    // 1 minuto  
+        var WARNING_TIME = 300000;     // 5 minutos
         
-        let lastActivity = Date.now();
-        let warningShown = false;
+        var lastActivity = Date.now();
+        var warningShown = false;
 
         // Detectar actividad del usuario
-        const activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'mousemove'];
+        var activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'mousemove'];
         
         function updateActivity() {
             lastActivity = Date.now();
@@ -464,7 +588,7 @@ const WARNING_TIME = 300000;     // 5 minutos
         }
 
         // Registrar eventos de actividad
-        activityEvents.forEach(event => {
+        activityEvents.forEach(function(event) {
             document.addEventListener(event, updateActivity, { passive: true });
         });
 
@@ -474,27 +598,24 @@ const WARNING_TIME = 300000;     // 5 minutos
                 warningShown = true;
                 
                 // Crear alerta de Bootstrap
-                const alertHtml = `
-                    <div class="alert alert-warning alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3" 
-                         role="alert" style="z-index: 9999; max-width: 500px;">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-exclamation-triangle me-2 fa-lg"></i>
-                            <div>
-                                <strong>Advertencia de inactividad</strong><br>
-                                Tu sesión se cerrará en ${minutesLeft} minutos por inactividad. 
-                                Haz clic en cualquier lugar para continuar trabajando.
-                            </div>
-                        </div>
-                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                    </div>
-                `;
+                var alertHtml = '<div class="alert alert-warning alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3" role="alert" style="z-index: 9999; max-width: 500px;">' +
+                    '<div class="d-flex align-items-center">' +
+                        '<i class="fas fa-exclamation-triangle me-2 fa-lg"></i>' +
+                        '<div>' +
+                            '<strong>Advertencia de inactividad</strong><br>' +
+                            'Tu sesión se cerrará en ' + minutesLeft + ' minutos por inactividad. ' +
+                            'Haz clic en cualquier lugar para continuar trabajando.' +
+                        '</div>' +
+                    '</div>' +
+                    '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' +
+                '</div>';
                 
                 // Insertar la alerta en el body
                 document.body.insertAdjacentHTML('afterbegin', alertHtml);
                 
                 // Auto-cerrar después de 30 segundos
-                setTimeout(() => {
-                    const alert = document.querySelector('.alert-warning');
+                setTimeout(function() {
+                    var alert = document.querySelector('.alert-warning');
                     if (alert) {
                         alert.remove();
                     }
@@ -504,30 +625,27 @@ const WARNING_TIME = 300000;     // 5 minutos
 
         // Función para verificar inactividad
         function checkInactivity() {
-            const now = Date.now();
-            const inactiveTime = now - lastActivity;
-            const timeRemaining = SESSION_TIMEOUT - inactiveTime;
-            const minutesRemaining = Math.floor(timeRemaining / 60000);
+            var now = Date.now();
+            var inactiveTime = now - lastActivity;
+            var timeRemaining = SESSION_TIMEOUT - inactiveTime;
+            var minutesRemaining = Math.floor(timeRemaining / 60000);
             
-            console.log(`[Auto-Logout] Tiempo inactivo: ${Math.floor(inactiveTime/60000)} minutos de 60`);
+            console.log('[Auto-Logout] Tiempo inactivo: ' + Math.floor(inactiveTime/60000) + ' minutos de 60');
             
             // Si el tiempo se agotó, recargar la página
             if (timeRemaining <= 0) {
                 console.log('[Auto-Logout] Sesión expirada. Recargando...');
                 
                 // Mostrar mensaje antes de recargar
-                const messageHtml = `
-                    <div class="position-fixed top-50 start-50 translate-middle bg-danger text-white p-4 rounded-3 shadow-lg"
-                         style="z-index: 10000; min-width: 300px; text-align: center;">
-                        <i class="fas fa-clock fa-3x mb-3"></i>
-                        <h5>Tu sesión ha expirado</h5>
-                        <p class="mb-0">Serás redirigido al inicio de sesión...</p>
-                    </div>
-                `;
+                var messageHtml = '<div class="position-fixed top-50 start-50 translate-middle bg-danger text-white p-4 rounded-3 shadow-lg" style="z-index: 10000; min-width: 300px; text-align: center;">' +
+                    '<i class="fas fa-clock fa-3x mb-3"></i>' +
+                    '<h5>Tu sesión ha expirado</h5>' +
+                    '<p class="mb-0">Serás redirigido al inicio de sesión...</p>' +
+                '</div>';
                 document.body.insertAdjacentHTML('beforeend', messageHtml);
                 
                 // Recargar después de 2 segundos
-                setTimeout(() => {
+                setTimeout(function() {
                     window.location.reload();
                 }, 2000);
             }
@@ -545,12 +663,12 @@ const WARNING_TIME = 300000;     // 5 minutos
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest'
                 }
-            }).then(response => {
+            }).then(function(response) {
                 if (response.status === 401 || response.redirected) {
                     console.log('[Auto-Logout] Servidor confirmó sesión expirada');
                     window.location.reload();
                 }
-            }).catch(error => {
+            }).catch(function(error) {
                 console.error('[Auto-Logout] Error verificando con servidor:', error);
             });
         }

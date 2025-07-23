@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-URLs for API app - VERSIÓN NUCLEAR CORREGIDA CON SEGURIDAD
+URLs for API app - VERSIÓN NUCLEAR CORREGIDA CON SEGURIDAD + AUTH TOKENS
 apps/api/urls.py
 """
 from django.urls import path, include
@@ -26,15 +26,25 @@ except ImportError:
 # 🔥🔥🔥 IMPORTAR VIEWSET NUCLEAR CORRECTO 🔥🔥🔥
 from apps.api.views.company_views import CompanyViewSet as NuclearCompanyViewSet
 
+# 🔑🔑🔑 IMPORTAR AUTH VIEWS PARA TOKENS 🔑🔑🔑
+from apps.api.views.auth_views import token_login, token_logout, token_profile, auth_status
+
 
 def api_status(request):
     """Status de la API"""
     return JsonResponse({
         'status': 'OK', 
-        'message': 'VENDO_SRI API funcionando con SEGURIDAD NUCLEAR',
-        'version': 'v1-nuclear',
+        'message': 'VENDO_SRI API funcionando con SEGURIDAD NUCLEAR + TOKEN AUTH',
+        'version': 'v1-nuclear-tokens',
         'sri_enabled': SRI_AVAILABLE,
-        'security_level': 'NUCLEAR_MAXIMUM'
+        'security_level': 'NUCLEAR_MAXIMUM',
+        'authentication': 'Dual Token System (User + Company tokens)',
+        'token_endpoints': {
+            'login': '/api/auth/login/',
+            'logout': '/api/auth/logout/',
+            'profile': '/api/auth/profile/',
+            'status': '/api/auth/status/'
+        }
     })
 
 
@@ -45,7 +55,12 @@ def api_root(request):
         'companies_mine': '/api/companies/my_companies/',
         'customers': '/api/customers/',
         'products': '/api/products/',
-        'status': '/api/status/'
+        'status': '/api/status/',
+        # Auth endpoints
+        'auth_login': '/api/auth/login/',
+        'auth_logout': '/api/auth/logout/',
+        'auth_profile': '/api/auth/profile/',
+        'auth_status': '/api/auth/status/'
     }
     
     # Agregar endpoints SRI si están disponibles
@@ -62,9 +77,14 @@ def api_root(request):
         })
     
     return JsonResponse({
-        'message': 'VENDO_SRI API v1 - NUCLEAR SECURITY ENABLED',
+        'message': 'VENDO_SRI API v1 - NUCLEAR SECURITY + DUAL TOKEN AUTHENTICATION',
         'sri_integration': SRI_AVAILABLE,
-        'security_method': 'UserCompanyAssignment + Nuclear Protection',
+        'security_method': 'UserCompanyAssignment + Nuclear Protection + Dual Tokens',
+        'authentication_types': {
+            'user_tokens': 'Multi-company access with company_id required',
+            'company_tokens': 'Single company access, no company_id needed',
+            'session_auth': 'Browser-based authentication for web interface'
+        },
         'endpoints': endpoints
     })
 
@@ -277,6 +297,15 @@ if SRI_AVAILABLE:
     router.register(r'sri/configuration', SRIConfigurationViewSet, basename='sri-configuration')
     router.register(r'sri/responses', SRIResponseViewSet, basename='sri-responses')
 
+# ========== URLs DE AUTENTICACIÓN CON TOKENS ==========
+
+auth_urlpatterns = [
+    path('auth/login/', token_login, name='token-login'),
+    path('auth/logout/', token_logout, name='token-logout'),
+    path('auth/profile/', token_profile, name='token-profile'),
+    path('auth/status/', auth_status, name='auth-status'),
+]
+
 # ========== URLs ESPECÍFICAS SRI ==========
 
 sri_urlpatterns = []
@@ -355,25 +384,34 @@ urlpatterns = [
     path('v1/status/', api_status, name='status'),
     path('status/', api_status, name='status_simple'),
     
+    # 🔑 URLs de autenticación con tokens
+    path('', include(auth_urlpatterns)),
+    
     # Router con ViewSets (incluye SRI si está disponible)
     path('', include(router.urls)),
     
     # URLs específicas SRI
     path('', include(sri_urlpatterns)),
     
-    # Auth para browsable API
+    # Auth para browsable API (DRF tradicional)
     path('auth/', include('rest_framework.urls')),
 ]
 
-# ========== DOCUMENTACIÓN DE ENDPOINTS NUCLEAR ==========
+# ========== DOCUMENTACIÓN DE ENDPOINTS NUCLEAR + TOKENS ==========
 
 """
-ENDPOINTS DISPONIBLES CON SEGURIDAD NUCLEAR:
+ENDPOINTS DISPONIBLES CON SEGURIDAD NUCLEAR + DUAL TOKEN AUTHENTICATION:
+
+=== AUTENTICACIÓN CON TOKENS ===
+POST /api/auth/login/                             # Login → Retorna tokens disponibles
+POST /api/auth/logout/                            # Logout → Invalida token actual
+GET  /api/auth/profile/                           # Info del token/usuario actual
+GET  /api/auth/status/                            # Estado de autenticación
 
 === BÁSICOS CON SEGURIDAD NUCLEAR ===
-GET  /api/                                        # Info de la API (Nuclear)
-GET  /api/status/                                 # Estado de la API (Nuclear)
-GET  /api/companies/                              # Listar empresas (SOLO del usuario)
+GET  /api/                                        # Info de la API (Nuclear + Tokens)
+GET  /api/status/                                 # Estado de la API (Nuclear + Tokens)
+GET  /api/companies/                              # Listar empresas (SEGÚN TIPO DE TOKEN)
 GET  /api/companies/{id}/                         # Obtener empresa (CON BLOQUEO NUCLEAR)
 GET  /api/companies/my_companies/                 # Empresas del usuario (SEGURO)
 GET  /api/customers/                              # Listar clientes
@@ -400,27 +438,80 @@ GET  /api/sri/documents/                          # Listar documentos
 GET  /api/sri/configuration/                      # Configuraciones SRI
 GET  /api/sri/responses/                          # Respuestas del SRI
 
-=== SEGURIDAD NUCLEAR IMPLEMENTADA ===
-🔥 SOLO empresas asignadas via UserCompanyAssignment
-🔥 Bloqueo NUCLEAR de acceso no autorizado (403 NUCLEAR_BLOCK)
+=== TIPOS DE AUTENTICACIÓN DISPONIBLES ===
+🔑 TOKEN DE USUARIO:
+   - Formato: Token 372a72b56b8bdf7b2d626d3a0df82c37c1600804
+   - Acceso: Múltiples empresas asignadas al usuario
+   - Uso: Dashboard web, aplicaciones multi-empresa
+   - Requisito: Debe especificar company_id en requests de documentos
+
+🏢 TOKEN DE EMPRESA:
+   - Formato: Token vsr_ABC123456789...
+   - Acceso: Solo la empresa específica del token
+   - Uso: APIs externas, sistemas POS, integraciones
+   - Ventaja: NO necesita company_id (implícito en token)
+
+🍪 SESIÓN (NAVEGADOR):
+   - Autenticación tradicional con cookies
+   - Uso: Interfaz web browsable de DRF
+   - Acceso: Según empresas asignadas al usuario
+
+=== SEGURIDAD NUCLEAR + TOKENS IMPLEMENTADA ===
+🔥 SOLO empresas asignadas via UserCompanyAssignment o token específico
+🔥 Bloqueo NUCLEAR de acceso no autorizado (403 NUCLEAR_BLOCK/COMPANY_TOKEN_BLOCK)
 🔥 Logs de seguridad 🔥🔥🔥 NUCLEAR en cada request
+🔥 Autenticación dual automática (detecta tipo de token)
 🔥 Sin bypass de permisos - seguridad máxima
 🔥 Validación estricta de acceso en cada endpoint
+🔥 Estadísticas de uso por token de empresa
+🔥 Permisos granulares por token
 
-=== CÓDIGOS DE RESPUESTA NUCLEAR ===
+=== CÓDIGOS DE RESPUESTA NUCLEAR + TOKENS ===
 200 OK                     - Operación exitosa y autorizada
 201 Created               - Recurso creado exitosamente
 400 Bad Request           - Datos inválidos en el request
-403 NUCLEAR_BLOCK         - ⚠️  ACCESO NUCLEAR BLOQUEADO ⚠️
+401 Unauthorized          - Token inválido o ausente
+403 NUCLEAR_BLOCK         - ⚠️  ACCESO NUCLEAR BLOQUEADO (usuario) ⚠️
+403 COMPANY_TOKEN_BLOCK   - ⚠️  ACCESO TOKEN EMPRESA BLOQUEADO ⚠️
 404 Not Found             - Recurso no encontrado
 422 Unprocessable Entity  - Error de validación de datos
 500 Internal Server Error - Error interno del servidor
 
+=== EJEMPLOS DE USO ===
+
+# Login y obtener tokens
+POST /api/auth/login/
+{
+    "email": "usuario@empresa.com",
+    "password": "password123"
+}
+
+# Usar token de usuario (múltiples empresas)
+Authorization: Token 372a72b56b8bdf7b2d626d3a0df82c37c1600804
+GET /api/companies/                               # Ve todas sus empresas
+POST /api/sri/documents/create_invoice/
+{
+    "company_id": 1,
+    "customer": {...},
+    "items": [...]
+}
+
+# Usar token de empresa (empresa específica)
+Authorization: Token vsr_ABC123456789...
+GET /api/companies/                               # Ve solo SU empresa
+POST /api/sri/documents/create_invoice/           # NO necesita company_id
+{
+    "customer": {...},
+    "items": [...]
+}
+
 === CAMBIOS APLICADOS ===
-✅ CompanyViewSet original REMOVIDO de urls.py
-✅ NuclearCompanyViewSet importado desde views/company_views.py
-✅ Todos los imports de DRF agregados correctamente
-✅ Seguridad nuclear aplicada SOLO a companies endpoint
-✅ Otros endpoints (customers, products, SRI) mantienen funcionalidad original
+✅ Dual Token Authentication system implementado
+✅ CompanyViewSet nuclear con soporte para ambos tipos de token
+✅ Auth endpoints para login/logout/profile/status
+✅ Detección automática de tipo de token (user vs company)
+✅ Seguridad nuclear aplicada a ambos tipos de autenticación
 ✅ Logs nucleares 🔥🔥🔥 activos para detectar accesos no autorizados
+✅ URLs limpias para tokens de empresa (sin company_id)
+✅ Compatibilidad total con sistema existente
 """
