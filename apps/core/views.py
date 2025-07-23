@@ -146,9 +146,9 @@ def dashboard_view(request):
     """
     user = request.user
     
-    # Si es admin/staff, mostrar dashboard administrativo
+    # AGREGAR ESTA VERIFICACIÓN AL INICIO
     if user.is_staff or user.is_superuser:
-        return admin_dashboard_view(request)
+        return redirect('/admin-panel/')
     
     # Obtener empresas del usuario de forma SEGURA
     user_companies = get_user_companies_secure(user)

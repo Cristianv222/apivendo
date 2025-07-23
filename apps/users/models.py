@@ -89,7 +89,48 @@ class User(AbstractUser):
         null=True,
         help_text=_('Optional profile picture.')
     )
+    USER_STATUS_CHOICES = [
+        ('waiting', 'En Sala de Espera'),
+        ('active', 'Activo'),
+        ('suspended', 'Suspendido'),
+        ('rejected', 'Rechazado'),
+    ]
     
+    user_status = models.CharField(
+        max_length=20,
+        choices=USER_STATUS_CHOICES,
+        default='waiting',
+        verbose_name='Estado del Usuario'
+    )
+    
+    approved_by = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='approved_users',
+        verbose_name='Aprobado por'
+    )
+    
+    approved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Fecha de aprobación'
+    )
+    
+    suspension_reason = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Razón de suspensión'
+    )
+    
+    rejection_reason = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Razón de rechazo'
+    )
+    
+
     # Manager personalizado
     objects = UserManager()
     

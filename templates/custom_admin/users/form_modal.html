@@ -1,0 +1,216 @@
+<!-- templates/custom_admin/users/form_modal.html -->
+<form method="POST" action="{% if mode == 'edit' %}{% url 'custom_admin:user_edit' user.id %}{% else %}{% url 'custom_admin:user_create' %}{% endif %}" 
+      id="userForm" class="needs-validation" novalidate>
+    {% csrf_token %}
+    
+    <!-- Hidden field para indicar el modo -->
+    <input type="hidden" id="formMode" value="{{ mode }}">
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <!-- Basic Information -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Información Básica</h6>
+            
+            <div class="mb-3">
+                <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                <input type="email" class="form-control" id="email" name="email" 
+                       value="{{ user.email|default:'' }}" 
+                       {% if mode == 'edit' %}readonly{% endif %}
+                       required>
+                <div class="invalid-feedback">
+                    Por favor ingresa un email válido.
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="first_name" class="form-label">Nombre</label>
+                <input type="text" class="form-control" id="first_name" name="first_name" 
+                       value="{{ user.first_name|default:'' }}">
+            </div>
+            
+            <div class="mb-3">
+                <label for="last_name" class="form-label">Apellido</label>
+                <input type="text" class="form-control" id="last_name" name="last_name" 
+                       value="{{ user.last_name|default:'' }}">
+            </div>
+            
+            <div class="mb-3">
+                <label for="phone" class="form-label">Teléfono</label>
+                <input type="tel" class="form-control" id="phone" name="phone" 
+                       value="{{ user.phone|default:'' }}"
+                       placeholder="+593 99 999 9999">
+            </div>
+        </div>
+        
+        <!-- Access Configuration -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Configuración de Acceso</h6>
+            
+            {% if mode == 'create' %}
+            <div class="mb-3">
+                <label for="password" class="form-label">Contraseña <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <input type="password" class="form-control" id="password" name="password" 
+                           required minlength="8">
+                    <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <div class="form-text">Mínimo 8 caracteres</div>
+                <div class="invalid-feedback">
+                    La contraseña debe tener al menos 8 caracteres.
+                </div>
+            </div>
+            {% else %}
+            <div class="mb-3">
+                <label for="password" class="form-label">Nueva Contraseña</label>
+                <div class="input-group">
+                    <input type="password" class="form-control" id="password" name="password" 
+                           minlength="8" placeholder="Dejar vacío para mantener la actual">
+                    <button class="btn btn-outline-secondary" type="button" id="togglePassword">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <div class="form-text">Solo completar si deseas cambiar la contraseña</div>
+            </div>
+            {% endif %}
+            
+            <div class="mb-3">
+                <label for="company_id" class="form-label">Empresa</label>
+                <select class="form-select" id="company_id" name="company_id">
+                    <option value="">Sin empresa asignada</option>
+                    {% for company in companies %}
+                        <option value="{{ company.id }}" 
+                                {% if user and user.company_id == company.id %}selected{% endif %}>
+                            {{ company.business_name }} ({{ company.ruc }})
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            {% if mode == 'edit' %}
+                {% if user.user_status %}
+                <!-- Estado del Usuario - Solo si el campo existe -->
+                <div class="mb-3">
+                    <label class="form-label">Estado del Usuario</label>
+                    <select class="form-select" id="user_status" name="user_status">
+                        <option value="active" {% if user.user_status == 'active' %}selected{% endif %}>
+                            ✅ Activo - Acceso completo al sistema
+                        </option>
+                        <option value="waiting" {% if user.user_status == 'waiting' %}selected{% endif %}>
+                            ⏳ En Sala de Espera - Esperando aprobación
+                        </option>
+                        <option value="suspended" {% if user.user_status == 'suspended' %}selected{% endif %}>
+                            🚫 Suspendido - Acceso temporal bloqueado
+                        </option>
+                        <option value="rejected" {% if user.user_status == 'rejected' %}selected{% endif %}>
+                            ❌ Rechazado - Sin acceso
+                        </option>
+                    </select>
+                    <div class="form-text">Define el nivel de acceso del usuario al sistema</div>
+                </div>
+                
+                <!-- Razón de suspensión/rechazo -->
+                <div class="mb-3" id="reasonField" style="display: none;">
+                    <label for="reason" class="form-label">Razón</label>
+                    <textarea class="form-control" id="reason" name="reason" rows="2" 
+                              placeholder="Explica la razón del rechazo o suspensión">{{ user.suspension_reason|default:user.rejection_reason|default:'' }}</textarea>
+                </div>
+                {% else %}
+                <!-- Si no tiene user_status, usar is_active simple -->
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
+                               {% if user.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">
+                            Usuario Activo
+                        </label>
+                    </div>
+                </div>
+                {% endif %}
+            {% else %}
+            <!-- Modo creación - Usuario empieza en sala de espera -->
+            <input type="hidden" name="user_status" value="waiting">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> Los nuevos usuarios entran automáticamente a la <strong>Sala de Espera</strong> hasta ser aprobados.
+            </div>
+            {% endif %}
+            
+            <div class="mb-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="is_staff" name="is_staff"
+                           {% if user and user.is_staff %}checked{% endif %}>
+                    <label class="form-check-label" for="is_staff">
+                        Es Staff
+                    </label>
+                </div>
+                <div class="form-text">Los usuarios staff pueden acceder al panel de administración</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="modal-footer px-0 pb-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times me-1"></i>Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary" id="btnSubmitForm">
+            <i class="fas fa-save me-1"></i>
+            {% if mode == 'create' %}Crear Usuario{% else %}Guardar Cambios{% endif %}
+        </button>
+    </div>
+</form>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Obtener el modo del formulario
+    var formMode = document.getElementById('formMode').value;
+    
+    // Toggle password visibility
+    var togglePassword = document.getElementById('togglePassword');
+    if (togglePassword) {
+        togglePassword.addEventListener('click', function() {
+            var passwordField = document.getElementById('password');
+            var icon = this.querySelector('i');
+            
+            if (passwordField.type === 'password') {
+                passwordField.type = 'text';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                passwordField.type = 'password';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        });
+    }
+    
+    // Solo ejecutar en modo edición y si existe user_status
+    var userStatusField = document.getElementById('user_status');
+    if (formMode === 'edit' && userStatusField) {
+        userStatusField.addEventListener('change', function() {
+            var status = this.value;
+            var reasonField = document.getElementById('reasonField');
+            var reasonTextarea = document.getElementById('reason');
+            
+            if (status === 'suspended' || status === 'rejected') {
+                reasonField.style.display = 'block';
+                reasonTextarea.placeholder = status === 'suspended' ? 
+                    'Razón de la suspensión...' : 
+                    'Razón del rechazo...';
+            } else {
+                reasonField.style.display = 'none';
+            }
+        });
+        
+        // Trigger inicial
+        userStatusField.dispatchEvent(new Event('change'));
+    }
+});
+</script>

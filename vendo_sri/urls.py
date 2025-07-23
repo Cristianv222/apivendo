@@ -19,7 +19,10 @@ from django.views.generic import TemplateView
 def home_redirect(request):
     """Redirección inteligente desde la raíz"""
     if request.user.is_authenticated:
-        return redirect('core:dashboard')  # Actualizado para usar el nuevo dashboard
+        # Si es admin/staff, ir al panel personalizado
+        if request.user.is_staff or request.user.is_superuser:
+            return redirect('/admin-panel/')
+        return redirect('core:dashboard')
     return redirect('account_login')
 
 class CustomLoginView(LoginView):
@@ -28,6 +31,9 @@ class CustomLoginView(LoginView):
     redirect_authenticated_user = True
     
     def get_success_url(self):
+        # Si es admin/staff, ir al panel personalizado
+        if self.request.user.is_staff or self.request.user.is_superuser:
+            return '/admin-panel/'
         return '/dashboard/'
 
 def custom_logout(request):
@@ -177,6 +183,10 @@ urlpatterns = [
     # ADMIN
     # ==========================================
     path('admin/', admin.site.urls),
+    # ==========================================
+    # PANEL ADMIN PERSONALIZADO
+    # ==========================================
+    path('admin-panel/', include('apps.custom_admin.urls')),
     
     # ==========================================
     # REDIRECCIÓN DE RAÍZ

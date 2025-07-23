@@ -1,0 +1,531 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Usuarios{% endblock %}
+
+{% block extra_css %}
+<style>
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        margin-right: 10px;
+    }
+    
+    .user-info {
+        display: flex;
+        align-items: center;
+    }
+    
+    .filters-card {
+        background: #f8f9fa;
+        border: none;
+        margin-bottom: 20px;
+    }
+    
+    .btn-action {
+        padding: 5px 10px;
+        font-size: 0.875rem;
+        margin: 0 2px;
+    }
+    
+    .status-toggle {
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Gestión de Usuarios</h2>
+        <p class="text-muted mb-0">Total: {{ total_count }} usuarios</p>
+    </div>
+    <div>
+        <button class="btn btn-admin btn-admin-primary" id="btnCreateUser">
+            <i class="fas fa-plus"></i> Nuevo Usuario
+        </button>
+        <button class="btn btn-admin btn-admin-success" id="btnExportUsers">
+            <i class="fas fa-download"></i> Exportar
+        </button>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="admin-card filters-card">
+    <div class="card-body">
+        <form method="get" id="filtersForm">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Buscar</label>
+                    <input type="text" name="search" class="form-control" 
+                           value="{{ filters.search }}" placeholder="Email, nombre...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select name="status" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="active" {% if filters.status == 'active' %}selected{% endif %}>Activos</option>
+                        <option value="inactive" {% if filters.status == 'inactive' %}selected{% endif %}>Inactivos</option>
+                        <option value="staff" {% if filters.status == 'staff' %}selected{% endif %}>Staff</option>
+                        <option value="waiting" {% if filters.status == 'waiting' %}selected{% endif %}>En Espera</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Empresa</label>
+                    <select name="company" class="form-select select2">
+                        <option value="">Todas</option>
+                        {% for company in companies %}
+                            <option value="{{ company.id }}" {% if filters.company == company.id|stringformat:"s" %}selected{% endif %}>
+                                {{ company.business_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i> Filtrar
+                    </button>
+                    <a href="{% url 'custom_admin:users' %}" class="btn btn-light ms-2">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Users Table -->
+<div class="admin-card">
+    <div class="table-container">
+        <table class="table table-hover" id="usersTable">
+            <thead>
+                <tr>
+                    <th>Usuario</th>
+                    <th>Email</th>
+                    <th>Empresa</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th>Registro</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr data-user-id="{{ user.id }}">
+                    <td>
+                        <div class="user-info">
+                            {% if user.profile_picture %}
+                                <img src="{{ user.profile_picture.url }}" alt="{{ user.get_display_name }}" class="user-avatar">
+                            {% else %}
+                                <div class="user-avatar bg-secondary d-inline-flex align-items-center justify-content-center text-white">
+                                    {{ user.get_display_name|first|upper }}
+                                </div>
+                            {% endif %}
+                            <div>
+                                <strong>{{ user.get_full_name|default:"Sin nombre" }}</strong><br>
+                                <small class="text-muted">ID: {{ user.id }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{ user.email }}</td>
+                    <td>
+                        {% if user.company %}
+                            <span class="badge bg-info">{{ user.company.business_name }}</span>
+                        {% else %}
+                            <span class="text-muted">Sin empresa</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.is_superuser %}
+                            <span class="badge bg-danger">Superuser</span>
+                        {% elif user.is_staff %}
+                            <span class="badge bg-warning">Staff</span>
+                        {% elif user.is_company_admin %}
+                            <span class="badge bg-primary">Admin Empresa</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Usuario</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.user_status == 'active' %}
+                            <span class="badge bg-success">
+                                <i class="fas fa-check-circle"></i> Activo
+                            </span>
+                        {% elif user.user_status == 'waiting' %}
+                            <span class="badge bg-warning">
+                                <i class="fas fa-clock"></i> En Sala de Espera
+                            </span>
+                        {% elif user.user_status == 'suspended' %}
+                            <span class="badge bg-danger">
+                                <i class="fas fa-ban"></i> Suspendido
+                            </span>
+                        {% elif user.user_status == 'rejected' %}
+                            <span class="badge bg-dark">
+                                <i class="fas fa-times-circle"></i> Rechazado
+                            </span>
+                        {% else %}
+                            <!-- Fallback para usuarios sin el campo user_status -->
+                            {% if not user.is_active %}
+                                <span class="badge bg-danger">
+                                    <i class="fas fa-times-circle"></i> Inactivo
+                                </span>
+                            {% elif user.is_active and not user.company %}
+                                <span class="badge bg-warning">
+                                    <i class="fas fa-clock"></i> En Espera
+                                </span>
+                            {% else %}
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check-circle"></i> Activo
+                                </span>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td>
+                        <small>{{ user.date_joined|date:"d/m/Y H:i" }}</small>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info btn-action btn-view" 
+                                data-user-id="{{ user.id }}"
+                                title="Ver detalles">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary btn-action btn-edit" 
+                                data-user-id="{{ user.id }}"
+                                title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        {% if not user.is_superuser and user.id != request.user.id %}
+                        <button class="btn btn-sm btn-outline-danger btn-action btn-delete" 
+                                data-user-id="{{ user.id }}"
+                                data-user-email="{{ user.email }}"
+                                title="Eliminar">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center py-4">
+                        <i class="fas fa-users fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No se encontraron usuarios</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if users.has_other_pages %}
+    <div class="card-footer">
+        <nav aria-label="Paginación">
+            <ul class="pagination justify-content-center mb-0">
+                {% if users.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ users.previous_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                {% for num in users.paginator.page_range %}
+                    {% if users.number == num %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ num }}</span>
+                        </li>
+                    {% elif num > users.number|add:'-3' and num < users.number|add:'3' %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ num }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">{{ num }}</a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if users.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ users.next_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ users.paginator.num_pages }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<!-- User Form Modal -->
+<div class="modal fade" id="userFormModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="userFormModalTitle">
+                    <i class="fas fa-user me-2"></i>Usuario
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="userFormModalBody">
+                <!-- Content loaded via AJAX -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Variables globales
+    var userFormModal = new bootstrap.Modal(document.getElementById('userFormModal'));
+    
+    // Create User - Abrir modal
+    $('#btnCreateUser').on('click', function() {
+        console.log("Abriendo modal de crear usuario...");
+        
+        $('#userFormModalTitle').html('<i class="fas fa-user-plus me-2"></i>Crear Usuario');
+        
+        $.ajax({
+            url: "{% url 'custom_admin:user_create' %}",
+            type: 'GET',
+            success: function(html) {
+                $('#userFormModalBody').html(html);
+                userFormModal.show();
+                initializeFormHandlers();
+            },
+            error: function(xhr, status, error) {
+                console.error("Error al cargar formulario:", error);
+                Swal.fire('Error', 'No se pudo cargar el formulario', 'error');
+            }
+        });
+    });
+    
+    // Edit User - Abrir modal
+    $(document).on('click', '.btn-edit', function() {
+        var userId = $(this).data('user-id');
+        console.log("Editando usuario ID:", userId);
+        
+        $('#userFormModalTitle').html('<i class="fas fa-user-edit me-2"></i>Editar Usuario');
+        
+        Swal.fire({
+            title: 'Cargando...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: function() {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: "{% url 'custom_admin:user_edit' 0 %}".replace('0', userId),
+            type: 'GET',
+            success: function(html) {
+                Swal.close();
+                $('#userFormModalBody').html(html);
+                userFormModal.show();
+                initializeFormHandlers();
+            },
+            error: function() {
+                Swal.fire('Error', 'No se pudo cargar el formulario', 'error');
+            }
+        });
+    });
+    
+    // View User - Abrir modal de vista
+    $(document).on('click', '.btn-view', function() {
+        var userId = $(this).data('user-id');
+        console.log("Viendo usuario ID:", userId);
+        
+        $('#userFormModalTitle').html('<i class="fas fa-eye me-2"></i>Ver Detalles del Usuario');
+        
+        Swal.fire({
+            title: 'Cargando...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: function() {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: "{% url 'custom_admin:user_view' 0 %}".replace('0', userId),
+            type: 'GET',
+            success: function(html) {
+                Swal.close();
+                $('#userFormModalBody').html(html);
+                userFormModal.show();
+            },
+            error: function(xhr, status, error) {
+                Swal.close();
+                console.error("Error:", error);
+                Swal.fire('Error', 'No se pudo cargar la información del usuario', 'error');
+            }
+        });
+    });
+    
+    // Función para inicializar los handlers del formulario
+    function initializeFormHandlers() {
+        $('#userForm').off('submit');
+        
+        $('#userForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            var form = this;
+            var formData = new FormData(form);
+            
+            Swal.fire({
+                title: 'Guardando...',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                willOpen: function() {
+                    Swal.showLoading();
+                }
+            });
+            
+            $.ajax({
+                url: $(form).attr('action'),
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    Swal.close();
+                    
+                    if (response.includes('window.parent.location.reload()')) {
+                        userFormModal.hide();
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Éxito',
+                            text: 'Usuario guardado correctamente',
+                            timer: 1500,
+                            showConfirmButton: false
+                        }).then(function() {
+                            location.reload();
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    Swal.close();
+                    Swal.fire('Error', 'Error al guardar el usuario', 'error');
+                }
+            });
+        });
+        
+        // Toggle password
+        $('#togglePassword').off('click').on('click', function() {
+            var passwordField = $('#password');
+            var icon = $(this).find('i');
+            
+            if (passwordField.attr('type') === 'password') {
+                passwordField.attr('type', 'text');
+                icon.removeClass('fa-eye').addClass('fa-eye-slash');
+            } else {
+                passwordField.attr('type', 'password');
+                icon.removeClass('fa-eye-slash').addClass('fa-eye');
+            }
+        });
+    }
+    
+    // Toggle Status
+    $(document).on('change', '.status-toggle', function() {
+        var checkbox = $(this);
+        var userId = checkbox.data('user-id');
+        var newStatus = checkbox.is(':checked');
+        var badge = checkbox.siblings('label').find('.badge-status');
+        
+        $.ajax({
+            url: "{% url 'custom_admin:user_toggle_status' 0 %}".replace('0', userId),
+            type: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            contentType: 'application/json',
+            data: JSON.stringify({ is_active: newStatus }),
+            success: function(response) {
+                if (response.success) {
+                    if (newStatus) {
+                        badge.removeClass('badge-inactive').addClass('badge-active').text('Activo');
+                    } else {
+                        badge.removeClass('badge-active').addClass('badge-inactive').text('Inactivo');
+                    }
+                    
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: 'Estado actualizado',
+                        showConfirmButton: false,
+                        timer: 3000
+                    });
+                } else {
+                    checkbox.prop('checked', !newStatus);
+                    Swal.fire('Error', response.error || 'No se pudo actualizar el estado', 'error');
+                }
+            },
+            error: function() {
+                checkbox.prop('checked', !newStatus);
+                Swal.fire('Error', 'Error al actualizar estado', 'error');
+            }
+        });
+    });
+    
+    // Delete User
+    $(document).on('click', '.btn-delete', function() {
+        var userId = $(this).data('user-id');
+        var userEmail = $(this).data('user-email');
+        var row = $(this).closest('tr');
+        
+        Swal.fire({
+            title: '¿Eliminar usuario?',
+            text: '¿Estás seguro de que deseas eliminar a "' + userEmail + '"? Esta acción no se puede deshacer.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: "{% url 'custom_admin:user_delete' 0 %}".replace('0', userId),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            row.fadeOut(300, function() {
+                                $(this).remove();
+                            });
+                            Swal.fire('Eliminado', response.message, 'success');
+                        } else {
+                            Swal.fire('Error', response.error || 'No se pudo eliminar', 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Error', 'Error al eliminar usuario', 'error');
+                    }
+                });
+            }
+        });
+    });
+    
+    // Export Data
+    $('#btnExportUsers').on('click', function() {
+        window.location.href = "{% url 'custom_admin:export_data' 'users' %}";
+    });
+});
+</script>
+{% endblock %}

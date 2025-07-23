@@ -8,6 +8,36 @@ from django.db.models.signals import post_save, user_logged_in
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 from .models import UserCompanyAssignment, AdminNotification
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from .models import User, UserCompanyAssignment
+
+@receiver(post_save, sender=User)
+def sync_user_assignment(sender, instance, created, **kwargs):
+    """Sincroniza el estado del usuario con UserCompanyAssignment"""
+    if created:
+        # Crear UserCompanyAssignment para nuevos usuarios
+        UserCompanyAssignment.objects.create(
+            user=instance,
+            status='waiting'
+        )
+    else:
+        # Actualizar UserCompanyAssignment existente
+        try:
+            assignment = UserCompanyAssignment.objects.get(user=instance)
+            # Mapear estados
+            status_map = {
+                'active': 'assigned',
+                'waiting': 'waiting',
+                'suspended': 'suspended',
+                'rejected': 'rejected'
+            }
+            assignment.status = status_map.get(instance.user_status, 'waiting')
+            if instance.user_status in ['suspended', 'rejected']:
+                assignment.notes = instance.suspension_reason or instance.rejection_reason or ''
+            assignment.save()
+        except UserCompanyAssignment.DoesNotExist:
+            pass
 
 User = get_user_model()
 

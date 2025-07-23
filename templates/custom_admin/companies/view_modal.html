@@ -1,0 +1,221 @@
+<!-- templates/custom_admin/companies/view_modal.html -->
+<div class="company-view-content">
+    <div class="row">
+        <!-- Company Information -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3"><i class="fas fa-building me-2"></i>Información de la Empresa</h6>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">RUC</label>
+                <p class="mb-0"><strong>{{ company.ruc }}</strong></p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Razón Social</label>
+                <p class="mb-0">{{ company.business_name }}</p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Nombre Comercial</label>
+                <p class="mb-0">{{ company.trade_name|default:"No especificado" }}</p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Email</label>
+                <p class="mb-0">
+                    {% if company.email %}
+                        <a href="mailto:{{ company.email }}">{{ company.email }}</a>
+                    {% else %}
+                        <span class="text-muted">No especificado</span>
+                    {% endif %}
+                </p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Teléfono</label>
+                <p class="mb-0">{{ company.phone|default:"No especificado" }}</p>
+            </div>
+        </div>
+        
+        <!-- Location & Status -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3"><i class="fas fa-map-marker-alt me-2"></i>Ubicación y Estado</h6>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Dirección</label>
+                <p class="mb-0">{{ company.address|default:"No especificada" }}</p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Ciudad</label>
+                <p class="mb-0">{{ company.city|default:"No especificada" }}</p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Provincia</label>
+                <p class="mb-0">{{ company.province|default:"No especificada" }}</p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Estado</label>
+                <p class="mb-0">
+                    {% if company.is_active %}
+                        <span class="badge badge-status badge-active">Activa</span>
+                    {% else %}
+                        <span class="badge badge-status badge-inactive">Inactiva</span>
+                    {% endif %}
+                </p>
+            </div>
+            
+            {% if company.plan %}
+            <div class="info-group mb-3">
+                <label class="text-muted small">Plan</label>
+                <p class="mb-0">
+                    {% if company.plan == 'basic' %}
+                        <span class="badge bg-secondary">Básico</span>
+                    {% elif company.plan == 'professional' %}
+                        <span class="badge bg-primary">Profesional</span>
+                    {% elif company.plan == 'enterprise' %}
+                        <span class="badge bg-success">Empresarial</span>
+                    {% else %}
+                        {{ company.plan }}
+                    {% endif %}
+                </p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <hr>
+    
+    <!-- Statistics -->
+    <div class="row">
+        <div class="col-12">
+            <h6 class="text-muted mb-3"><i class="fas fa-chart-bar me-2"></i>Estadísticas</h6>
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="stat-card text-center p-3 bg-light rounded">
+                        <i class="fas fa-users fa-2x text-primary mb-2"></i>
+                        <h4 class="mb-0">{{ user_count }}</h4>
+                        <small class="text-muted">Usuarios</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card text-center p-3 bg-light rounded">
+                        <i class="fas fa-certificate fa-2x text-warning mb-2"></i>
+                        <h4 class="mb-0">{{ certificate_count }}</h4>
+                        <small class="text-muted">Certificados</small>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="stat-card text-center p-3 bg-light rounded">
+                        <i class="fas fa-calendar fa-2x text-info mb-2"></i>
+                        <h4 class="mb-0">{{ company.created_at|timesince }}</h4>
+                        <small class="text-muted">Antigüedad</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% if users %}
+    <hr>
+    <div class="row">
+        <div class="col-12">
+            <h6 class="text-muted mb-3"><i class="fas fa-users me-2"></i>Usuarios Asociados</h6>
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users|slice:":5" %}
+                        <tr>
+                            <td>{{ user.get_full_name|default:"Sin nombre" }}</td>
+                            <td><small>{{ user.email }}</small></td>
+                            <td>
+                                {% if user.is_staff %}
+                                    <span class="badge bg-warning">Staff</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Usuario</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if user.is_active %}
+                                    <span class="badge bg-success">Activo</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactivo</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% if user_count > 5 %}
+                <p class="text-center text-muted small">Mostrando 5 de {{ user_count }} usuarios</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="modal-footer px-0 pb-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times me-1"></i>Cerrar
+        </button>
+        {% if company.is_active %}
+        <a href="#" class="btn btn-primary btn-edit-from-view" data-company-id="{{ company.id }}">
+            <i class="fas fa-edit me-1"></i>Editar Empresa
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<style>
+.info-group {
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 0.25rem;
+}
+
+.info-group label {
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.company-view-content {
+    padding: 0.5rem;
+}
+
+.stat-card {
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+</style>
+
+<script>
+// Handler para el botón de editar desde la vista
+$('.btn-edit-from-view').on('click', function(e) {
+    e.preventDefault();
+    var companyId = $(this).data('company-id');
+    
+    // Cerrar el modal actual
+    bootstrap.Modal.getInstance(document.getElementById('companyFormModal')).hide();
+    
+    // Esperar un poco y abrir el modal de edición
+    setTimeout(function() {
+        $('.btn-edit[data-company-id="' + companyId + '"]').click();
+    }, 300);
+});
+</script>

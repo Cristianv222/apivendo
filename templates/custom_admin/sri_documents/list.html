@@ -1,0 +1,791 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Documentos SRI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .doc-type-badge {
+        font-size: 0.875rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        font-weight: 500;
+    }
+    
+    .doc-type-badge.factura {
+        background-color: #e3f2fd;
+        color: #1565c0;
+    }
+    
+    .doc-type-badge.retencion {
+        background-color: #f3e5f5;
+        color: #6a1b9a;
+    }
+    
+    .doc-type-badge.nota-credito {
+        background-color: #e8f5e9;
+        color: #2e7d32;
+    }
+    
+    .doc-type-badge.nota-debito {
+        background-color: #fff3e0;
+        color: #e65100;
+    }
+    
+    .doc-type-badge.guia-remision {
+        background-color: #e0f2f1;
+        color: #00695c;
+    }
+    
+    .doc-status {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    
+    .doc-status.autorizado {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .doc-status.pendiente {
+        background-color: #fff3cd;
+        color: #856404;
+    }
+    
+    .doc-status.rechazado {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .doc-status.anulado {
+        background-color: #e2e3e5;
+        color: #383d41;
+    }
+    
+    .doc-status.error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .doc-number {
+        font-family: 'Courier New', monospace;
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .filters-card {
+        background: #f8f9fa;
+        border: none;
+        margin-bottom: 20px;
+    }
+    
+    .btn-action {
+        padding: 5px 10px;
+        font-size: 0.875rem;
+        margin: 0 2px;
+    }
+    
+    .stat-card {
+        text-align: center;
+        padding: 1.5rem;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        transition: all 0.3s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card i {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-card h4 {
+        margin-bottom: 0.25rem;
+        color: #495057;
+    }
+    
+    .customer-info {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .customer-name {
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .customer-id {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Documentos Electrónicos SRI</h2>
+        <p class="text-muted mb-0">Gestión unificada de todos los comprobantes electrónicos</p>
+    </div>
+    <div>
+        <div class="btn-group" role="group">
+            <button type="button" class="btn btn-admin btn-admin-primary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="fas fa-plus"></i> Nuevo Documento
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{% url 'custom_admin:invoice_create' %}">
+                    <i class="fas fa-file-invoice text-primary"></i> Factura
+                </a></li>
+                <li><a class="dropdown-item" href="#">
+                    <i class="fas fa-hand-holding-usd text-purple"></i> Retención
+                </a></li>
+                <li><a class="dropdown-item" href="#">
+                    <i class="fas fa-undo text-success"></i> Nota de Crédito
+                </a></li>
+                <li><a class="dropdown-item" href="#">
+                    <i class="fas fa-plus-circle text-warning"></i> Nota de Débito
+                </a></li>
+                <li><a class="dropdown-item" href="#">
+                    <i class="fas fa-truck text-info"></i> Guía de Remisión
+                </a></li>
+            </ul>
+        </div>
+        <button class="btn btn-admin btn-admin-warning" id="btnBatchProcess">
+            <i class="fas fa-rocket"></i> Procesar Pendientes
+        </button>
+        <button class="btn btn-admin btn-admin-success" id="btnExportDocuments">
+            <i class="fas fa-download"></i> Exportar
+        </button>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="stat-card">
+            <i class="fas fa-file-invoice text-primary"></i>
+            <h4>{{ stats.facturas|default:0 }}</h4>
+            <small class="text-muted">Facturas</small>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <i class="fas fa-hand-holding-usd text-purple"></i>
+            <h4>{{ stats.retenciones|default:0 }}</h4>
+            <small class="text-muted">Retenciones</small>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <i class="fas fa-undo text-success"></i>
+            <h4>{{ stats.notas_credito|default:0 }}</h4>
+            <small class="text-muted">N. Crédito</small>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <i class="fas fa-plus-circle text-warning"></i>
+            <h4>{{ stats.notas_debito|default:0 }}</h4>
+            <small class="text-muted">N. Débito</small>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <i class="fas fa-clock text-danger"></i>
+            <h4>{{ stats.pendientes|default:0 }}</h4>
+            <small class="text-muted">Pendientes</small>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="stat-card">
+            <i class="fas fa-check-circle text-success"></i>
+            <h4>{{ stats.autorizados|default:0 }}</h4>
+            <small class="text-muted">Autorizados</small>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="admin-card filters-card">
+    <div class="card-body">
+        <form method="get" id="filtersForm">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Buscar</label>
+                    <input type="text" name="search" class="form-control" 
+                           value="{{ filters.search }}" placeholder="Número, cliente, clave acceso...">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Tipo Documento</label>
+                    <select name="doc_type" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="01" {% if filters.doc_type == '01' %}selected{% endif %}>Factura</option>
+                        <option value="07" {% if filters.doc_type == '07' %}selected{% endif %}>Retención</option>
+                        <option value="04" {% if filters.doc_type == '04' %}selected{% endif %}>Nota de Crédito</option>
+                        <option value="05" {% if filters.doc_type == '05' %}selected{% endif %}>Nota de Débito</option>
+                        <option value="06" {% if filters.doc_type == '06' %}selected{% endif %}>Guía de Remisión</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Estado</label>
+                    <select name="status" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="AUTORIZADO" {% if filters.status == 'AUTORIZADO' %}selected{% endif %}>Autorizado</option>
+                        <option value="PENDIENTE" {% if filters.status == 'PENDIENTE' %}selected{% endif %}>Pendiente</option>
+                        <option value="RECHAZADO" {% if filters.status == 'RECHAZADO' %}selected{% endif %}>Rechazado</option>
+                        <option value="ANULADO" {% if filters.status == 'ANULADO' %}selected{% endif %}>Anulado</option>
+                        <option value="ERROR" {% if filters.status == 'ERROR' %}selected{% endif %}>Error</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Empresa</label>
+                    <select name="company" class="form-select select2">
+                        <option value="">Todas</option>
+                        {% for company in companies %}
+                            <option value="{{ company.id }}" {% if filters.company == company.id|stringformat:"s" %}selected{% endif %}>
+                                {{ company.trade_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Fecha</label>
+                    <input type="date" name="date" class="form-control" value="{{ filters.date }}">
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <a href="{% url 'custom_admin:sri_documents' %}" class="btn btn-light ms-2">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Documents Table -->
+<div class="admin-card">
+    <div class="table-container">
+        <table class="table table-hover" id="documentsTable">
+            <thead>
+                <tr>
+                    <th width="30">
+                        <input type="checkbox" id="selectAll" class="form-check-input">
+                    </th>
+                    <th>Tipo</th>
+                    <th>Número</th>
+                    <th>Cliente/Proveedor</th>
+                    <th>Empresa</th>
+                    <th>Fecha</th>
+                    <th>Total</th>
+                    <th>Estado</th>
+                    <th>Clave Acceso</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                <tr data-doc-id="{{ doc.id }}" data-doc-type="{{ doc.tipo_documento }}">
+                    <td>
+                        <input type="checkbox" class="doc-select form-check-input" 
+                               value="{{ doc.id }}"
+                               {% if doc.estado != 'PENDIENTE' %}disabled{% endif %}>
+                    </td>
+                    <td>
+                        {% if doc.tipo_documento == '01' %}
+                            <span class="doc-type-badge factura">
+                                <i class="fas fa-file-invoice"></i> Factura
+                            </span>
+                        {% elif doc.tipo_documento == '07' %}
+                            <span class="doc-type-badge retencion">
+                                <i class="fas fa-hand-holding-usd"></i> Retención
+                            </span>
+                        {% elif doc.tipo_documento == '04' %}
+                            <span class="doc-type-badge nota-credito">
+                                <i class="fas fa-undo"></i> N. Crédito
+                            </span>
+                        {% elif doc.tipo_documento == '05' %}
+                            <span class="doc-type-badge nota-debito">
+                                <i class="fas fa-plus-circle"></i> N. Débito
+                            </span>
+                        {% elif doc.tipo_documento == '06' %}
+                            <span class="doc-type-badge guia-remision">
+                                <i class="fas fa-truck"></i> Guía
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="doc-number">{{ doc.numero_completo }}</span>
+                    </td>
+                    <td>
+                        <div class="customer-info">
+                            <span class="customer-name">{{ doc.razon_social_receptor|truncatechars:30 }}</span>
+                            <span class="customer-id">{{ doc.identificacion_receptor }}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <span class="badge bg-info">{{ doc.company.trade_name|truncatechars:20 }}</span>
+                    </td>
+                    <td>
+                        <small>{{ doc.fecha_emision|date:"d/m/Y" }}</small>
+                    </td>
+                    <td class="text-end">
+                        <strong>${{ doc.total|floatformat:2 }}</strong>
+                    </td>
+                    <td>
+                        {% if doc.estado == 'AUTORIZADO' %}
+                            <span class="doc-status autorizado">
+                                <i class="fas fa-check-circle"></i> Autorizado
+                            </span>
+                        {% elif doc.estado == 'PENDIENTE' %}
+                            <span class="doc-status pendiente">
+                                <i class="fas fa-clock"></i> Pendiente
+                            </span>
+                        {% elif doc.estado == 'RECHAZADO' %}
+                            <span class="doc-status rechazado">
+                                <i class="fas fa-times-circle"></i> Rechazado
+                            </span>
+                        {% elif doc.estado == 'ANULADO' %}
+                            <span class="doc-status anulado">
+                                <i class="fas fa-ban"></i> Anulado
+                            </span>
+                        {% elif doc.estado == 'ERROR' %}
+                            <span class="doc-status error">
+                                <i class="fas fa-exclamation-triangle"></i> Error
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if doc.clave_acceso %}
+                            <small class="text-monospace" title="{{ doc.clave_acceso }}">
+                                {{ doc.clave_acceso|truncatechars:15 }}
+                            </small>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info btn-action btn-view" 
+                                data-doc-id="{{ doc.id }}"
+                                data-doc-type="{{ doc.tipo_documento }}"
+                                title="Ver documento">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        {% if doc.estado == 'PENDIENTE' %}
+                        <button class="btn btn-sm btn-outline-success btn-action btn-authorize" 
+                                data-doc-id="{{ doc.id }}"
+                                title="Autorizar">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-secondary btn-action btn-download" 
+                                data-doc-id="{{ doc.id }}"
+                                data-doc-type="{{ doc.tipo_documento }}"
+                                title="Descargar">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        {% if doc.estado == 'AUTORIZADO' and doc.tipo_documento == '01' %}
+                        <button class="btn btn-sm btn-outline-danger btn-action btn-cancel" 
+                                data-doc-id="{{ doc.id }}"
+                                title="Anular">
+                            <i class="fas fa-ban"></i>
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-sm btn-outline-primary btn-action btn-resend" 
+                                data-doc-id="{{ doc.id }}"
+                                data-emails="{{ doc.emails_notificacion }}"
+                                title="Reenviar email">
+                            <i class="fas fa-envelope"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="10" class="text-center py-4">
+                        <i class="fas fa-file-alt fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No se encontraron documentos</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if documents.has_other_pages %}
+    <div class="card-footer">
+        <nav aria-label="Paginación">
+            <ul class="pagination justify-content-center mb-0">
+                {% if documents.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ documents.previous_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                {% for num in documents.paginator.page_range %}
+                    {% if documents.number == num %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ num }}</span>
+                        </li>
+                    {% elif num > documents.number|add:'-3' and num < documents.number|add:'3' %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ num }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">{{ num }}</a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if documents.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ documents.next_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ documents.paginator.num_pages }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Document Modal -->
+<div class="modal fade" id="documentModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentModalTitle">
+                    <i class="fas fa-file-alt me-2"></i>Documento Electrónico
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="documentModalBody">
+                <!-- Content loaded via AJAX -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Variables globales
+    var documentModal = new bootstrap.Modal(document.getElementById('documentModal'));
+    
+    // View Document
+    $(document).on('click', '.btn-view', function() {
+        var docId = $(this).data('doc-id');
+        var docType = $(this).data('doc-type');
+        
+        $('#documentModalTitle').html('<i class="fas fa-eye me-2"></i>Ver Documento');
+        
+        Swal.fire({
+            title: 'Cargando...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: function() {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: "{% url 'custom_admin:sri_document_view' 0 %}".replace('0', docId),
+            type: 'GET',
+            success: function(html) {
+                Swal.close();
+                $('#documentModalBody').html(html);
+                documentModal.show();
+            },
+            error: function(xhr, status, error) {
+                Swal.close();
+                console.error("Error:", error);
+                Swal.fire('Error', 'No se pudo cargar el documento', 'error');
+            }
+        });
+    });
+    
+    // Authorize Document
+    $(document).on('click', '.btn-authorize', function() {
+        var docId = $(this).data('doc-id');
+        var button = $(this);
+        
+        Swal.fire({
+            title: '¿Autorizar documento?',
+            text: 'Se enviará el documento al SRI para su autorización',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, autorizar',
+            cancelButtonText: 'Cancelar'
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                button.prop('disabled', true);
+                button.html('<i class="fas fa-spinner fa-spin"></i>');
+                
+                $.ajax({
+                    url: "{% url 'custom_admin:sri_document_authorize' 0 %}".replace('0', docId),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Documento autorizado',
+                                text: 'Clave de acceso: ' + response.clave_acceso,
+                                timer: 3000
+                            }).then(function() {
+                                location.reload();
+                            });
+                        } else {
+                            button.prop('disabled', false);
+                            button.html('<i class="fas fa-paper-plane"></i>');
+                            Swal.fire('Error', response.error || 'No se pudo autorizar', 'error');
+                        }
+                    },
+                    error: function() {
+                        button.prop('disabled', false);
+                        button.html('<i class="fas fa-paper-plane"></i>');
+                        Swal.fire('Error', 'Error al autorizar documento', 'error');
+                    }
+                });
+            }
+        });
+    });
+    
+    // Download Document
+    $(document).on('click', '.btn-download', function() {
+        var docId = $(this).data('doc-id');
+        var docType = $(this).data('doc-type');
+        
+        // Abrir en nueva ventana
+        window.open("{% url 'custom_admin:sri_document_download' 0 %}".replace('0', docId), '_blank');
+    });
+    
+    // Cancel Document
+    $(document).on('click', '.btn-cancel', function() {
+        var docId = $(this).data('doc-id');
+        
+        Swal.fire({
+            title: '¿Anular documento?',
+            text: 'Esta acción no se puede deshacer y se notificará al SRI',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            confirmButtonText: 'Sí, anular',
+            cancelButtonText: 'No, cancelar'
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: "{% url 'custom_admin:sri_document_cancel' 0 %}".replace('0', docId),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire('Anulado', 'El documento ha sido anulado', 'success')
+                                .then(function() {
+                                    location.reload();
+                                });
+                        } else {
+                            Swal.fire('Error', response.error || 'No se pudo anular', 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Error', 'Error al anular documento', 'error');
+                    }
+                });
+            }
+        });
+    });
+    
+    // Resend Email
+    $(document).on('click', '.btn-resend', function() {
+        var docId = $(this).data('doc-id');
+        var emails = $(this).data('emails');
+        
+        Swal.fire({
+            title: 'Reenviar documento por email',
+            input: 'email',
+            inputLabel: 'Correo electrónico',
+            inputValue: emails,
+            inputPlaceholder: 'correo@ejemplo.com',
+            showCancelButton: true,
+            confirmButtonText: 'Enviar',
+            cancelButtonText: 'Cancelar',
+            inputValidator: function(value) {
+                if (!value) {
+                    return 'Debes ingresar un email';
+                }
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+                    return 'Email inválido';
+                }
+            }
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: "{% url 'custom_admin:sri_document_resend' 0 %}".replace('0', docId),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    data: {
+                        email: result.value
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'Email enviado',
+                                text: 'El documento fue enviado correctamente',
+                                timer: 2000
+                            });
+                        } else {
+                            Swal.fire('Error', response.error || 'No se pudo enviar', 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Error', 'Error al enviar email', 'error');
+                    }
+                });
+            }
+        });
+    });
+    
+    // Select All
+    $('#selectAll').on('change', function() {
+        $('.doc-select:not(:disabled)').prop('checked', $(this).prop('checked'));
+        updateBatchButtons();
+    });
+    
+    // Individual checkbox
+    $(document).on('change', '.doc-select', function() {
+        updateBatchButtons();
+    });
+    
+    // Update batch buttons
+    function updateBatchButtons() {
+        var selectedCount = $('.doc-select:checked').length;
+        $('#btnBatchProcess').prop('disabled', selectedCount === 0);
+        if (selectedCount > 0) {
+            $('#btnBatchProcess').html('<i class="fas fa-rocket"></i> Procesar ' + selectedCount + ' documentos');
+        } else {
+            $('#btnBatchProcess').html('<i class="fas fa-rocket"></i> Procesar Pendientes');
+        }
+    }
+    
+    // Batch Process
+    $('#btnBatchProcess').on('click', function() {
+        var selectedIds = [];
+        $('.doc-select:checked').each(function() {
+            selectedIds.push($(this).val());
+        });
+        
+        if (selectedIds.length === 0) {
+            // Si no hay seleccionados, procesar todos los pendientes
+            Swal.fire({
+                title: '¿Procesar todos los documentos pendientes?',
+                text: 'Se enviarán todos los documentos pendientes al SRI',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, procesar todos',
+                cancelButtonText: 'Cancelar'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    processBatchDocuments([]);
+                }
+            });
+        } else {
+            // Procesar solo los seleccionados
+            Swal.fire({
+                title: '¿Procesar ' + selectedIds.length + ' documentos?',
+                text: 'Se enviarán los documentos seleccionados al SRI',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, procesar',
+                cancelButtonText: 'Cancelar'
+            }).then(function(result) {
+                if (result.isConfirmed) {
+                    processBatchDocuments(selectedIds);
+                }
+            });
+        }
+    });
+    
+    function processBatchDocuments(documentIds) {
+        Swal.fire({
+            title: 'Procesando...',
+            text: 'Enviando documentos al SRI, por favor espere',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: function() {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: "{% url 'custom_admin:sri_documents_batch_process' %}",
+            type: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            contentType: 'application/json',
+            data: JSON.stringify({ document_ids: documentIds }),
+            success: function(response) {
+                Swal.close();
+                if (response.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Proceso completado',
+                        html: 'Procesados: ' + response.processed + '<br>' +
+                              'Autorizados: ' + response.authorized + '<br>' +
+                              'Errores: ' + response.errors,
+                        timer: 5000
+                    }).then(function() {
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Error', response.error || 'Error en el proceso', 'error');
+                }
+            },
+            error: function() {
+                Swal.close();
+                Swal.fire('Error', 'Error al procesar los documentos', 'error');
+            }
+        });
+    }
+    
+    // Export Data
+    $('#btnExportDocuments').on('click', function() {
+        var queryString = window.location.search;
+        window.location.href = "{% url 'custom_admin:export_data' 'sri_documents' %}" + queryString;
+    });
+    
+    // Initialize
+    updateBatchButtons();
+});
+</script>
+{% endblock %}

@@ -1,0 +1,498 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Empresas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .company-logo {
+        width: 50px;
+        height: 50px;
+        border-radius: 8px;
+        object-fit: cover;
+        margin-right: 10px;
+    }
+    
+    .company-info {
+        display: flex;
+        align-items: center;
+    }
+    
+    .filters-card {
+        background: #f8f9fa;
+        border: none;
+        margin-bottom: 20px;
+    }
+    
+    .btn-action {
+        padding: 5px 10px;
+        font-size: 0.875rem;
+        margin: 0 2px;
+    }
+    
+    .status-toggle {
+        cursor: pointer;
+    }
+    
+    .badge-plan {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Gestión de Empresas</h2>
+        <p class="text-muted mb-0">Total: {{ total_count }} empresas</p>
+    </div>
+    <div>
+        <button class="btn btn-admin btn-admin-primary" id="btnCreateCompany">
+            <i class="fas fa-plus"></i> Nueva Empresa
+        </button>
+        <button class="btn btn-admin btn-admin-success" id="btnExportCompanies">
+            <i class="fas fa-download"></i> Exportar
+        </button>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="admin-card filters-card">
+    <div class="card-body">
+        <form method="get" id="filtersForm">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Buscar</label>
+                    <input type="text" name="search" class="form-control" 
+                           value="{{ filters.search }}" placeholder="RUC, nombre comercial...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Estado</label>
+                    <select name="is_active" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="true" {% if filters.is_active == 'true' %}selected{% endif %}>Activas</option>
+                        <option value="false" {% if filters.is_active == 'false' %}selected{% endif %}>Inactivas</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Plan</label>
+                    <select name="plan" class="form-select">
+                        <option value="">Todos</option>
+                        <option value="basic" {% if filters.plan == 'basic' %}selected{% endif %}>Básico</option>
+                        <option value="professional" {% if filters.plan == 'professional' %}selected{% endif %}>Profesional</option>
+                        <option value="enterprise" {% if filters.plan == 'enterprise' %}selected{% endif %}>Empresarial</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-search"></i> Filtrar
+                    </button>
+                    <a href="{% url 'custom_admin:companies' %}" class="btn btn-light ms-2">
+                        <i class="fas fa-times"></i>
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Companies Table -->
+<div class="admin-card">
+    <div class="table-container">
+        <table class="table table-hover" id="companiesTable">
+            <thead>
+                <tr>
+                    <th>Empresa</th>
+                    <th>RUC</th>
+                    <th>Email</th>
+                    <th>Plan</th>
+                    <th>Usuarios</th>
+                    <th>Estado</th>
+                    <th>Registro</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for company in companies %}
+                <tr data-company-id="{{ company.id }}">
+                    <td>
+                        <div class="company-info">
+                            {% if company.logo %}
+                                <img src="{{ company.logo.url }}" alt="{{ company.trade_name }}" class="company-logo">
+                            {% else %}
+                                <div class="company-logo bg-secondary d-inline-flex align-items-center justify-content-center text-white">
+                                    <i class="fas fa-building"></i>
+                                </div>
+                            {% endif %}
+                            <div>
+                                <strong>{{ company.trade_name }}</strong><br>
+                                <small class="text-muted">{{ company.business_name|truncatechars:30 }}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>{{ company.ruc }}</td>
+                    <td>{{ company.email|default:"-" }}</td>
+                    <td>
+                        {% if company.plan == 'basic' %}
+                            <span class="badge bg-secondary badge-plan">Básico</span>
+                        {% elif company.plan == 'professional' %}
+                            <span class="badge bg-primary badge-plan">Profesional</span>
+                        {% elif company.plan == 'enterprise' %}
+                            <span class="badge bg-success badge-plan">Empresarial</span>
+                        {% else %}
+                            <span class="badge bg-light text-dark badge-plan">Sin plan</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge bg-info">{{ company.user_count|default:0 }}</span>
+                    </td>
+                    <td>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input status-toggle" type="checkbox" 
+                                   data-company-id="{{ company.id }}"
+                                   {% if company.is_active %}checked{% endif %}>
+                            <label class="form-check-label">
+                                {% if company.is_active %}
+                                    <span class="badge badge-status badge-active">Activa</span>
+                                {% else %}
+                                    <span class="badge badge-status badge-inactive">Inactiva</span>
+                                {% endif %}
+                            </label>
+                        </div>
+                    </td>
+                    <td>
+                        <small>{{ company.created_at|date:"d/m/Y" }}</small>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-info btn-action btn-view" 
+                                data-company-id="{{ company.id }}"
+                                title="Ver detalles">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary btn-action btn-edit" 
+                                data-company-id="{{ company.id }}"
+                                title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger btn-action btn-delete" 
+                                data-company-id="{{ company.id }}"
+                                data-company-name="{{ company.trade_name }}"
+                                title="Eliminar">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-warning btn-action btn-users" 
+                                data-company-id="{{ company.id }}"
+                                title="Ver usuarios">
+                            <i class="fas fa-users"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4">
+                        <i class="fas fa-building fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">No se encontraron empresas</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    
+    <!-- Pagination -->
+    {% if companies.has_other_pages %}
+    <div class="card-footer">
+        <nav aria-label="Paginación">
+            <ul class="pagination justify-content-center mb-0">
+                {% if companies.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ companies.previous_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-left"></i>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                {% for num in companies.paginator.page_range %}
+                    {% if companies.number == num %}
+                        <li class="page-item active">
+                            <span class="page-link">{{ num }}</span>
+                        </li>
+                    {% elif num > companies.number|add:'-3' and num < companies.number|add:'3' %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ num }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">{{ num }}</a>
+                        </li>
+                    {% endif %}
+                {% endfor %}
+                
+                {% if companies.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ companies.next_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-right"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ companies.paginator.num_pages }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Company Form Modal -->
+<div class="modal fade" id="companyFormModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="companyFormModalTitle">
+                    <i class="fas fa-building me-2"></i>Empresa
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="companyFormModalBody">
+                <!-- Content loaded via AJAX -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Variables globales
+    var companyFormModal = new bootstrap.Modal(document.getElementById('companyFormModal'));
+    
+    // Create Company
+    $('#btnCreateCompany').on('click', function() {
+        $('#companyFormModalTitle').html('<i class="fas fa-building me-2"></i>Crear Empresa');
+        
+        $.ajax({
+            url: "{% url 'custom_admin:company_create' %}",
+            type: 'GET',
+            success: function(html) {
+                $('#companyFormModalBody').html(html);
+                companyFormModal.show();
+                initializeFormHandlers();
+            },
+            error: function() {
+                Swal.fire('Error', 'No se pudo cargar el formulario', 'error');
+            }
+        });
+    });
+    
+    // Edit Company
+    $(document).on('click', '.btn-edit', function() {
+        var companyId = $(this).data('company-id');
+        $('#companyFormModalTitle').html('<i class="fas fa-building me-2"></i>Editar Empresa');
+        
+        Swal.fire({
+            title: 'Cargando...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: function() {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: "{% url 'custom_admin:company_edit' 0 %}".replace('0', companyId),
+            type: 'GET',
+            success: function(html) {
+                Swal.close();
+                $('#companyFormModalBody').html(html);
+                companyFormModal.show();
+                initializeFormHandlers();
+            },
+            error: function() {
+                Swal.fire('Error', 'No se pudo cargar el formulario', 'error');
+            }
+        });
+    });
+    
+    // View Company
+    $(document).on('click', '.btn-view', function() {
+        var companyId = $(this).data('company-id');
+        console.log("Viendo empresa ID:", companyId);
+        
+        $('#companyFormModalTitle').html('<i class="fas fa-eye me-2"></i>Ver Detalles de la Empresa');
+        
+        Swal.fire({
+            title: 'Cargando...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: function() {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: "{% url 'custom_admin:company_view' 0 %}".replace('0', companyId),
+            type: 'GET',
+            success: function(html) {
+                Swal.close();
+                $('#companyFormModalBody').html(html);
+                companyFormModal.show();
+            },
+            error: function(xhr, status, error) {
+                Swal.close();
+                console.error("Error:", error);
+                Swal.fire('Error', 'No se pudo cargar la información de la empresa', 'error');
+            }
+        });
+    });
+    
+    // Initialize form handlers
+    function initializeFormHandlers() {
+        $('#companyForm').off('submit').on('submit', function(e) {
+            e.preventDefault();
+            
+            var form = this;
+            var formData = new FormData(form);
+            
+            Swal.fire({
+                title: 'Guardando...',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                willOpen: function() {
+                    Swal.showLoading();
+                }
+            });
+            
+            $.ajax({
+                url: $(form).attr('action'),
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    Swal.close();
+                    
+                    if (response.includes('window.parent.location.reload()')) {
+                        companyFormModal.hide();
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Éxito',
+                            text: 'Empresa guardada correctamente',
+                            timer: 1500,
+                            showConfirmButton: false
+                        }).then(function() {
+                            location.reload();
+                        });
+                    }
+                },
+                error: function(xhr) {
+                    Swal.close();
+                    Swal.fire('Error', 'Error al guardar la empresa', 'error');
+                }
+            });
+        });
+    }
+    
+    // Toggle Status
+    $(document).on('change', '.status-toggle', function() {
+        var checkbox = $(this);
+        var companyId = checkbox.data('company-id');
+        var newStatus = checkbox.is(':checked');
+        var badge = checkbox.siblings('label').find('.badge-status');
+        
+        $.ajax({
+            url: "{% url 'custom_admin:company_toggle_status' 0 %}".replace('0', companyId),
+            type: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            contentType: 'application/json',
+            data: JSON.stringify({ is_active: newStatus }),
+            success: function(response) {
+                if (response.success) {
+                    if (newStatus) {
+                        badge.removeClass('badge-inactive').addClass('badge-active').text('Activa');
+                    } else {
+                        badge.removeClass('badge-active').addClass('badge-inactive').text('Inactiva');
+                    }
+                    
+                    Swal.fire({
+                        toast: true,
+                        position: 'top-end',
+                        icon: 'success',
+                        title: 'Estado actualizado',
+                        showConfirmButton: false,
+                        timer: 3000
+                    });
+                } else {
+                    checkbox.prop('checked', !newStatus);
+                    Swal.fire('Error', response.error || 'No se pudo actualizar el estado', 'error');
+                }
+            },
+            error: function() {
+                checkbox.prop('checked', !newStatus);
+                Swal.fire('Error', 'Error al actualizar estado', 'error');
+            }
+        });
+    });
+    
+    // Delete Company
+    $(document).on('click', '.btn-delete', function() {
+        var companyId = $(this).data('company-id');
+        var companyName = $(this).data('company-name');
+        var row = $(this).closest('tr');
+        
+        Swal.fire({
+            title: '¿Eliminar empresa?',
+            text: '¿Estás seguro de que deseas eliminar "' + companyName + '"? Esta acción no se puede deshacer.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        }).then(function(result) {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: "{% url 'custom_admin:company_delete' 0 %}".replace('0', companyId),
+                    type: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            row.fadeOut(300, function() {
+                                $(this).remove();
+                            });
+                            Swal.fire('Eliminado', response.message, 'success');
+                        } else {
+                            Swal.fire('Error', response.error || 'No se pudo eliminar', 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Error', 'Error al eliminar empresa', 'error');
+                    }
+                });
+            }
+        });
+    });
+    
+    // Show Users - Redirigir a usuarios filtrados por empresa
+    $(document).on('click', '.btn-users', function() {
+        var companyId = $(this).data('company-id');
+        window.location.href = "{% url 'custom_admin:users' %}?company=" + companyId;
+    });
+    
+    // Export Data
+    $('#btnExportCompanies').on('click', function() {
+        window.location.href = "{% url 'custom_admin:export_data' 'companies' %}";
+    });
+});
+</script>
+{% endblock %}

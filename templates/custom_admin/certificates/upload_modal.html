@@ -1,0 +1,139 @@
+<!-- templates/custom_admin/certificates/upload_modal.html -->
+<form method="POST" action="{% url 'custom_admin:certificate_upload' %}"
+      id="certificateUploadForm" class="needs-validation" novalidate enctype="multipart/form-data">
+    {% csrf_token %}
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <div class="col-12">
+            <h6 class="text-muted mb-3">Información del Certificado</h6>
+            
+            <div class="mb-3">
+                <label for="company_id" class="form-label">Empresa <span class="text-danger">*</span></label>
+                <select class="form-select" id="company_id" name="company_id" required>
+                    <option value="">Seleccionar empresa...</option>
+                    {% for company in companies %}
+                        <option value="{{ company.id }}">
+                            {{ company.business_name }} ({{ company.ruc }})
+                        </option>
+                    {% endfor %}
+                </select>
+                <div class="invalid-feedback">
+                    Por favor selecciona una empresa.
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="certificate_file" class="form-label">Archivo de Certificado <span class="text-danger">*</span></label>
+                <input type="file" class="form-control" id="certificate_file" name="certificate_file" 
+                       accept=".p12,.pfx" required>
+                <div class="form-text">
+                    Formatos aceptados: .p12, .pfx (máximo 10MB)
+                </div>
+                <div class="invalid-feedback">
+                    Por favor selecciona un archivo de certificado válido.
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="password" class="form-label">Contraseña del Certificado <span class="text-danger">*</span></label>
+                <div class="input-group">
+                    <input type="password" class="form-control" id="password" name="password" 
+                           required placeholder="Contraseña del archivo .p12">
+                    <button class="btn btn-outline-secondary" type="button" id="toggleCertPassword">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+                <div class="form-text">
+                    La contraseña será encriptada antes de guardarse
+                </div>
+                <div class="invalid-feedback">
+                    La contraseña es requerida para procesar el certificado.
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="description" class="form-label">Descripción (Opcional)</label>
+                <textarea class="form-control" id="description" name="description" rows="2" 
+                          placeholder="Descripción o notas sobre este certificado"></textarea>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Información adicional -->
+    <div class="alert alert-info" role="alert">
+        <h6 class="alert-heading"><i class="fas fa-info-circle"></i> Información Importante</h6>
+        <ul class="mb-0 small">
+            <li>El certificado debe estar en formato PKCS#12 (.p12 o .pfx)</li>
+            <li>La contraseña es necesaria para validar y usar el certificado</li>
+            <li>El sistema extraerá automáticamente la información del certificado</li>
+            <li>Se verificará la validez y fecha de expiración del certificado</li>
+        </ul>
+    </div>
+    
+    <div class="modal-footer px-0 pb-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times me-1"></i>Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-upload me-1"></i>Subir Certificado
+        </button>
+    </div>
+</form>
+
+<script>
+$(document).ready(function() {
+    // Toggle password visibility
+    $('#toggleCertPassword').on('click', function() {
+        var passwordField = $('#password');
+        var icon = $(this).find('i');
+        
+        if (passwordField.attr('type') === 'password') {
+            passwordField.attr('type', 'text');
+            icon.removeClass('fa-eye').addClass('fa-eye-slash');
+        } else {
+            passwordField.attr('type', 'password');
+            icon.removeClass('fa-eye-slash').addClass('fa-eye');
+        }
+    });
+    
+    // File validation
+    $('#certificate_file').on('change', function() {
+        var file = this.files[0];
+        if (file) {
+            // Check file size (10MB max)
+            if (file.size > 10 * 1024 * 1024) {
+                Swal.fire('Error', 'El archivo no debe superar los 10MB', 'error');
+                this.value = '';
+                return;
+            }
+            
+            // Check file extension
+            var fileName = file.name.toLowerCase();
+            if (!fileName.endsWith('.p12') && !fileName.endsWith('.pfx')) {
+                Swal.fire('Error', 'Solo se aceptan archivos .p12 o .pfx', 'error');
+                this.value = '';
+                return;
+            }
+        }
+    });
+    
+    // Form validation
+    var forms = document.querySelectorAll('.needs-validation');
+    Array.prototype.slice.call(forms).forEach(function(form) {
+        form.addEventListener('submit', function(event) {
+            if (!form.checkValidity()) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            form.classList.add('was-validated');
+        }, false);
+    });
+});
+</script>

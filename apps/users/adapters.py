@@ -188,20 +188,24 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             # Log del error pero no fallar el proceso
             print(f"Error saving avatar from Google: {e}")
     
-    def get_login_redirect_url(self, request):
-        """
-        Personalizar redirección después del login social
-        """
-        # Verificar estado de aprobación del usuario
-        user = request.user
-        
-        if user.is_pending_approval():
-            return '/accounts/waiting-room/'
-        elif user.is_rejected():
-            return '/accounts/account-rejected/'
-        
-        # Usuario aprobado - redirigir al dashboard
-        return '/'
+def get_login_redirect_url(self, request):
+    """
+    Personalizar redirección después del login
+    """
+    user = request.user
+    
+    # NUEVA VERIFICACIÓN PARA ADMIN/STAFF
+    if user.is_staff or user.is_superuser:
+        return '/admin-panel/'
+    
+    # Verificar estado de aprobación del usuario
+    if user.is_pending_approval():
+        return '/accounts/waiting-room/'
+    elif user.is_rejected():
+        return '/accounts/account-rejected/'
+    
+    # Usuario aprobado - redirigir al dashboard
+    return '/'
     
     def is_auto_signup_allowed(self, request, sociallogin):
         """

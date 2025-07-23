@@ -1,0 +1,153 @@
+<!-- templates/custom_admin/companies/form_modal.html -->
+<form method="POST" action="{% if mode == 'edit' %}{% url 'custom_admin:company_edit' company.id %}{% else %}{% url 'custom_admin:company_create' %}{% endif %}"
+      id="companyForm" class="needs-validation" novalidate>
+    {% csrf_token %}
+    
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    
+    <div class="row">
+        <!-- Basic Information -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Información Básica</h6>
+            
+            <div class="mb-3">
+                <label for="ruc" class="form-label">RUC <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="ruc" name="ruc" 
+                       value="{{ company.ruc|default:'' }}" 
+                       pattern="[0-9]{13}" maxlength="13"
+                       {% if mode == 'edit' %}readonly{% endif %}
+                       required>
+                <div class="invalid-feedback">
+                    Por favor ingresa un RUC válido (13 dígitos).
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="business_name" class="form-label">Razón Social <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="business_name" name="business_name" 
+                       value="{{ company.business_name|default:'' }}"
+                       required>
+                <div class="invalid-feedback">
+                    La razón social es requerida.
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="trade_name" class="form-label">Nombre Comercial <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" id="trade_name" name="trade_name" 
+                       value="{{ company.trade_name|default:'' }}"
+                       required>
+                <div class="invalid-feedback">
+                    El nombre comercial es requerido.
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label for="email" class="form-label">Email Corporativo</label>
+                <input type="email" class="form-control" id="email" name="email" 
+                       value="{{ company.email|default:'' }}"
+                       placeholder="contacto@empresa.com">
+            </div>
+            
+            <div class="mb-3">
+                <label for="phone" class="form-label">Teléfono</label>
+                <input type="tel" class="form-control" id="phone" name="phone" 
+                       value="{{ company.phone|default:'' }}"
+                       placeholder="+593 99 999 9999">
+            </div>
+        </div>
+        
+        <!-- Configuration -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Configuración</h6>
+            
+            <div class="mb-3">
+                <label for="address" class="form-label">Dirección</label>
+                <textarea class="form-control" id="address" name="address" rows="3">{{ company.address|default:'' }}</textarea>
+            </div>
+            
+            <div class="mb-3">
+                <label for="city" class="form-label">Ciudad</label>
+                <input type="text" class="form-control" id="city" name="city" 
+                       value="{{ company.city|default:'Quito' }}">
+            </div>
+            
+            <div class="mb-3">
+                <label for="province" class="form-label">Provincia</label>
+                <select class="form-select" id="province" name="province">
+                    <option value="">Seleccionar...</option>
+                    <option value="Azuay" {% if company.province == 'Azuay' %}selected{% endif %}>Azuay</option>
+                    <option value="Bolívar" {% if company.province == 'Bolívar' %}selected{% endif %}>Bolívar</option>
+                    <option value="Cañar" {% if company.province == 'Cañar' %}selected{% endif %}>Cañar</option>
+                    <option value="Carchi" {% if company.province == 'Carchi' %}selected{% endif %}>Carchi</option>
+                    <option value="Chimborazo" {% if company.province == 'Chimborazo' %}selected{% endif %}>Chimborazo</option>
+                    <option value="Cotopaxi" {% if company.province == 'Cotopaxi' %}selected{% endif %}>Cotopaxi</option>
+                    <option value="El Oro" {% if company.province == 'El Oro' %}selected{% endif %}>El Oro</option>
+                    <option value="Esmeraldas" {% if company.province == 'Esmeraldas' %}selected{% endif %}>Esmeraldas</option>
+                    <option value="Galápagos" {% if company.province == 'Galápagos' %}selected{% endif %}>Galápagos</option>
+                    <option value="Guayas" {% if company.province == 'Guayas' %}selected{% endif %}>Guayas</option>
+                    <option value="Imbabura" {% if company.province == 'Imbabura' %}selected{% endif %}>Imbabura</option>
+                    <option value="Loja" {% if company.province == 'Loja' %}selected{% endif %}>Loja</option>
+                    <option value="Los Ríos" {% if company.province == 'Los Ríos' %}selected{% endif %}>Los Ríos</option>
+                    <option value="Manabí" {% if company.province == 'Manabí' %}selected{% endif %}>Manabí</option>
+                    <option value="Morona Santiago" {% if company.province == 'Morona Santiago' %}selected{% endif %}>Morona Santiago</option>
+                    <option value="Napo" {% if company.province == 'Napo' %}selected{% endif %}>Napo</option>
+                    <option value="Orellana" {% if company.province == 'Orellana' %}selected{% endif %}>Orellana</option>
+                    <option value="Pastaza" {% if company.province == 'Pastaza' %}selected{% endif %}>Pastaza</option>
+                    <option value="Pichincha" {% if company.province == 'Pichincha' %}selected{% endif %}>Pichincha</option>
+                    <option value="Santa Elena" {% if company.province == 'Santa Elena' %}selected{% endif %}>Santa Elena</option>
+                    <option value="Santo Domingo" {% if company.province == 'Santo Domingo' %}selected{% endif %}>Santo Domingo</option>
+                    <option value="Sucumbíos" {% if company.province == 'Sucumbíos' %}selected{% endif %}>Sucumbíos</option>
+                    <option value="Tungurahua" {% if company.province == 'Tungurahua' %}selected{% endif %}>Tungurahua</option>
+                    <option value="Zamora Chinchipe" {% if company.province == 'Zamora Chinchipe' %}selected{% endif %}>Zamora Chinchipe</option>
+                </select>
+            </div>
+            
+            <div class="mb-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
+                           {% if not company or company.is_active %}checked{% endif %}>
+                    <label class="form-check-label" for="is_active">
+                        Empresa Activa
+                    </label>
+                </div>
+                <div class="form-text">Las empresas inactivas no pueden emitir documentos</div>
+            </div>
+        </div>
+    </div>
+    
+    {% if mode == 'edit' and company %}
+    <hr>
+    <div class="row">
+        <div class="col-12">
+            <h6 class="text-muted mb-3">Información Adicional</h6>
+            <div class="row text-muted small">
+                <div class="col-md-6">
+                    <p><strong>ID:</strong> {{ company.id }}</p>
+                    <p><strong>Fecha de registro:</strong> {{ company.created_at|date:"d/m/Y H:i" }}</p>
+                    <p><strong>Usuarios activos:</strong> {{ company.users.count|default:0 }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Última actualización:</strong> {{ company.updated_at|date:"d/m/Y H:i"|default:"Nunca" }}</p>
+                    <p><strong>Certificados:</strong> {{ company.digital_certificate.count|default:0 }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="modal-footer px-0 pb-0">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times me-1"></i>Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary">
+            <i class="fas fa-save me-1"></i>
+            {% if mode == 'create' %}Crear Empresa{% else %}Guardar Cambios{% endif %}
+        </button>
+    </div>
+</form>
