@@ -230,6 +230,7 @@ urlpatterns = [
     path('notifications/', include('apps.notifications.urls')),
     path('settings/', include('apps.settings.urls')),
     path('sri/', include('apps.sri_integration.urls')),
+    path('billing/', include('apps.billing.urls')),
     
     # ==========================================
     # UTILIDADES

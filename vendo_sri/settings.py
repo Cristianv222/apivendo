@@ -34,14 +34,14 @@ DJANGO_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.sites',  # Requerido para allauth
+    'django.contrib.sites',  
 ]
 
 # Third party apps
 THIRD_PARTY_APPS = [
     # API
     'rest_framework',
-    'rest_framework.authtoken',  # 🔥 AGREGADO PARA TOKEN AUTHENTICATION 🔥
+    'rest_framework.authtoken',  # AGREGADO PARA TOKEN AUTHENTICATION 
     'corsheaders',
     'django_filters',
     
@@ -67,6 +67,7 @@ LOCAL_APPS = [
     'apps.settings',
     'apps.sri_integration',
     'apps.api',
+    'apps.billing',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -85,6 +86,7 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',  # Requerido para allauth
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'apps.billing.middleware.BillingLimitMiddleware',
     # SOLO ESTOS DOS:
     'apps.users.views.SimpleSessionTimeoutMiddleware',  # Para timeout
     'apps.users.views.CheckUserAccessMiddleware',       # Para sala de espera
