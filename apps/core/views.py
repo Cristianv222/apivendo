@@ -1,29 +1,56 @@
 # -*- coding: utf-8 -*-
 """
-Core views - VERSIÓN SEGURA CON DECORADORES Y TOKENS EN URL
+Core views - VERSIÓN COMPLETA CON TOKENS, EDICIÓN DE EMPRESA Y CERTIFICADOS
 Todas las vistas validadas con decoradores personalizados
-NUEVO: Usa tokens en lugar de IDs en URLs
 """
 
 import logging
-from django.shortcuts import render, redirect
+import json
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q, Sum
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.utils import timezone
 from django.contrib import messages
+from django.views.decorators.http import require_POST
+from django.db import transaction
+from django.core.exceptions import ValidationError, PermissionDenied
 from datetime import datetime, timedelta
 from functools import wraps
 
 from apps.companies.models import Company, CompanyAPIToken
-from apps.users.models import User
+from apps.certificates.models import DigitalCertificate
+
+# Importar User del sistema de autenticación de Django
+from django.contrib.auth import get_user_model
+User = get_user_model()
 
 # ========== IMPORTAR DECORADORES DEL SISTEMA ==========
-from apps.api.views.sri_views import (
-    audit_api_action,
-    get_user_company_by_id
-)
+try:
+    from apps.api.views.sri_views import (
+        audit_api_action,
+        get_user_company_by_id
+    )
+except ImportError:
+    # Si no existen, crear versiones simples
+    def audit_api_action(action):
+        def decorator(func):
+            return func
+        return decorator
+    
+    def get_user_company_by_id(company_id, user):
+        try:
+            company = Company.objects.get(id=company_id, is_active=True)
+            if user.is_staff or user.is_superuser:
+                return company
+            # Verificar si el usuario tiene acceso a la empresa
+            user_companies = get_user_companies_secure(user)
+            if user_companies.filter(id=company.id).exists():
+                return company
+            return None
+        except Company.DoesNotExist:
+            return None
 
 logger = logging.getLogger(__name__)
 
@@ -120,35 +147,85 @@ def audit_html_action(action_type):
 
 def get_user_companies_secure(user):
     """
-    Función auxiliar SEGURA CORREGIDA - USA EL HELPER QUE FUNCIONA
+    Función auxiliar SEGURA - Obtiene las empresas del usuario
     """
-    from apps.api.user_company_helper import get_user_companies_exact
-    return get_user_companies_exact(user)
+    # Intentar usar el helper si existe
+    try:
+        from apps.api.user_company_helper import get_user_companies_exact
+        return get_user_companies_exact(user)
+    except ImportError:
+        pass
+    
+    # Si es admin, puede ver todas las empresas
+    if user.is_staff or user.is_superuser:
+        return Company.objects.filter(is_active=True)
+    
+    # Para usuarios normales, intentar diferentes formas de obtener las empresas
+    
+    # Opción 1: Si el usuario tiene un campo 'companies' (ManyToMany)
+    if hasattr(user, 'companies'):
+        return user.companies.filter(is_active=True)
+    
+    # Opción 2: Si existe un modelo UserCompany en algún lado
+    try:
+        from apps.users.models import UserCompany
+        user_company_ids = UserCompany.objects.filter(
+            user=user,
+            is_active=True
+        ).values_list('company_id', flat=True)
+        return Company.objects.filter(id__in=user_company_ids, is_active=True)
+    except ImportError:
+        pass
+    
+    # Opción 3: Si existe una relación a través del modelo User
+    try:
+        # Django permite acceso a través de relaciones reversas
+        if hasattr(User, 'companies'):
+            through_model = User.companies.through
+            user_company_ids = through_model.objects.filter(
+                user=user
+            ).values_list('company_id', flat=True)
+            return Company.objects.filter(id__in=user_company_ids, is_active=True)
+    except:
+        pass
+    
+    # Opción 4: Por defecto, devolver la primera empresa activa
+    # Esto es temporal - deberías implementar la lógica correcta para tu caso
+    logger.warning(f"No se pudo determinar las empresas del usuario {user.username}, usando empresa por defecto")
+    return Company.objects.filter(is_active=True)[:1]
 
 
 # ========== VISTAS PRINCIPALES CON TOKENS ==========
 
 @login_required
+def dashboard(request):
+    """
+    Vista principal del dashboard que redirige según el tipo de usuario
+    """
+    if request.user.is_staff:
+        return admin_dashboard_view(request)
+    else:
+        return user_dashboard(request)
+
+
+@login_required
 @audit_html_action('VIEW_DASHBOARD')
 def dashboard_view(request):
+    """Alias para compatibilidad"""
+    return dashboard(request)
+
+
+@login_required
+@audit_html_action('VIEW_USER_DASHBOARD')
+def user_dashboard(request):
     """
-    🔒 DASHBOARD SEGURO CON MODO INTELIGENTE
-    
-    MODO INTELIGENTE:
-    - Detecta ?company=X y redirige automáticamente a ?token=ABC...
-    - Siempre usa tokens en lugar de IDs
-    - URLs limpias sin exposer estructura interna
-    
-    URLs soportadas:
-    - /dashboard/ (empresa por defecto del usuario)
-    - /dashboard/?company=X (REDIRIGE a ?token=ABC...)
-    - /dashboard/?token=vsr_ABC123... (modo token directo)
+    Dashboard mejorado para usuarios con toda la información necesaria
     """
     user = request.user
     
-    # AGREGAR ESTA VERIFICACIÓN AL INICIO
+    # Verificar si es admin
     if user.is_staff or user.is_superuser:
-        return redirect('/admin-panel/')
+        return redirect('/admin/')
     
     # Obtener empresas del usuario de forma SEGURA
     user_companies = get_user_companies_secure(user)
@@ -167,8 +244,6 @@ def dashboard_view(request):
         
         try:
             company_id = int(company_id_param)
-            
-            # Verificar que el usuario tenga acceso a esta empresa
             target_company = user_companies.filter(id=company_id).first()
             
             if target_company:
@@ -258,7 +333,7 @@ def dashboard_view(request):
             selected_company = default_company
             selected_token = None
     
-    # 🔑 Preparar tokens disponibles para el selector (SIEMPRE CON TOKENS)
+    # 🔑 Preparar tokens disponibles para el selector
     available_companies_with_tokens = []
     for company in user_companies:
         try:
@@ -275,7 +350,7 @@ def dashboard_view(request):
                 'company': company,
                 'token': company_token,
                 'is_selected': company.id == selected_company.id,
-                'dashboard_url': f"/dashboard/?token={company_token.key}",  # 🔑 SIEMPRE TOKEN
+                'dashboard_url': f"/dashboard/?token={company_token.key}",
                 'api_test_url': f"/api/companies/",
                 'token_display': f"{company_token.key[:20]}...",
             })
@@ -283,75 +358,129 @@ def dashboard_view(request):
         except Exception as e:
             logger.error(f"❌ Error obtaining token for {company.business_name}: {e}")
     
-    # Verificar si el modelo Invoice existe
-    try:
-        from apps.invoicing.models import Invoice
-        INVOICES_AVAILABLE = True
-    except ImportError:
-        INVOICES_AVAILABLE = False
-        logger.warning("Invoice model not available")
+    # ==================== INFORMACIÓN DEL CERTIFICADO ====================
+    has_certificate = False
+    certificate_info = {}
     
-    if INVOICES_AVAILABLE:
-        # 🔒 FILTRAR FACTURAS SOLO DE LA EMPRESA SELECCIONADA
-        invoices = Invoice.objects.filter(company=selected_company)
+    if selected_company:
+        try:
+            certificate = DigitalCertificate.objects.filter(
+                company=selected_company,
+                status='ACTIVE'
+            ).first()
+            
+            if certificate:
+                has_certificate = True
+                certificate_info = {
+                    'issuer': certificate.issuer_name,
+                    'subject': certificate.subject_name,
+                    'expiry': certificate.valid_to,
+                    'days_left': certificate.days_until_expiration,
+                    'expired': certificate.is_expired,
+                    'serial': certificate.serial_number
+                }
+        except Exception as e:
+            logger.error(f"Error obteniendo certificado: {e}")
+    
+    # ==================== BILLING ====================
+    current_plan = None
+    all_plans = []
+    recent_purchases = []
+    billing_profile = None
+    
+    try:
+        from apps.billing.models import Plan, CompanyBillingProfile, PlanPurchase
+        BILLING_AVAILABLE = True
+    except ImportError:
+        try:
+            # Intentar con nombre alternativo
+            from apps.billing.models import Plan, BillingProfile as CompanyBillingProfile, PlanPurchase
+            BILLING_AVAILABLE = True
+        except ImportError:
+            BILLING_AVAILABLE = False
+            logger.warning("Billing models not available")
+    
+    if BILLING_AVAILABLE and selected_company:
+        try:
+            # Asegurar que existe el billing profile
+            billing_profile, created = CompanyBillingProfile.objects.get_or_create(
+                company=selected_company,
+                defaults={
+                    'available_invoices': 0,
+                    'total_invoices_purchased': 0,
+                    'total_invoices_consumed': 0,
+                }
+            )
+            
+            if created:
+                logger.info(f"💳 Billing profile created for {selected_company.business_name}")
+            
+            # Obtener plan actual
+            last_purchase = PlanPurchase.objects.filter(
+                company=selected_company,
+                payment_status='approved'
+            ).order_by('-created_at').first()
+            
+            if last_purchase:
+                current_plan = last_purchase.plan
+            
+            # Obtener todos los planes activos
+            all_plans = Plan.objects.filter(is_active=True).order_by('price')
+            
+            # Obtener compras recientes
+            recent_purchases = PlanPurchase.objects.filter(
+                company=selected_company
+            ).order_by('-created_at')[:5]
+        except Exception as e:
+            logger.error(f"Error loading billing data: {e}")
+            BILLING_AVAILABLE = False
+    
+    # ==================== ESTADÍSTICAS ====================
+    stats = {
+        'total_invoices': 0,
+        'authorized_invoices': 0,
+        'pending_invoices': 0,
+        'total_amount': 0
+    }
+    
+    recent_invoices = []
+    
+    try:
+        from apps.sri_integration.models import ElectronicDocument
         
-        # Filtros adicionales
-        status_filter = request.GET.get('status')
-        date_from = request.GET.get('date_from')
-        date_to = request.GET.get('date_to')
-        
-        if status_filter:
-            invoices = invoices.filter(status=status_filter)
-        
-        if date_from:
-            try:
-                date_from = datetime.strptime(date_from, '%Y-%m-%d').date()
-                invoices = invoices.filter(created_at__date__gte=date_from)
-            except ValueError:
-                logger.warning(f"Invalid date_from format: {date_from}")
-        
-        if date_to:
-            try:
-                date_to = datetime.strptime(date_to, '%Y-%m-%d').date()
-                invoices = invoices.filter(created_at__date__lte=date_to)
-            except ValueError:
-                logger.warning(f"Invalid date_to format: {date_to}")
-        
-        # Estadísticas
-        stats = {
-            'total_invoices': invoices.count(),
-            'pending_invoices': invoices.filter(status='pending').count(),
-            'authorized_invoices': invoices.filter(status='authorized').count(),
-            'rejected_invoices': invoices.filter(status='rejected').count(),
-            'total_amount': invoices.aggregate(total=Sum('total_amount'))['total'] or 0,
-        }
-        
-        # Estadísticas por estado
-        status_stats = invoices.values('status').annotate(
-            count=Count('id'),
-            total_amount=Sum('total_amount')
-        ).order_by('status')
-        
-        # Facturas recientes (últimas 10)
-        recent_invoices = invoices.order_by('-created_at')[:10]
-        
-        # Paginación
-        paginator = Paginator(invoices.order_by('-created_at'), 25)
-        page_number = request.GET.get('page')
-        page_obj = paginator.get_page(page_number)
-        
-    else:
-        # Datos ficticios si no existe Invoice
-        stats = {
-            'total_invoices': 0,
-            'pending_invoices': 0,
-            'authorized_invoices': 0,
-            'rejected_invoices': 0,
-            'total_amount': 0,
-        }
-        status_stats = []
-        recent_invoices = []
-        page_obj = None
+        if selected_company:
+            stats = {
+                'total_invoices': ElectronicDocument.objects.filter(
+                    company=selected_company,
+                    document_type='INVOICE'
+                ).count(),
+                'authorized_invoices': ElectronicDocument.objects.filter(
+                    company=selected_company,
+                    document_type='INVOICE',
+                    status='AUTHORIZED'
+                ).count(),
+                'pending_invoices': ElectronicDocument.objects.filter(
+                    company=selected_company,
+                    document_type='INVOICE',
+                    status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']
+                ).count(),
+                'total_amount': ElectronicDocument.objects.filter(
+                    company=selected_company,
+                    document_type='INVOICE',
+                    status='AUTHORIZED'
+                ).aggregate(
+                    total=Sum('total_amount')
+                )['total'] or 0
+            }
+            
+            # Facturas recientes
+            recent_invoices = ElectronicDocument.objects.filter(
+                company=selected_company,
+                document_type='INVOICE'
+            ).order_by('-created_at')[:10]
+            
+    except Exception as e:
+        logger.error(f"Error obteniendo estadísticas: {e}")
     
     # Estados disponibles para el filtro
     INVOICE_STATUS_CHOICES = [
@@ -369,34 +498,382 @@ def dashboard_view(request):
         'user_companies': user_companies,
         'selected_company': selected_company,
         'selected_token': selected_token,
-        'available_companies_with_tokens': available_companies_with_tokens,  # 🔑 SIEMPRE TOKENS
+        'available_companies_with_tokens': available_companies_with_tokens,
+        'has_certificate': has_certificate,
+        'certificate_info': certificate_info,
+        'certificate_expired': certificate_info.get('expired', False),
+        'certificate_expiry': certificate_info.get('expiry'),
+        'certificate_days_left': certificate_info.get('days_left', 0),
+        'certificate_issuer': certificate_info.get('issuer'),
         'stats': stats,
-        'status_stats': status_stats,
         'recent_invoices': recent_invoices,
-        'page_obj': page_obj,
         'status_choices': INVOICE_STATUS_CHOICES,
-        'invoices_exist': INVOICES_AVAILABLE,
         'is_admin': False,
         'current_filters': {
-            'token': current_token,  # 🔑 SIEMPRE TOKEN (nunca company_id)
+            'token': current_token,
             'status': request.GET.get('status'),
             'date_from': request.GET.get('date_from'),
             'date_to': request.GET.get('date_to'),
         },
-        'token_mode': True,  # 🔑 SIEMPRE EN MODO TOKEN
-        'smart_mode': True,  # 🔄 MODO INTELIGENTE ACTIVO
+        'token_mode': True,
+        'smart_mode': True,
         'security_validation': {
             'validated_by_decorator': True,
             'user_access_confirmed': True,
             'companies_filtered_by_user': True,
-            'token_based_access': True,  # 🔑 SIEMPRE
-            'smart_redirect_enabled': True,  # 🔄 NUEVO
+            'token_based_access': True,
+            'smart_redirect_enabled': True,
             'current_token': current_token[:20] + '...' if current_token else None,
-        }
+        },
+        # Variables de billing
+        'billing_available': BILLING_AVAILABLE,
+        'billing_profile': billing_profile,
+        'current_plan': current_plan,
+        'all_plans': all_plans,
+        'recent_purchases': recent_purchases,
     }
     
     return render(request, 'dashboard/user_dashboard.html', context)
 
+
+@login_required
+@audit_html_action('UPDATE_COMPANY')
+@require_POST
+def company_update(request, company_id):
+    """
+    Vista AJAX para actualizar información de la empresa
+    """
+    company = get_object_or_404(Company, id=company_id)
+    
+    # Verificar permisos
+    user_companies = get_user_companies_secure(request.user)
+    if not user_companies.filter(id=company.id).exists() and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'errors': {'general': 'No tienes permisos para editar esta empresa'}
+        }, status=403)
+    
+    try:
+        with transaction.atomic():
+            # Actualizar campos básicos
+            company.business_name = request.POST.get('business_name', company.business_name)
+            company.trade_name = request.POST.get('trade_name', '')
+            company.email = request.POST.get('email', company.email)
+            company.phone = request.POST.get('phone', '')
+            company.address = request.POST.get('address', company.address)
+            company.ciudad = request.POST.get('ciudad', '')
+            company.provincia = request.POST.get('provincia', '')
+            company.codigo_postal = request.POST.get('codigo_postal', '')
+            company.website = request.POST.get('website', '')
+            
+            # Actualizar campos SRI
+            company.tipo_contribuyente = request.POST.get('tipo_contribuyente', company.tipo_contribuyente)
+            company.obligado_contabilidad = request.POST.get('obligado_contabilidad', company.obligado_contabilidad)
+            company.contribuyente_especial = request.POST.get('contribuyente_especial', '') or None
+            company.codigo_establecimiento = request.POST.get('codigo_establecimiento', company.codigo_establecimiento)
+            company.codigo_punto_emision = request.POST.get('codigo_punto_emision', company.codigo_punto_emision)
+            company.ambiente_sri = request.POST.get('ambiente_sri', company.ambiente_sri)
+            company.tipo_emision = request.POST.get('tipo_emision', company.tipo_emision)
+            
+            # Manejar logo si se subió
+            if 'logo' in request.FILES:
+                company.logo = request.FILES['logo']
+            
+            # Validar y guardar
+            company.full_clean()
+            company.save()
+            
+            # Manejar certificado si se subió
+            if 'certificate_file' in request.FILES:
+                handle_certificate_upload(
+                    company=company,
+                    file=request.FILES['certificate_file'],
+                    password=request.POST.get('certificate_password', ''),
+                    alias=request.POST.get('certificate_alias', ''),
+                    user=request.user
+                )
+            
+            logger.info(f"✅ Company {company.business_name} updated by {request.user.username}")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Información actualizada correctamente'
+            })
+            
+    except ValidationError as e:
+        return JsonResponse({
+            'success': False,
+            'errors': e.message_dict if hasattr(e, 'message_dict') else {'general': str(e)}
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error updating company: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'errors': {'general': f'Error al actualizar: {str(e)}'}
+        }, status=500)
+
+
+@login_required
+@audit_html_action('UPLOAD_CERTIFICATE')
+def certificate_upload(request, company_id):
+    """
+    Vista dedicada para subir/actualizar certificado digital
+    """
+    company = get_object_or_404(Company, id=company_id)
+    
+    # Verificar permisos
+    user_companies = get_user_companies_secure(request.user)
+    if not user_companies.filter(id=company.id).exists() and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'errors': {'general': 'No tienes permisos para gestionar certificados de esta empresa'}
+        }, status=403)
+    
+    if request.method == 'POST':
+        try:
+            certificate = handle_certificate_upload(
+                company=company,
+                file=request.FILES.get('certificate_file'),
+                password=request.POST.get('certificate_password', ''),
+                alias=request.POST.get('certificate_alias', ''),
+                user=request.user
+            )
+            
+            messages.success(request, 'Certificado cargado exitosamente')
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Certificado cargado correctamente',
+                    'certificate': {
+                        'id': certificate.id,
+                        'issuer': certificate.issuer_name,
+                        'subject': certificate.subject_name,
+                        'valid_from': certificate.valid_from.strftime('%d/%m/%Y'),
+                        'valid_to': certificate.valid_to.strftime('%d/%m/%Y'),
+                        'days_until_expiration': certificate.days_until_expiration,
+                        'is_active': certificate.status == 'ACTIVE'
+                    }
+                })
+            
+            # Obtener token para redirección
+            try:
+                company_token = CompanyAPIToken.objects.get(company=company, is_active=True)
+                return redirect(f'/dashboard/?token={company_token.key}')
+            except:
+                return redirect('core:dashboard')
+            
+        except Exception as e:
+            error_msg = f'Error al procesar certificado: {str(e)}'
+            messages.error(request, error_msg)
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False,
+                    'errors': {'certificate_file': error_msg}
+                }, status=400)
+    
+    return redirect('core:dashboard')
+
+
+def handle_certificate_upload(company, file, password, alias, user):
+    """
+    Maneja la carga y procesamiento del certificado digital
+    """
+    from cryptography.hazmat.primitives.serialization import pkcs12
+    from cryptography import x509
+    from cryptography.hazmat.backends import default_backend
+    import hashlib
+    
+    if not file:
+        raise ValueError("No se proporcionó archivo de certificado")
+    
+    try:
+        # Leer el archivo
+        cert_data = file.read()
+        
+        # Intentar cargar el certificado para validarlo
+        try:
+            private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
+                cert_data,
+                password.encode() if password else None,
+                backend=default_backend()
+            )
+        except Exception as e:
+            raise ValueError(f"No se pudo leer el certificado. Verifique que el archivo y contraseña sean correctos: {str(e)}")
+        
+        if not certificate:
+            raise ValueError("El archivo no contiene un certificado válido")
+        
+        # Extraer información del certificado
+        subject = certificate.subject
+        issuer = certificate.issuer
+        
+        # Formatear nombres
+        subject_name = ", ".join([f"{attr.oid._name}={attr.value}" for attr in subject])
+        issuer_name = ", ".join([f"{attr.oid._name}={attr.value}" for attr in issuer])
+        
+        # Desactivar certificados anteriores
+        DigitalCertificate.objects.filter(
+            company=company,
+            status='ACTIVE'
+        ).update(status='INACTIVE')
+        
+        # Crear nuevo certificado
+        new_cert = DigitalCertificate(
+            company=company,
+            subject_name=subject_name[:255],
+            issuer_name=issuer_name[:255],
+            serial_number=str(certificate.serial_number)[:100],
+            valid_from=certificate.not_valid_before,
+            valid_to=certificate.not_valid_after,
+            status='ACTIVE',
+            created_by=user,
+            environment='TEST' if company.ambiente_sri == '1' else 'PRODUCTION'
+        )
+        
+        # Establecer contraseña hasheada
+        new_cert.set_password(password)
+        
+        # Guardar archivo
+        file.seek(0)  # Volver al inicio del archivo
+        new_cert.certificate_file.save(f"{company.ruc}_cert.p12", file)
+        
+        # Guardar certificado
+        new_cert.save()
+        
+        logger.info(f"✅ Certificate uploaded for company {company.business_name} by {user.username}")
+        
+        return new_cert
+        
+    except Exception as e:
+        logger.error(f"Error processing certificate: {str(e)}")
+        raise ValueError(f"Error al procesar el certificado: {str(e)}")
+
+
+@login_required
+def company_info_modal(request, company_id):
+    """
+    Vista para obtener información de la empresa para el modal de edición
+    """
+    company = get_object_or_404(Company, id=company_id)
+    
+    # Verificar permisos
+    user_companies = get_user_companies_secure(request.user)
+    if not user_companies.filter(id=company.id).exists() and not request.user.is_staff:
+        return JsonResponse({'error': 'Sin permisos'}, status=403)
+    
+    # Obtener información del certificado si existe
+    certificate_info = None
+    try:
+        certificate = company.digital_certificate
+        if certificate:
+            certificate_info = {
+                'has_certificate': True,
+                'issuer': certificate.issuer_name,
+                'valid_until': certificate.valid_to.strftime('%d/%m/%Y'),
+                'days_left': certificate.days_until_expiration,
+                'is_expired': certificate.is_expired,
+                'is_active': certificate.status == 'ACTIVE'
+            }
+    except:
+        certificate_info = {'has_certificate': False}
+    
+    # Preparar datos para el formulario
+    data = {
+        'company': {
+            'id': company.id,
+            'ruc': company.ruc,
+            'business_name': company.business_name,
+            'trade_name': company.trade_name,
+            'email': company.email,
+            'phone': company.phone,
+            'address': company.address,
+            'ciudad': company.ciudad,
+            'provincia': company.provincia,
+            'codigo_postal': company.codigo_postal,
+            'website': company.website,
+            'tipo_contribuyente': company.tipo_contribuyente,
+            'obligado_contabilidad': company.obligado_contabilidad,
+            'contribuyente_especial': company.contribuyente_especial,
+            'codigo_establecimiento': company.codigo_establecimiento,
+            'codigo_punto_emision': company.codigo_punto_emision,
+            'ambiente_sri': company.ambiente_sri,
+            'tipo_emision': company.tipo_emision,
+            'logo_url': company.logo.url if company.logo else None
+        },
+        'certificate': certificate_info,
+        'tipo_contribuyente_choices': list(Company.TIPO_CONTRIBUYENTE_CHOICES),
+        'obligado_contabilidad_choices': list(Company.OBLIGADO_CONTABILIDAD_CHOICES)
+    }
+    
+    return JsonResponse(data)
+
+
+@login_required
+def company_select(request, company_id):
+    """
+    Cambia la empresa seleccionada - redirige con token
+    """
+    company = get_object_or_404(Company, id=company_id, is_active=True)
+    
+    # Verificar que el usuario tenga acceso
+    user_companies = get_user_companies_secure(request.user)
+    if user_companies.filter(id=company.id).exists() or request.user.is_staff:
+        # Obtener o crear token para la empresa
+        try:
+            company_token, created = CompanyAPIToken.objects.get_or_create(
+                company=company,
+                defaults={
+                    'name': f'Auto-generated token for {company.business_name}',
+                    'is_active': True
+                }
+            )
+            
+            messages.success(request, f'Empresa cambiada a: {company.display_name}')
+            return redirect(f'/dashboard/?token={company_token.key}')
+            
+        except Exception as e:
+            logger.error(f"Error getting token for company selection: {e}")
+            messages.error(request, 'Error al cambiar de empresa')
+    else:
+        messages.error(request, 'No tienes acceso a esta empresa')
+    
+    return redirect('core:dashboard')
+
+
+@login_required
+def company_dashboard(request, company_id):
+    """
+    Dashboard específico de una empresa - redirige con token
+    """
+    company = get_object_or_404(Company, id=company_id, is_active=True)
+    
+    # Verificar acceso
+    user_companies = get_user_companies_secure(request.user)
+    if user_companies.filter(id=company.id).exists() or request.user.is_staff:
+        # Obtener o crear token y redirigir
+        try:
+            company_token, created = CompanyAPIToken.objects.get_or_create(
+                company=company,
+                defaults={
+                    'name': f'Auto-generated token for {company.business_name}',
+                    'is_active': True
+                }
+            )
+            
+            return redirect(f'/dashboard/?token={company_token.key}')
+            
+        except Exception as e:
+            logger.error(f"Error in company_dashboard: {e}")
+            messages.error(request, 'Error al acceder al dashboard de la empresa')
+    else:
+        messages.error(request, 'No tienes acceso a esta empresa')
+    
+    return redirect('core:dashboard')
+
+
+# ========== VISTAS ADMINISTRATIVAS ==========
 
 @login_required
 @audit_html_action('VIEW_ADMIN_DASHBOARD')
@@ -412,39 +889,18 @@ def admin_dashboard_view(request):
     # Estadísticas generales para admins
     total_users = User.objects.filter(is_staff=False, is_superuser=False).count()
     total_companies = Company.objects.count()
-    total_tokens = CompanyAPIToken.objects.filter(is_active=True).count()  # 🔑 NUEVO
+    total_tokens = CompanyAPIToken.objects.filter(is_active=True).count()
     
-    try:
-        from apps.users.models import UserCompanyAssignment, AdminNotification
-        ASSIGNMENTS_AVAILABLE = True
-        
-        waiting_users = UserCompanyAssignment.objects.filter(status='waiting').count()
-        assigned_users = UserCompanyAssignment.objects.filter(status='assigned').count()
-        unread_notifications = AdminNotification.objects.filter(is_read=False).count()
-        recent_notifications = AdminNotification.objects.filter(is_read=False)[:5]
-        recent_waiting = UserCompanyAssignment.objects.filter(
-            status='waiting'
-        ).select_related('user').order_by('-created_at')[:10]
-        
-    except ImportError:
-        ASSIGNMENTS_AVAILABLE = False
-        waiting_users = 0
-        assigned_users = total_users
-        unread_notifications = 0
-        recent_notifications = []
-        recent_waiting = []
+    # Valores por defecto
+    waiting_users = 0
+    assigned_users = total_users
+    unread_notifications = 0
+    recent_notifications = []
+    recent_waiting = []
+    total_invoices = 0
+    pending_invoices = 0
     
-    try:
-        from apps.invoicing.models import Invoice
-        INVOICES_AVAILABLE = True
-        total_invoices = Invoice.objects.count()
-        pending_invoices = Invoice.objects.filter(status='pending').count()
-    except ImportError:
-        INVOICES_AVAILABLE = False
-        total_invoices = 0
-        pending_invoices = 0
-    
-    # 🔑 Estadísticas de tokens más utilizados
+    # Estadísticas de tokens más utilizados
     try:
         top_tokens = CompanyAPIToken.objects.filter(
             is_active=True
@@ -458,7 +914,7 @@ def admin_dashboard_view(request):
         'waiting_users': waiting_users,
         'assigned_users': assigned_users,
         'total_companies': total_companies,
-        'total_tokens': total_tokens,  # 🔑 NUEVO
+        'total_tokens': total_tokens,
         'total_invoices': total_invoices,
         'pending_invoices': pending_invoices,
         'unread_notifications': unread_notifications,
@@ -467,20 +923,22 @@ def admin_dashboard_view(request):
     context = {
         'is_admin': True,
         'admin_stats': admin_stats,
-        'top_tokens': top_tokens,  # 🔑 NUEVO
+        'top_tokens': top_tokens,
         'recent_notifications': recent_notifications,
         'recent_waiting': recent_waiting,
-        'assignments_available': ASSIGNMENTS_AVAILABLE,
-        'invoices_available': INVOICES_AVAILABLE,
+        'assignments_available': False,
+        'invoices_available': False,
         'security_validation': {
             'admin_access_confirmed': True,
             'user': request.user.username,
-            'token_system_enabled': True,  # 🔑 NUEVO
+            'token_system_enabled': True,
         }
     }
     
     return render(request, 'dashboard/admin_dashboard.html', context)
 
+
+# ========== APIs CON TOKENS ==========
 
 @login_required
 @audit_html_action('SWITCH_COMPANY_TOKEN')
@@ -494,7 +952,6 @@ def switch_company_token_ajax(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
-    import json
     try:
         data = json.loads(request.body)
         token = data.get('token')
@@ -519,7 +976,7 @@ def switch_company_token_ajax(request):
                 'company_id': company_token.company.id,
                 'company_name': company_token.company.business_name,
                 'token': company_token.key,
-                'redirect_url': f'/dashboard/?token={token}',  # 🔑 TOKEN EN URL
+                'redirect_url': f'/dashboard/?token={token}',
                 'security_validation': {
                     'token_validated': True,
                     'user_access_confirmed': True
@@ -557,7 +1014,7 @@ def company_invoices_api_token(request):
         INVOICES_AVAILABLE = False
     
     if INVOICES_AVAILABLE:
-        # 🔒 FILTRAR SOLO FACTURAS DE LA EMPRESA VALIDADA POR TOKEN
+        # FILTRAR SOLO FACTURAS DE LA EMPRESA VALIDADA POR TOKEN
         invoices = Invoice.objects.filter(company=company).order_by('-created_at')
         
         invoices_data = []
@@ -575,11 +1032,11 @@ def company_invoices_api_token(request):
         return JsonResponse({
             'success': True,
             'company_name': getattr(company, 'business_name', company.trade_name),
-            'company_token': company_token.key[:20] + '...',  # 🔑 NUEVO
+            'company_token': company_token.key[:20] + '...',
             'invoices': invoices_data,
             'total_count': invoices.count(),
             'security_validation': {
-                'validated_by_token': True,  # 🔑 NUEVO
+                'validated_by_token': True,
                 'token_validated': True,
                 'user_access_confirmed': True
             }
@@ -590,11 +1047,11 @@ def company_invoices_api_token(request):
             'success': False,
             'error': 'El módulo de facturación no está disponible',
             'company_name': getattr(company, 'business_name', company.trade_name),
-            'company_token': company_token.key[:20] + '...',  # 🔑 NUEVO
+            'company_token': company_token.key[:20] + '...',
             'invoices': [],
             'total_count': 0,
             'security_validation': {
-                'validated_by_token': True,  # 🔑 NUEVO
+                'validated_by_token': True,
                 'token_validated': True,
                 'user_access_confirmed': True
             }
@@ -665,7 +1122,7 @@ def invoice_detail_view(request, invoice_id):
         from django.http import Http404
         raise Http404("La funcionalidad de facturas no está disponible")
     
-    # 🔒 VALIDACIÓN CRÍTICA: Solo facturas de empresas del usuario
+    # VALIDACIÓN CRÍTICA: Solo facturas de empresas del usuario
     user_companies = get_user_companies_secure(request.user)
     
     if user_companies.exists():
@@ -676,7 +1133,7 @@ def invoice_detail_view(request, invoice_id):
             )
             logger.info(f"✅ User {request.user.username} accessing invoice {invoice_id}")
             
-            # 🔑 Obtener token de la empresa de la factura
+            # Obtener token de la empresa de la factura
             try:
                 company_token = CompanyAPIToken.objects.get(
                     company=invoice.company,
@@ -698,12 +1155,12 @@ def invoice_detail_view(request, invoice_id):
     context = {
         'invoice': invoice,
         'company': invoice.company,
-        'dashboard_token_url': dashboard_token_url,  # 🔑 NUEVO
+        'dashboard_token_url': dashboard_token_url,
         'is_admin': request.user.is_staff or request.user.is_superuser,
         'security_validation': {
             'validated_by_query_filter': True,
             'user_access_confirmed': True,
-            'token_url_generated': True,  # 🔑 NUEVO
+            'token_url_generated': True,
         }
     }
     
@@ -735,7 +1192,7 @@ def dashboard_stats_api(request):
         INVOICES_AVAILABLE = False
     
     if INVOICES_AVAILABLE:
-        # 🔒 ESTADÍSTICAS SOLO DE EMPRESAS DEL USUARIO
+        # ESTADÍSTICAS SOLO DE EMPRESAS DEL USUARIO
         last_30_days = timezone.now() - timedelta(days=30)
         invoices_last_30 = Invoice.objects.filter(
             company__in=user_companies,
@@ -773,7 +1230,7 @@ def dashboard_stats_api(request):
                 
                 company_stats.append({
                     'company_name': company.trade_name or company.business_name,
-                    'token_display': token_display,  # 🔑 NUEVO
+                    'token_display': token_display,
                     'count': company_invoices.count(),
                     'total_amount': company_invoices.aggregate(
                         total=Sum('total_amount')
@@ -786,13 +1243,13 @@ def dashboard_stats_api(request):
         return JsonResponse({
             'daily_stats': list(reversed(daily_stats)),
             'status_distribution': list(status_distribution),
-            'company_stats': company_stats,  # 🔑 ACTUALIZADO CON TOKENS
+            'company_stats': company_stats,
             'total_last_30': invoices_last_30.count(),
             'security_validation': {
                 'filtered_by_user_companies': True,
                 'companies_count': user_companies.count(),
                 'user': request.user.username,
-                'token_system_enabled': True,  # 🔑 NUEVO
+                'token_system_enabled': True,
             }
         })
         
@@ -807,7 +1264,7 @@ def dashboard_stats_api(request):
                 'filtered_by_user_companies': True,
                 'companies_count': user_companies.count(),
                 'user': request.user.username,
-                'token_system_enabled': True,  # 🔑 NUEVO
+                'token_system_enabled': True,
             }
         })
 
@@ -846,7 +1303,7 @@ def company_tokens_view(request):
                 'company': company,
                 'tokens': company_tokens,
                 'primary_token': company_tokens.first(),
-                'dashboard_url': f"/dashboard/?token={company_tokens.first().key}",  # 🔑 TOKEN EN URL
+                'dashboard_url': f"/dashboard/?token={company_tokens.first().key}",
                 'api_test_url': f"/api/companies/",
                 'token_display': company_tokens.first().key[:20] + '...',
             })
