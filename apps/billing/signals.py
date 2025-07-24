@@ -46,10 +46,17 @@ def handle_plan_purchase_approval(sender, instance, created, **kwargs):
     Manejar aprobación automática de compras de planes
     """
     if not created and instance.payment_status == 'approved':
+        # Obtener update_fields de forma segura
+        update_fields = kwargs.get('update_fields', []) or []
+        
         # Solo procesar si cambió a aprobado
-        if 'payment_status' in kwargs.get('update_fields', []) or hasattr(instance, '_state') and instance._state.adding:
+        if 'payment_status' in update_fields or (hasattr(instance, '_state') and instance._state.adding):
             try:
-                logger.info(f"✅ Plan purchase approved: {instance.company.business_name} - {instance.plan_name}")
+                # Manejo seguro del plan_name
+                plan_name = getattr(instance, 'plan_name', None) or 'Unknown Plan'
+                company_name = getattr(instance.company, 'business_name', None) or getattr(instance.company, 'trade_name', 'Unknown Company')
+                
+                logger.info(f"✅ Plan purchase approved: {company_name} - {plan_name}")
                 
                 # Nota: La lógica de aprobación ya está en el método approve_purchase del modelo
                 # Esta señal es para futuras extensiones como notificaciones
@@ -65,11 +72,17 @@ def handle_invoice_consumption(sender, instance, created, **kwargs):
     """
     if created:
         try:
+            # Verificar que existe el perfil de facturación
+            if not hasattr(instance.company, 'billing_profile'):
+                logger.error(f"❌ No billing profile found for company: {instance.company.business_name}")
+                return
+                
             billing_profile = instance.company.billing_profile
+            company_name = getattr(instance.company, 'business_name', None) or getattr(instance.company, 'trade_name', 'Unknown Company')
             
             # Log del consumo
             logger.info(
-                f"📊 Invoice consumed: {instance.company.business_name} - "
+                f"📊 Invoice consumed: {company_name} - "
                 f"Document: {instance.invoice_id} - "
                 f"Remaining: {billing_profile.available_invoices}"
             )
@@ -77,7 +90,7 @@ def handle_invoice_consumption(sender, instance, created, **kwargs):
             # Alertas de saldo bajo
             if billing_profile.is_low_balance:
                 logger.warning(
-                    f"⚠️ Low balance alert: {instance.company.business_name} - "
+                    f"⚠️ Low balance alert: {company_name} - "
                     f"Only {billing_profile.available_invoices} invoices remaining"
                 )
                 
@@ -87,7 +100,7 @@ def handle_invoice_consumption(sender, instance, created, **kwargs):
             # Alerta de saldo agotado
             if billing_profile.available_invoices == 0:
                 logger.warning(
-                    f"🚨 Balance depleted: {instance.company.business_name} - "
+                    f"🚨 Balance depleted: {company_name} - "
                     f"No invoices remaining. Company needs to purchase a plan."
                 )
                 
@@ -103,20 +116,26 @@ def prevent_billing_profile_deletion(sender, instance, **kwargs):
     """
     Prevenir eliminación accidental de perfiles de facturación
     """
-    logger.warning(
-        f"🚨 ATTEMPT TO DELETE BILLING PROFILE: {instance.company.business_name} - "
-        f"Available invoices: {instance.available_invoices} - "
-        f"Total spent: ${instance.total_spent}"
-    )
-    
-    # Opcional: Cancelar la eliminación en casos críticos
-    if instance.available_invoices > 0 or instance.total_spent > 0:
-        logger.error(
-            f"❌ BILLING PROFILE DELETION BLOCKED: Profile has active data - "
-            f"Company: {instance.company.business_name}"
+    try:
+        company_name = getattr(instance.company, 'business_name', None) or getattr(instance.company, 'trade_name', 'Unknown Company')
+        
+        logger.warning(
+            f"🚨 ATTEMPT TO DELETE BILLING PROFILE: {company_name} - "
+            f"Available invoices: {instance.available_invoices} - "
+            f"Total spent: ${instance.total_spent}"
         )
-        # Uncomment to actually prevent deletion:
-        # raise Exception("Cannot delete billing profile with active invoices or payment history")
+        
+        # Opcional: Cancelar la eliminación en casos críticos
+        if instance.available_invoices > 0 or instance.total_spent > 0:
+            logger.error(
+                f"❌ BILLING PROFILE DELETION BLOCKED: Profile has active data - "
+                f"Company: {company_name}"
+            )
+            # Uncomment to actually prevent deletion:
+            # raise Exception("Cannot delete billing profile with active invoices or payment history")
+            
+    except Exception as e:
+        logger.error(f"❌ Error in billing profile deletion handler: {e}")
 
 
 # Función auxiliar para futuras notificaciones
@@ -124,18 +143,24 @@ def send_low_balance_notification(billing_profile):
     """
     Enviar notificación de saldo bajo (para implementar)
     """
-    # TODO: Implementar notificaciones por email
-    # TODO: Implementar notificaciones en dashboard
-    # TODO: Implementar notificaciones por webhook
-    pass
+    try:
+        # TODO: Implementar notificaciones por email
+        # TODO: Implementar notificaciones en dashboard
+        # TODO: Implementar notificaciones por webhook
+        pass
+    except Exception as e:
+        logger.error(f"❌ Error sending low balance notification: {e}")
 
 
 def send_balance_depleted_notification(billing_profile):
     """
     Enviar notificación de saldo agotado (para implementar)
     """
-    # TODO: Implementar notificaciones urgentes
-    pass
+    try:
+        # TODO: Implementar notificaciones urgentes
+        pass
+    except Exception as e:
+        logger.error(f"❌ Error sending balance depleted notification: {e}")
 
 
 # Log de inicialización

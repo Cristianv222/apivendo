@@ -136,9 +136,9 @@ class PlanPurchase(models.Model):
     plan = models.ForeignKey(Plan, on_delete=models.CASCADE, related_name='purchases')
     
     # Datos del plan al momento de la compra (para histórico)
-    plan_name = models.CharField('Nombre del Plan', max_length=100)
-    plan_invoice_limit = models.PositiveIntegerField('Facturas del Plan')
-    plan_price = models.DecimalField('Precio del Plan', max_digits=10, decimal_places=2)
+    plan_name = models.CharField('Nombre del Plan', max_length=100, blank=True)
+    plan_invoice_limit = models.PositiveIntegerField('Facturas del Plan', null=True, blank=True)
+    plan_price = models.DecimalField('Precio del Plan', max_digits=10, decimal_places=2, null=True, blank=True)
     
     # Estado del pago
     payment_status = models.CharField('Estado', max_length=20, choices=PAYMENT_STATUS_CHOICES, default='pending')
@@ -173,10 +173,26 @@ class PlanPurchase(models.Model):
         ordering = ['-created_at']
     
     def __str__(self):
-        return f"{self.company.business_name} - {self.plan_name} - {self.get_payment_status_display()}"
+        return f"{self.company.business_name} - {self.plan_name or self.plan.name} - {self.get_payment_status_display()}"
+    
+    def save(self, *args, **kwargs):
+        """
+        Override save para auto-popular campos del plan si están vacíos
+        """
+        from django.utils import timezone
+        
+        # Auto-popular campos del plan si no están definidos y hay un plan seleccionado
+        if self.plan and (not self.plan_name or not self.plan_invoice_limit or not self.plan_price):
+            self.plan_name = self.plan.name
+            self.plan_invoice_limit = self.plan.invoice_limit
+            self.plan_price = self.plan.price
+        
+        super().save(*args, **kwargs)
     
     def approve_purchase(self, admin_user):
         """Aprobar la compra y activar el plan"""
+        from django.utils import timezone
+        
         if self.payment_status == 'pending':
             # Crear o obtener perfil de facturación
             billing_profile, created = CompanyBillingProfile.objects.get_or_create(
@@ -189,8 +205,12 @@ class PlanPurchase(models.Model):
                 }
             )
             
+            # Usar los valores guardados al momento de la compra
+            invoice_limit = self.plan_invoice_limit or self.plan.invoice_limit
+            price = self.plan_price or self.plan.price
+            
             # Agregar facturas al perfil
-            billing_profile.add_invoices(self.plan_invoice_limit, self.plan_price)
+            billing_profile.add_invoices(invoice_limit, price)
             billing_profile.last_purchase_date = self.created_at
             billing_profile.save(update_fields=['last_purchase_date'])
             
@@ -205,6 +225,8 @@ class PlanPurchase(models.Model):
     
     def reject_purchase(self, admin_user, reason=None):
         """Rechazar la compra"""
+        from django.utils import timezone
+        
         if self.payment_status == 'pending':
             self.payment_status = 'rejected'
             self.processed_by = admin_user
@@ -266,7 +288,6 @@ class InvoiceConsumption(models.Model):
 # Señales para crear automáticamente perfiles de facturación
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.utils import timezone
 
 @receiver(post_save, sender='companies.Company')
 def create_billing_profile(sender, instance, created, **kwargs):
