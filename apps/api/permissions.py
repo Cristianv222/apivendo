@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Custom permissions for API - VERSIÓN MEJORADA
+Custom permissions for API - VERSIÓN MEJORADA Y CORREGIDA
 apps/api/permissions.py
 """
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class IsCompanyOwnerOrAdmin(permissions.BasePermission):
     """
     Permiso que permite acceso solo a propietarios de empresa o administradores
-    MEJORADO: Con mejor logging y validación
+    MEJORADO: Con mejor logging y validación + soporte para VirtualCompanyUser
     """
     
     def has_permission(self, request, view):
@@ -35,14 +35,23 @@ class IsCompanyOwnerOrAdmin(permissions.BasePermission):
             logger.info(f"Superuser {request.user.username} granted access")
             return True
         
-        # Los usuarios regulares deben tener al menos una empresa
-        has_companies = request.user.companies.filter(is_active=True).exists()
-        if not has_companies:
-            logger.warning(f"User {request.user.username} has no active companies")
-            return False
+        # ✅ NUEVO: Soporte para VirtualCompanyUser (tokens VSR)
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser {getattr(request.user, 'username', 'VSR')} granted access")
+            return True
         
-        logger.info(f"User {request.user.username} has active companies")
-        return True
+        # Los usuarios regulares deben tener al menos una empresa
+        if hasattr(request.user, 'companies'):
+            has_companies = request.user.companies.filter(is_active=True).exists()
+            if not has_companies:
+                logger.warning(f"User {request.user.username} has no active companies")
+                return False
+            
+            logger.info(f"User {request.user.username} has active companies")
+            return True
+        else:
+            logger.warning(f"User {getattr(request.user, 'username', 'Unknown')} has no companies attribute")
+            return False
     
     def has_object_permission(self, request, view, obj):
         """
@@ -50,6 +59,11 @@ class IsCompanyOwnerOrAdmin(permissions.BasePermission):
         """
         # Los superusuarios tienen acceso total
         if request.user.is_superuser:
+            return True
+        
+        # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso (ya validado por token VSR)
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser granted object access")
             return True
         
         # Determinar la empresa relacionada con el objeto
@@ -60,14 +74,18 @@ class IsCompanyOwnerOrAdmin(permissions.BasePermission):
             return False
         
         # Verificar si el usuario tiene acceso a la empresa
-        has_access = company in request.user.companies.filter(is_active=True)
-        
-        if not has_access:
-            logger.warning(f"User {request.user.username} denied access to company {company.id}")
+        if hasattr(request.user, 'companies'):
+            has_access = company in request.user.companies.filter(is_active=True)
+            
+            if not has_access:
+                logger.warning(f"User {request.user.username} denied access to company {company.id}")
+            else:
+                logger.info(f"User {request.user.username} granted access to company {company.id}")
+            
+            return has_access
         else:
-            logger.info(f"User {request.user.username} granted access to company {company.id}")
-        
-        return has_access
+            logger.warning(f"User {getattr(request.user, 'username', 'Unknown')} has no companies attribute")
+            return False
     
     def _get_related_company(self, obj):
         """
@@ -139,7 +157,7 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
                 is_owner = owner == request.user
                 
                 if not is_owner:
-                    logger.warning(f"User {request.user.username} denied edit access to {type(obj).__name__}")
+                    logger.warning(f"User {getattr(request.user, 'username', 'Unknown')} denied edit access to {type(obj).__name__}")
                 
                 return is_owner
         
@@ -150,12 +168,17 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
 
 class IsCompanyMember(permissions.BasePermission):
     """
-    Permiso para miembros de la empresa - MEJORADO CON VALIDACIÓN ESTRICTA
+    Permiso para miembros de la empresa - MEJORADO CON VALIDACIÓN ESTRICTA Y SOPORTE VSR
     """
     
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        
+        # ✅ NUEVO: VirtualCompanyUser siempre pasa (token VSR ya validado)
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser granted permission")
+            return True
         
         # ✅ MEJORADO: Múltiples formas de obtener company_id
         company_id = self._extract_company_id(request, view)
@@ -203,19 +226,27 @@ class IsCompanyMember(permissions.BasePermission):
             if user.is_superuser:
                 return True
             
+            # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso
+            if hasattr(user, '__class__') and 'Virtual' in user.__class__.__name__:
+                return True
+            
             # Verificar relación usuario-empresa
-            from apps.companies.models import Company
-            try:
-                company = Company.objects.get(id=company_id, is_active=True)
-                has_access = company in user.companies.filter(is_active=True)
-                
-                if not has_access:
-                    logger.warning(f"User {user.username} denied access to company {company_id}")
-                
-                return has_access
-                
-            except Company.DoesNotExist:
-                logger.error(f"Company {company_id} does not exist")
+            if hasattr(user, 'companies'):
+                from apps.companies.models import Company
+                try:
+                    company = Company.objects.get(id=company_id, is_active=True)
+                    has_access = company in user.companies.filter(is_active=True)
+                    
+                    if not has_access:
+                        logger.warning(f"User {user.username} denied access to company {company_id}")
+                    
+                    return has_access
+                    
+                except Company.DoesNotExist:
+                    logger.error(f"Company {company_id} does not exist")
+                    return False
+            else:
+                logger.warning(f"User {getattr(user, 'username', 'Unknown')} has no companies attribute")
                 return False
                 
         except (ValueError, TypeError):
@@ -227,12 +258,17 @@ class IsCompanyMember(permissions.BasePermission):
 
 class SRIDocumentPermission(permissions.BasePermission):
     """
-    Permiso específico para documentos SRI
+    Permiso específico para documentos SRI - CORREGIDO PARA VSR
     """
     
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        
+        # ✅ NUEVO: VirtualCompanyUser siempre pasa
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser granted SRI permission")
+            return True
         
         # Para creación de documentos, validar company_id
         if request.method == 'POST':
@@ -246,6 +282,10 @@ class SRIDocumentPermission(permissions.BasePermission):
         if request.user.is_superuser:
             return True
         
+        # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            return True
+        
         # Obtener empresa del documento
         company = None
         if hasattr(obj, 'company'):
@@ -256,7 +296,10 @@ class SRIDocumentPermission(permissions.BasePermission):
         if not company:
             return False
         
-        return company in request.user.companies.filter(is_active=True)
+        if hasattr(request.user, 'companies'):
+            return company in request.user.companies.filter(is_active=True)
+        else:
+            return False
     
     def _validate_company_access(self, user, company_id):
         """Misma validación que IsCompanyMember"""
@@ -266,11 +309,18 @@ class SRIDocumentPermission(permissions.BasePermission):
             if user.is_superuser:
                 return True
             
-            from apps.companies.models import Company
-            try:
-                company = Company.objects.get(id=company_id, is_active=True)
-                return company in user.companies.filter(is_active=True)
-            except Company.DoesNotExist:
+            # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso
+            if hasattr(user, '__class__') and 'Virtual' in user.__class__.__name__:
+                return True
+            
+            if hasattr(user, 'companies'):
+                from apps.companies.models import Company
+                try:
+                    company = Company.objects.get(id=company_id, is_active=True)
+                    return company in user.companies.filter(is_active=True)
+                except Company.DoesNotExist:
+                    return False
+            else:
                 return False
         except (ValueError, TypeError):
             return False
@@ -278,25 +328,37 @@ class SRIDocumentPermission(permissions.BasePermission):
 
 class CertificatePermission(permissions.BasePermission):
     """
-    Permiso específico para certificados digitales
+    Permiso específico para certificados digitales - CORREGIDO PARA VSR
     """
     
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         
+        # ✅ NUEVO: VirtualCompanyUser puede gestionar certificados
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser granted certificate permission")
+            return True
+        
         # Solo superuser y usuarios con empresas pueden gestionar certificados
         if request.user.is_superuser:
             return True
         
-        return request.user.companies.filter(is_active=True).exists()
+        if hasattr(request.user, 'companies'):
+            return request.user.companies.filter(is_active=True).exists()
+        else:
+            return False
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_superuser:
             return True
         
+        # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            return True
+        
         # Solo el propietario de la empresa puede gestionar sus certificados
-        if hasattr(obj, 'company'):
+        if hasattr(obj, 'company') and hasattr(request.user, 'companies'):
             return obj.company in request.user.companies.filter(is_active=True)
         
         return False
@@ -306,10 +368,15 @@ class CertificatePermission(permissions.BasePermission):
 
 def require_company_access(func):
     """
-    Decorador que valida acceso a empresa - MEJORADO
+    Decorador que valida acceso a empresa - MEJORADO CON SOPORTE VSR
     """
     @wraps(func)
     def wrapper(self, request, *args, **kwargs):
+        # ✅ NUEVO: VirtualCompanyUser siempre pasa
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser bypassing company access check")
+            return func(self, request, *args, **kwargs)
+        
         # Extraer company_id de múltiples fuentes
         company_id = None
         
@@ -332,7 +399,7 @@ def require_company_access(func):
                 'message': 'You do not have permission to access this company',
                 'code': 'FORBIDDEN_COMPANY_ACCESS',
                 'company_id': str(company_id),
-                'user': request.user.username if request.user else None,
+                'user': getattr(request.user, 'username', 'Unknown') if request.user else None,
                 'timestamp': timezone.now().isoformat()
             }, status=status.HTTP_403_FORBIDDEN)
         
@@ -363,7 +430,7 @@ def require_admin_access(func):
 
 def _validate_user_company_access_with_logging(user, company_id):
     """
-    Validación con logging detallado
+    Validación con logging detallado - CORREGIDO PARA VSR
     """
     if not user or not user.is_authenticated:
         logger.warning("Access denied: User not authenticated")
@@ -374,7 +441,12 @@ def _validate_user_company_access_with_logging(user, company_id):
         
         # Superuser tiene acceso completo
         if user.is_superuser:
-            logger.info(f"Superuser {user.username} accessing company {company_id}")
+            logger.info(f"Superuser {getattr(user, 'username', 'Admin')} accessing company {company_id}")
+            return True
+        
+        # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso
+        if hasattr(user, '__class__') and 'Virtual' in user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser accessing company {company_id}")
             return True
         
         # Validar relación usuario-empresa
@@ -395,7 +467,7 @@ def _validate_user_company_access_with_logging(user, company_id):
                 logger.error(f"Company {company_id} does not exist")
                 return False
         
-        logger.warning(f"User {user.username} has no company relationships")
+        logger.warning(f"User {getattr(user, 'username', 'Unknown')} has no company relationships")
         return False
         
     except (ValueError, TypeError):
@@ -405,12 +477,17 @@ def _validate_user_company_access_with_logging(user, company_id):
 
 def get_user_accessible_companies(user):
     """
-    Obtiene las empresas accesibles para el usuario
+    Obtiene las empresas accesibles para el usuario - CORREGIDO PARA VSR
     """
     if not user or not user.is_authenticated:
         return []
     
     if user.is_superuser:
+        from apps.companies.models import Company
+        return Company.objects.filter(is_active=True)
+    
+    # ✅ NUEVO: VirtualCompanyUser puede acceder a todas las empresas activas
+    if hasattr(user, '__class__') and 'Virtual' in user.__class__.__name__:
         from apps.companies.models import Company
         return Company.objects.filter(is_active=True)
     
@@ -422,13 +499,17 @@ def get_user_accessible_companies(user):
 
 def check_company_permission(user, company_id, action='access'):
     """
-    Verificación centralizada de permisos de empresa
+    Verificación centralizada de permisos de empresa - CORREGIDO PARA VSR
     """
     if not user or not user.is_authenticated:
         return False, "User not authenticated"
     
     if user.is_superuser:
         return True, "Superuser access granted"
+    
+    # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso
+    if hasattr(user, '__class__') and 'Virtual' in user.__class__.__name__:
+        return True, "VirtualCompanyUser access granted"
     
     try:
         company_id = int(company_id)
@@ -456,7 +537,7 @@ def check_company_permission(user, company_id, action='access'):
 
 class VendoSRIPermission(permissions.BasePermission):
     """
-    Permiso combinado para todo el sistema VENDO SRI
+    Permiso combinado para todo el sistema VENDO SRI - CORREGIDO PARA VSR
     """
     
     def has_permission(self, request, view):
@@ -468,6 +549,11 @@ class VendoSRIPermission(permissions.BasePermission):
         if request.user.is_superuser:
             return True
         
+        # ✅ NUEVO: VirtualCompanyUser siempre pasa
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
+            logger.info(f"VirtualCompanyUser granted VendoSRI permission")
+            return True
+        
         # Para acciones que requieren empresa específica
         company_id = self._extract_company_id(request, view)
         if company_id:
@@ -477,10 +563,17 @@ class VendoSRIPermission(permissions.BasePermission):
             return is_valid
         
         # Para listados generales, verificar que tenga al menos una empresa
-        return request.user.companies.filter(is_active=True).exists()
+        if hasattr(request.user, 'companies'):
+            return request.user.companies.filter(is_active=True).exists()
+        else:
+            return False
     
     def has_object_permission(self, request, view, obj):
         if request.user.is_superuser:
+            return True
+        
+        # ✅ NUEVO: VirtualCompanyUser siempre tiene acceso a objetos
+        if hasattr(request.user, '__class__') and 'Virtual' in request.user.__class__.__name__:
             return True
         
         # Usar el permiso existente IsCompanyOwnerOrAdmin
@@ -491,9 +584,14 @@ class VendoSRIPermission(permissions.BasePermission):
         """Extrae company_id usando la misma lógica de IsCompanyMember"""
         member_permission = IsCompanyMember()
         return member_permission._extract_company_id(request, view)
-    
+
+
 class CompanySecurityMiddleware(MiddlewareMixin):
+    """
+    Middleware de seguridad para empresas - SIN CAMBIOS
+    """
     def process_request(self, request):
         return None
+    
     def process_response(self, request, response):
         return response

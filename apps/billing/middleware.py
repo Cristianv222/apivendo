@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Middleware para control de límites de facturación
+Middleware para control de límites de facturación - INTEGRADO CON TU SISTEMA
 apps/billing/middleware.py
 """
 
+import json
 import logging
 from django.http import JsonResponse
 from django.utils.deprecation import MiddlewareMixin
 from apps.companies.models import CompanyAPIToken
 from apps.billing.models import CompanyBillingProfile, InvoiceConsumption
+from apps.api.user_company_helper import get_user_companies_exact, get_user_company_by_id_exact
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +18,7 @@ logger = logging.getLogger(__name__)
 class BillingLimitMiddleware(MiddlewareMixin):
     """
     Middleware que controla los límites de facturación antes de crear documentos SRI
+    INTEGRADO: Con tu sistema de autenticación dual (tokens de usuario + tokens de empresa)
     """
     
     # Endpoints que consumen facturas
@@ -39,13 +42,19 @@ class BillingLimitMiddleware(MiddlewareMixin):
         if request.method != 'POST':
             return None
         
-        # Obtener la empresa del request
+        # Obtener la empresa del request usando tu sistema existente
         company = self._get_company_from_request(request)
         if not company:
+            logger.warning(f"🚫 BILLING: No se pudo identificar empresa para {request.path}")
             return JsonResponse({
                 'error': 'BILLING_ERROR',
                 'message': 'No se pudo identificar la empresa para verificar límites de facturación',
-                'code': 'COMPANY_NOT_FOUND'
+                'code': 'COMPANY_NOT_FOUND',
+                'help': 'Asegúrate de enviar el token correcto o company_id válido',
+                'supported_auth': [
+                    'Authorization: Token YOUR_USER_TOKEN + company_id en el body',
+                    'Authorization: Token VSR_COMPANY_TOKEN (sin company_id)'
+                ]
             }, status=400)
         
         # Obtener o crear perfil de facturación
@@ -58,6 +67,9 @@ class BillingLimitMiddleware(MiddlewareMixin):
             }
         )
         
+        if created:
+            logger.info(f"✅ BILLING: Perfil de facturación creado para {company.business_name}")
+        
         # Verificar si tiene facturas disponibles
         if billing_profile.available_invoices <= 0:
             logger.warning(f"🚫 BILLING LIMIT: Company {company.business_name} has no invoices remaining")
@@ -67,24 +79,28 @@ class BillingLimitMiddleware(MiddlewareMixin):
                 'message': 'No tienes facturas disponibles. Debes comprar un plan para continuar.',
                 'details': {
                     'company': company.business_name,
+                    'ruc': company.ruc,
                     'available_invoices': billing_profile.available_invoices,
                     'total_purchased': billing_profile.total_invoices_purchased,
                     'total_consumed': billing_profile.total_invoices_consumed,
                 },
                 'actions': {
-                    'buy_plan_url': '/dashboard/billing/plans/',
+                    'buy_plan_url': '/billing/plans/',
                     'contact_admin': 'Contacta al administrador para activar tu plan',
+                    'dashboard_url': '/billing/',
                 },
                 'code': 'NO_INVOICES_REMAINING'
             }, status=402)  # 402 Payment Required
         
         # Verificar alerta de saldo bajo
-        if billing_profile.is_low_balance:
+        if hasattr(billing_profile, 'is_low_balance') and billing_profile.is_low_balance:
             logger.warning(f"⚠️ BILLING WARNING: Company {company.business_name} has low balance: {billing_profile.available_invoices} invoices remaining")
         
         # Agregar información de facturación al request para uso posterior
         request.billing_profile = billing_profile
         request.billing_company = company
+        
+        logger.info(f"✅ BILLING CHECK: Company {company.business_name} has {billing_profile.available_invoices} invoices remaining")
         
         return None
     
@@ -113,7 +129,7 @@ class BillingLimitMiddleware(MiddlewareMixin):
             balance_before = request.billing_profile.available_invoices
             
             # Consumir una factura
-            if request.billing_profile.consume_invoice():
+            if hasattr(request.billing_profile, 'consume_invoice') and request.billing_profile.consume_invoice():
                 balance_after = request.billing_profile.available_invoices
                 
                 # Registrar en auditoría
@@ -133,13 +149,37 @@ class BillingLimitMiddleware(MiddlewareMixin):
                 # Agregar headers informativos a la respuesta
                 response['X-Billing-Invoices-Remaining'] = str(balance_after)
                 response['X-Billing-Invoices-Consumed'] = str(request.billing_profile.total_invoices_consumed)
+                response['X-Billing-Company'] = request.billing_company.business_name
                 
                 # Alerta si se está agotando el saldo
-                if balance_after <= request.billing_profile.low_balance_threshold:
+                low_threshold = getattr(request.billing_profile, 'low_balance_threshold', 10)
+                if balance_after <= low_threshold:
                     response['X-Billing-Warning'] = f'Quedan solo {balance_after} facturas. Considera comprar un nuevo plan.'
+                    
+                    # Log adicional para alertas
+                    logger.warning(f"⚠️ LOW BALANCE: {request.billing_company.business_name} - {balance_after} facturas restantes")
                 
             else:
-                logger.error(f"❌ BILLING ERROR: Failed to consume invoice for {request.billing_company.business_name}")
+                # Si no tiene método consume_invoice, descontar manualmente
+                request.billing_profile.available_invoices -= 1
+                request.billing_profile.total_invoices_consumed += 1
+                request.billing_profile.save()
+                
+                balance_after = request.billing_profile.available_invoices
+                
+                # Registrar en auditoría
+                InvoiceConsumption.objects.create(
+                    company=request.billing_company,
+                    invoice_id=invoice_id or f"unknown_{request.path.split('/')[-2]}",
+                    invoice_type=invoice_type,
+                    balance_before=balance_before,
+                    balance_after=balance_after,
+                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
+                    ip_address=self._get_client_ip(request),
+                    api_endpoint=request.path,
+                )
+                
+                logger.info(f"✅ BILLING CONSUMED (manual): Company {request.billing_company.business_name} consumed 1 invoice. Remaining: {balance_after}")
         
         except Exception as e:
             logger.error(f"❌ BILLING MIDDLEWARE ERROR: {e}")
@@ -149,45 +189,85 @@ class BillingLimitMiddleware(MiddlewareMixin):
     
     def _get_company_from_request(self, request):
         """
-        Extraer la empresa del request (desde token o parámetros)
+        Extraer la empresa del request usando TU SISTEMA EXISTENTE
+        
+        Orden de prioridad:
+        1. Token de empresa (vsr_...) en Authorization header
+        2. Token de usuario + company_id en el body/params
+        3. Sesión de usuario + company_id
         """
         try:
-            # Intentar obtener desde token de autenticación
+            # 🔑 MÉTODO 1: Token de empresa (CompanyAPIToken)
             auth_header = request.META.get('HTTP_AUTHORIZATION', '')
             if auth_header.startswith('Token '):
                 token_key = auth_header.split(' ')[1]
                 
-                # Verificar si es token de empresa
+                # Verificar si es token de empresa (prefijo vsr_)
                 if token_key.startswith('vsr_'):
                     try:
                         company_token = CompanyAPIToken.objects.get(key=token_key, is_active=True)
-                        return company_token.company
+                        if company_token.company.is_active:
+                            logger.info(f"✅ BILLING: Company identified via CompanyAPIToken: {company_token.company.business_name}")
+                            return company_token.company
                     except CompanyAPIToken.DoesNotExist:
-                        pass
+                        logger.warning(f"❌ BILLING: Invalid company token: {token_key[:20]}...")
             
-            # Intentar obtener desde parámetros del request
-            if hasattr(request, 'data') and 'company_id' in request.data:
-                from apps.companies.models import Company
+            # 🔑 MÉTODO 2: Token de usuario + company_id (CORREGIDO)
+            if request.user and request.user.is_authenticated:
+                company_id = None
+                
+                # NUEVO: Intentar obtener company_id desde el body RAW
                 try:
-                    return Company.objects.get(id=request.data['company_id'])
-                except Company.DoesNotExist:
-                    pass
-            
-            # Intentar obtener desde usuario autenticado (para tokens de usuario)
-            if request.user.is_authenticated:
-                from apps.api.user_company_helper import get_user_companies_exact
+                    if request.body and hasattr(request, 'content_type'):
+                        content_type = getattr(request, 'content_type', request.META.get('CONTENT_TYPE', ''))
+                        if 'application/json' in content_type:
+                            body_unicode = request.body.decode('utf-8')
+                            body_data = json.loads(body_unicode)
+                            company_id = body_data.get('company') or body_data.get('company_id')
+                            logger.info(f"✅ BILLING: Company ID extraído del body raw: {company_id}")
+                except (json.JSONDecodeError, UnicodeDecodeError, AttributeError) as e:
+                    logger.debug(f"⚠️ BILLING: No se pudo parsear body como JSON: {e}")
+                
+                # Fallback: Intentar obtener desde request.data si está disponible
+                if not company_id and hasattr(request, 'data') and request.data:
+                    company_id = request.data.get('company') or request.data.get('company_id')
+                    logger.info(f"✅ BILLING: Company ID extraído del request.data: {company_id}")
+                
+                # Si no está en el body, intentar desde query params
+                if not company_id:
+                    company_id = request.GET.get('company') or request.GET.get('company_id')
+                    if company_id:
+                        logger.info(f"✅ BILLING: Company ID extraído de query params: {company_id}")
+                
+                if company_id:
+                    # Usar tu función existente para validar acceso
+                    company = get_user_company_by_id_exact(company_id, request.user)
+                    if company:
+                        logger.info(f"✅ BILLING: Company identified via user token + company_id: {company.business_name}")
+                        return company
+                    else:
+                        logger.warning(f"❌ BILLING: User {request.user.username} denied access to company {company_id}")
+                
+                # 🔑 MÉTODO 3: Usuario sin company_id específico - usar primera empresa
                 user_companies = get_user_companies_exact(request.user)
                 if user_companies.exists():
-                    # Si hay company_id en los datos, usarlo
-                    if hasattr(request, 'data') and 'company_id' in request.data:
-                        company_id = request.data['company_id']
-                        return user_companies.filter(id=company_id).first()
-                    else:
-                        # Usar la primera empresa del usuario
-                        return user_companies.first()
+                    first_company = user_companies.first()
+                    logger.info(f"✅ BILLING: Using default company for user {request.user.username}: {first_company.business_name}")
+                    return first_company
+                else:
+                    logger.warning(f"❌ BILLING: User {request.user.username} has no accessible companies")
+            
+            # 🔑 MÉTODO 4: Verificar si hay información en la sesión
+            if hasattr(request, 'session') and request.session.get('selected_company_id'):
+                session_company_id = request.session.get('selected_company_id')
+                if request.user and request.user.is_authenticated:
+                    company = get_user_company_by_id_exact(session_company_id, request.user)
+                    if company:
+                        logger.info(f"✅ BILLING: Company identified via session: {company.business_name}")
+                        return company
             
         except Exception as e:
-            logger.error(f"Error extracting company from request: {e}")
+            logger.error(f"❌ BILLING: Error extracting company from request: {e}")
         
         return None
     
@@ -197,10 +277,9 @@ class BillingLimitMiddleware(MiddlewareMixin):
         """
         try:
             if hasattr(response, 'content'):
-                import json
                 data = json.loads(response.content.decode('utf-8'))
-                return data.get('id') or data.get('document_id') or data.get('invoice_id')
-        except:
+                return data.get('id') or data.get('document_id') or data.get('invoice_id') or data.get('clave_acceso')
+        except (json.JSONDecodeError, UnicodeDecodeError, AttributeError):
             pass
         return None
     
@@ -228,7 +307,104 @@ class BillingLimitMiddleware(MiddlewareMixin):
         """
         x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
         if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
+            ip = x_forwarded_for.split(',')[0].strip()
         else:
             ip = request.META.get('REMOTE_ADDR')
         return ip
+
+
+# ========== FUNCIONES AUXILIARES PARA TESTING ==========
+
+def check_billing_limits_manually(company_id, user=None):
+    """
+    Función para verificar límites manualmente (útil para testing)
+    """
+    try:
+        from apps.companies.models import Company
+        
+        if user and not user.is_superuser:
+            company = get_user_company_by_id_exact(company_id, user)
+        else:
+            company = Company.objects.get(id=company_id, is_active=True)
+        
+        if not company:
+            return {
+                'error': True,
+                'message': f'Company {company_id} not found or no access',
+                'can_create_invoice': False
+            }
+        
+        billing_profile, created = CompanyBillingProfile.objects.get_or_create(
+            company=company,
+            defaults={'available_invoices': 0}
+        )
+        
+        return {
+            'error': False,
+            'company_name': company.business_name,
+            'available_invoices': billing_profile.available_invoices,
+            'total_purchased': billing_profile.total_invoices_purchased,
+            'total_consumed': billing_profile.total_invoices_consumed,
+            'can_create_invoice': billing_profile.available_invoices > 0,
+            'is_low_balance': getattr(billing_profile, 'is_low_balance', False),
+            'created_profile': created
+        }
+        
+    except Exception as e:
+        return {
+            'error': True,
+            'message': str(e),
+            'can_create_invoice': False
+        }
+
+
+def simulate_invoice_creation(company_id, user=None, invoice_id='TEST-001'):
+    """
+    Función para simular creación de factura (útil para testing)
+    """
+    billing_check = check_billing_limits_manually(company_id, user)
+    
+    if billing_check['error'] or not billing_check['can_create_invoice']:
+        return {
+            'success': False,
+            'message': 'Cannot create invoice - billing limits exceeded',
+            'billing_status': billing_check
+        }
+    
+    try:
+        from apps.companies.models import Company
+        company = Company.objects.get(id=company_id, is_active=True)
+        billing_profile = CompanyBillingProfile.objects.get(company=company)
+        
+        balance_before = billing_profile.available_invoices
+        
+        # Consumir factura manualmente
+        billing_profile.available_invoices -= 1
+        billing_profile.total_invoices_consumed += 1
+        billing_profile.save()
+        
+        balance_after = billing_profile.available_invoices
+        
+        # Registrar consumo
+        InvoiceConsumption.objects.create(
+            company=company,
+            invoice_id=invoice_id,
+            invoice_type='invoice',
+            balance_before=balance_before,
+            balance_after=balance_after,
+            api_endpoint='/test/simulate_invoice_creation',
+        )
+        
+        return {
+            'success': True,
+            'message': f'Invoice {invoice_id} created successfully',
+            'balance_before': balance_before,
+            'balance_after': balance_after,
+            'remaining_invoices': balance_after
+        }
+            
+    except Exception as e:
+        return {
+            'success': False,
+            'message': f'Error simulating invoice creation: {str(e)}'
+        }
