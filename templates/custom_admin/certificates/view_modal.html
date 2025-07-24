@@ -7,7 +7,7 @@
             
             <div class="info-group mb-3">
                 <label class="text-muted small">Nombre del Sujeto</label>
-                <p class="mb-0"><strong>{{ certificate.subject_name|default:"No disponible" }}</strong></p>
+                <p class="mb-0"><strong>{{ certificate.subject_name }}</strong></p>
             </div>
             
             <div class="info-group mb-3">
@@ -17,7 +17,7 @@
             
             <div class="info-group mb-3">
                 <label class="text-muted small">Emisor</label>
-                <p class="mb-0">{{ certificate.issuer_name|default:"No disponible" }}</p>
+                <p class="mb-0">{{ certificate.issuer_name }}</p>
             </div>
             
             <div class="info-group mb-3">
@@ -48,9 +48,16 @@
                         </span>
                     {% endif %}
                     
-                    {% if certificate.status %}
-                        <span class="badge bg-secondary ms-2">{{ certificate.status }}</span>
-                    {% endif %}
+                    <span class="badge bg-secondary ms-2">{{ certificate.status }}</span>
+                </p>
+            </div>
+            
+            <div class="info-group mb-3">
+                <label class="text-muted small">Ambiente</label>
+                <p class="mb-0">
+                    <span class="badge bg-{% if certificate.environment == 'PRODUCTION' %}danger{% else %}warning{% endif %}">
+                        {{ certificate.environment }}
+                    </span>
                 </p>
             </div>
         </div>
@@ -93,56 +100,41 @@
             </div>
             
             <div class="info-group mb-3">
-                <label class="text-muted small">Duración Total</label>
-                <p class="mb-0">
-                    {% with duration=certificate.valid_to|timeuntil:certificate.valid_from %}
-                        {{ duration }}
-                    {% endwith %}
-                </p>
+                <label class="text-muted small">Fecha de Carga</label>
+                <p class="mb-0">{{ certificate.created_at|date:"d/m/Y H:i" }}</p>
             </div>
             
             <div class="info-group mb-3">
-                <label class="text-muted small">Fecha de Carga</label>
-                <p class="mb-0">{{ certificate.created_at|date:"d/m/Y H:i" }}</p>
+                <label class="text-muted small">Fingerprint</label>
+                <p class="mb-0"><code>{{ certificate.fingerprint }}</code></p>
             </div>
         </div>
     </div>
     
-    {% if certificate.issuer_name or certificate.subject_name %}
     <hr>
+    
+    <!-- Technical Details -->
     <div class="row">
         <div class="col-12">
             <h6 class="text-muted mb-3"><i class="fas fa-info-circle me-2"></i>Detalles Técnicos</h6>
             
             <div class="technical-details bg-light p-3 rounded">
-                {% if certificate.subject_name %}
                 <p class="mb-2"><strong>CN (Common Name):</strong> {{ certificate.subject_name }}</p>
-                {% endif %}
-                
-                {% if certificate.issuer_name %}
                 <p class="mb-2"><strong>Autoridad Certificadora:</strong> {{ certificate.issuer_name }}</p>
-                {% endif %}
-                
-                {% if certificate.serial_number %}
                 <p class="mb-2"><strong>Serial Completo:</strong></p>
                 <pre class="bg-white p-2 rounded text-monospace small">{{ certificate.serial_number }}</pre>
-                {% endif %}
                 
                 {% if certificate.certificate_file %}
                 <p class="mb-0">
                     <strong>Archivo:</strong> 
-                    <code>{{ certificate.certificate_file.name|default:"certificado.p12" }}</code>
-                    {% if certificate.certificate_file.size %}
-                        <span class="text-muted">({{ certificate.certificate_file.size|filesizeformat }})</span>
-                    {% endif %}
+                    <code>{{ certificate.certificate_file.name }}</code>
                 </p>
                 {% endif %}
             </div>
         </div>
     </div>
-    {% endif %}
     
-    <!-- Progress Bar de Validez -->
+    <!-- Progress Bar -->
     <hr>
     <div class="row">
         <div class="col-12">
@@ -158,9 +150,6 @@
                         Válido por {{ certificate.days_until_expiry }} días más
                     </div>
                 </div>
-                <small class="text-muted">
-                    Válido desde {{ certificate.valid_from|date:"d/m/Y" }} hasta {{ certificate.valid_to|date:"d/m/Y" }}
-                </small>
             {% else %}
                 <div class="progress" style="height: 25px;">
                     <div class="progress-bar bg-danger" role="progressbar" style="width: 100%">
@@ -168,6 +157,9 @@
                     </div>
                 </div>
             {% endif %}
+            <small class="text-muted">
+                Válido desde {{ certificate.valid_from|date:"d/m/Y" }} hasta {{ certificate.valid_to|date:"d/m/Y" }}
+            </small>
         </div>
     </div>
     
@@ -188,7 +180,6 @@
     padding: 0.75rem;
     background: #f8f9fa;
     border-radius: 0.25rem;
-    margin-bottom: 0.5rem;
 }
 
 .info-group label {
@@ -216,6 +207,8 @@ pre {
     white-space: pre-wrap;
     word-break: break-all;
     margin-bottom: 0;
+    max-width: 100%;
+    overflow-x: auto;
 }
 </style>
 

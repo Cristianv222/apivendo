@@ -28,9 +28,9 @@ urlpatterns = [
     path('certificates/', views.certificates_list, name='certificates'),
     path('certificates/upload/', views.certificate_upload, name='certificate_upload'),
     path('certificates/<int:certificate_id>/view/', views.certificate_view, name='certificate_view'),
+    path('certificates/<int:certificate_id>/edit/', views.certificate_edit, name='certificate_edit'),  # Esta es la que necesitas
     path('certificates/<int:certificate_id>/delete/', views.certificate_delete, name='certificate_delete'),
     path('certificates/<int:certificate_id>/validate/', views.certificate_validate, name='certificate_validate'),
-    
     # Invoices (placeholder)
     path('invoices/', views.invoices_list, name='invoices'),
         # Invoice URLs

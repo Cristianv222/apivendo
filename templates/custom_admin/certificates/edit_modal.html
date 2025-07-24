@@ -1,0 +1,146 @@
+<!-- templates/custom_admin/certificates/edit_modal.html -->
+<form method="post" id="editCertificateForm" action="{% url 'custom_admin:certificate_edit' certificate.id %}">
+    {% csrf_token %}
+    
+    <div class="mb-4">
+        <h6 class="text-muted mb-3">Información del Certificado</h6>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Empresa</label>
+                    <p class="form-control-plaintext">
+                        <strong>{{ certificate.company.business_name|default:"N/A" }}</strong>
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Sujeto</label>
+                    <p class="form-control-plaintext">
+                        <strong>{{ certificate.subject_name }}</strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Número de Serie</label>
+                    <p class="form-control-plaintext">
+                        <code>{{ certificate.serial_number }}</code>
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Válido hasta</label>
+                    <p class="form-control-plaintext">
+                        {{ certificate.valid_to|date:"d/m/Y H:i"|default:"N/A" }}
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Estado Actual</label>
+                    <p class="form-control-plaintext">
+                        <span class="badge bg-{% if certificate.status == 'ACTIVE' %}success{% else %}secondary{% endif %}">
+                            {{ certificate.status }}
+                        </span>
+                    </p>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="mb-3">
+                    <label class="form-label text-muted small">Emisor</label>
+                    <p class="form-control-plaintext">
+                        {{ certificate.issuer_name|truncatechars:40 }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <hr>
+    
+    <div class="mb-4">
+        <h6 class="text-muted mb-3">Cambiar Ambiente</h6>
+        
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-1"></i>
+            Solo puedes cambiar el ambiente del certificado. Los demás datos son de solo lectura.
+        </div>
+        
+        <div class="mb-3">
+            <label for="environment" class="form-label">
+                <i class="fas fa-server me-1"></i>Ambiente del Certificado <span class="text-danger">*</span>
+            </label>
+            
+            <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="environment" id="env_test" 
+                       value="TEST" {% if certificate.environment == 'TEST' %}checked{% endif %} required>
+                <label class="btn btn-outline-warning" for="env_test">
+                    <i class="fas fa-flask me-1"></i>PRUEBAS (TEST)
+                </label>
+                
+                <input type="radio" class="btn-check" name="environment" id="env_prod" 
+                       value="PRODUCTION" {% if certificate.environment == 'PRODUCTION' %}checked{% endif %} required>
+                <label class="btn btn-outline-danger" for="env_prod">
+                    <i class="fas fa-industry me-1"></i>PRODUCCIÓN
+                </label>
+            </div>
+            
+            <div class="form-text">
+                <strong>Ambiente actual:</strong> 
+                <span class="badge bg-{% if certificate.environment == 'TEST' %}warning{% else %}danger{% endif %}">
+                    {{ certificate.environment }}
+                </span>
+            </div>
+        </div>
+        
+        <div class="alert alert-warning mt-3">
+            <strong><i class="fas fa-exclamation-triangle me-1"></i>Advertencia:</strong>
+            <ul class="mb-0">
+                <li>En ambiente <strong>TEST</strong>: Las facturas no serán válidas fiscalmente</li>
+                <li>En ambiente <strong>PRODUCCIÓN</strong>: Las facturas tendrán validez fiscal oficial</li>
+                <li>Asegúrate de usar el ambiente correcto según tu necesidad</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="fas fa-times me-1"></i>Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary" id="btnSaveEnvironment">
+            <i class="fas fa-save me-1"></i>Guardar Cambios
+        </button>
+    </div>
+</form>
+
+<script>
+$(document).ready(function() {
+    // Visual feedback when selecting environment
+    $('input[name="environment"]').on('change', function() {
+        var selected = $(this).val();
+        if (selected === 'PRODUCTION') {
+            Swal.fire({
+                icon: 'warning',
+                title: '¿Cambiar a Producción?',
+                text: 'Las facturas emitidas en este ambiente tendrán validez fiscal oficial.',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, cambiar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (!result.isConfirmed) {
+                    $('#env_test').prop('checked', true);
+                }
+            });
+        }
+    });
+});
+</script>

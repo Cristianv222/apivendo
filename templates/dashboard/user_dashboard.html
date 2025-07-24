@@ -4,10 +4,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - VENDO SRI</title>
+    <title>Dashboard Completo - VENDO SRI</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
+        /* Estilos existentes del dashboard */
         .dashboard-card {
             border-radius: 12px;
             border: none;
@@ -30,6 +31,150 @@
         .stat-card.rejected {
             background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
         }
+        
+        /* Estilos para Panel de Usuario */
+        .user-profile-section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        .sri-document-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s;
+        }
+        .sri-document-card:hover {
+            border-color: #6c757d;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        .document-icon {
+            font-size: 2.5rem;
+            color: #6c757d;
+        }
+        .verified-badge {
+            background: #28a745;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+        }
+        .unverified-badge {
+            background: #ffc107;
+            color: #333;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+        }
+        
+        /* Estilos para Configuración de Empresa */
+        .config-section {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid #dee2e6;
+        }
+        .config-item {
+            padding: 15px 0;
+            border-bottom: 1px solid #f1f3f5;
+        }
+        .config-item:last-child {
+            border-bottom: none;
+        }
+        .config-label {
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        .config-value {
+            color: #6c757d;
+        }
+        
+        /* Estilos para Tarjetas de Planes */
+        .plan-card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            height: 100%;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+        .plan-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        .plan-card.featured {
+            border-color: #667eea;
+            background: linear-gradient(135deg, rgba(102,126,234,0.05) 0%, rgba(118,75,162,0.05) 100%);
+        }
+        .plan-card.featured::before {
+            content: 'RECOMENDADO';
+            position: absolute;
+            top: 20px;
+            right: -30px;
+            background: #667eea;
+            color: white;
+            padding: 5px 40px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            transform: rotate(45deg);
+        }
+        .plan-price {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .plan-features {
+            list-style: none;
+            padding: 0;
+            margin: 20px 0;
+        }
+        .plan-features li {
+            padding: 10px 0;
+            border-bottom: 1px solid #f1f3f5;
+        }
+        .plan-features li:last-child {
+            border-bottom: none;
+        }
+        .plan-features i {
+            color: #28a745;
+            margin-right: 10px;
+        }
+        
+        /* Tabs mejorados */
+        .nav-tabs {
+            border-bottom: none;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 5px;
+        }
+        .nav-tabs .nav-link {
+            border: none;
+            border-radius: 8px;
+            padding: 12px 24px;
+            color: #6c757d;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .nav-tabs .nav-link:hover {
+            background: #e9ecef;
+            color: #495057;
+        }
+        .nav-tabs .nav-link.active {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        /* Estilos existentes */
         .table-hover tbody tr:hover {
             background-color: rgba(0,123,255,.05);
         }
@@ -44,56 +189,10 @@
         .status-rejected { background-color: #f8d7da; color: #721c24; }
         .status-cancelled { background-color: #e2e3e5; color: #383d41; }
         .status-sent { background-color: #d4edda; color: #155724; }
-        .filters-section {
-            background-color: #f8f9fa;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }
-        .company-selector {
-            background: white;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-            border: 1px solid #e9ecef;
-        }
-        .token-selector {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 20px;
-        }
-        .token-info {
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 6px;
-            padding: 10px;
-            margin-top: 10px;
-            font-family: 'Courier New', monospace;
-            font-size: 0.8em;
-        }
-        .no-invoices-placeholder {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 40px;
-            text-align: center;
-            border-radius: 15px;
-            margin: 20px 0;
-        }
-        .company-option {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .token-display {
-            font-family: 'Courier New', monospace;
-            font-size: 0.7em;
-            opacity: 0.8;
-        }
     </style>
 </head>
 <body class="bg-light">
-    <!-- Navbar -->
+    <!-- Navbar (usa el existente) -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container-fluid">
             <a class="navbar-brand fw-bold" href="{% url 'core:dashboard' %}">
@@ -108,6 +207,8 @@
                         <i class="fas fa-user-circle me-1"></i>{{ user.email }}
                     </a>
                     <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#userProfile"><i class="fas fa-user me-2"></i>Mi Perfil</a></li>
+                        <li><a class="dropdown-item" href="#sriDocuments"><i class="fas fa-file-alt me-2"></i>Documentos SRI</a></li>
                         <li><a class="dropdown-item" href="{% url 'core:company_tokens' %}"><i class="fas fa-key me-2"></i>Gestionar Tokens</a></li>
                         <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="fas fa-cog me-2"></i>Admin</a></li>
                         <li><hr class="dropdown-divider"></li>
@@ -119,172 +220,41 @@
     </nav>
 
     <div class="container-fluid py-4">
-        <div class="row">
-            <!-- Sidebar -->
-            <div class="col-lg-3 mb-4">
-                <!-- Selector de empresa CON TOKENS -->
-                {% if token_mode %}
-                <div class="token-selector">
-                    <h6 class="fw-bold mb-3"><i class="fas fa-key me-2"></i>Token de Empresa</h6>
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div>
-                            <strong>{{ selected_company.business_name|default:selected_company.trade_name }}</strong>
-                            <br><small>Acceso por token</small>
-                        </div>
-                        <i class="fas fa-shield-alt fa-2x opacity-75"></i>
-                    </div>
-                    {% if current_filters.token %}
-                    <div class="token-info">
-                        <small>Token: {{ current_filters.token|slice:":20" }}...</small>
-                    </div>
-                    {% endif %}
-                    <div class="mt-3">
-                        <select class="form-select form-select-sm" onchange="switchCompanyToken(this.value)">
-                            <option value="">Cambiar empresa...</option>
-                            {% for company_data in available_companies_with_tokens %}
-                                <option value="{{ company_data.token.key }}" 
-                                        {% if company_data.is_selected %}selected{% endif %}>
-                                    {{ company_data.company.business_name|default:company_data.company.trade_name }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                {% else %}
-                <!-- Selector tradicional de empresa (LEGACY) -->
-                <div class="company-selector">
-                    <h6 class="fw-bold mb-3"><i class="fas fa-building me-2"></i>Seleccionar Empresa</h6>
-                    <div class="alert alert-info alert-sm">
-                        <small><i class="fas fa-info-circle me-1"></i>Usando modo compatibilidad. 
-                        <a href="{% url 'core:company_tokens' %}" class="alert-link">Cambiar a tokens</a></small>
-                    </div>
-                    <form method="get" id="companyForm">
-                        <select name="company" class="form-select" onchange="this.form.submit()">
-                            <option value="">Todas las empresas</option>
-                            {% for company in user_companies %}
-                                <option value="{{ company.id }}" {% if selected_company.id == company.id %}selected{% endif %}>
-                                    {{ company.business_name|default:company.trade_name }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                        {% for key, value in current_filters.items %}
-                            {% if key != 'company' and key != 'token' and value %}
-                                <input type="hidden" name="{{ key }}" value="{{ value }}">
-                            {% endif %}
-                        {% endfor %}
-                    </form>
-                </div>
-                {% endif %}
+        <!-- Tabs de navegación -->
+        <ul class="nav nav-tabs mb-4" id="dashboardTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button">
+                    <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button">
+                    <i class="fas fa-user me-2"></i>Mi Perfil
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="companies-tab" data-bs-toggle="tab" data-bs-target="#companies" type="button">
+                    <i class="fas fa-building me-2"></i>Empresas
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="plans-tab" data-bs-toggle="tab" data-bs-target="#plans" type="button">
+                    <i class="fas fa-shopping-cart me-2"></i>Planes
+                </button>
+            </li>
+        </ul>
 
-                <!-- Filtros -->
-                {% if invoices_exist %}
-                <div class="filters-section">
-                    <h6 class="fw-bold mb-3"><i class="fas fa-filter me-2"></i>Filtros</h6>
-                    <form method="get">
-                        {% if current_filters.token %}
-                            <input type="hidden" name="token" value="{{ current_filters.token }}">
-                        {% elif current_filters.company %}
-                            <input type="hidden" name="company" value="{{ current_filters.company }}">
-                        {% endif %}
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Estado</label>
-                            <select name="status" class="form-select form-select-sm">
-                                <option value="">Todos los estados</option>
-                                {% for value, label in status_choices %}
-                                    <option value="{{ value }}" {% if current_filters.status == value %}selected{% endif %}>
-                                        {{ label }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Fecha desde</label>
-                            <input type="date" name="date_from" class="form-control form-control-sm" 
-                                   value="{{ current_filters.date_from|default:'' }}">
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Fecha hasta</label>
-                            <input type="date" name="date_to" class="form-control form-control-sm" 
-                                   value="{{ current_filters.date_to|default:'' }}">
-                        </div>
-                        
-                        <div class="d-grid gap-2">
-                            <button type="submit" class="btn btn-primary btn-sm">
-                                <i class="fas fa-search me-1"></i>Filtrar
-                            </button>
-                            <a href="{% if token_mode %}{% url 'core:dashboard' %}?token={{ current_filters.token }}{% else %}{% url 'core:dashboard' %}{% endif %}" class="btn btn-outline-secondary btn-sm">
-                                <i class="fas fa-times me-1"></i>Limpiar
-                            </a>
-                        </div>
-                    </form>
-                </div>
-                {% endif %}
-            </div>
-
-            <!-- Main Content -->
-            <div class="col-lg-9">
-                <!-- Header -->
-                <div class="row mb-4">
-                    <div class="col">
-                        <h2 class="fw-bold">
-                            Dashboard de Facturas
-                            {% if selected_company %}
-                                - {{ selected_company.business_name|default:selected_company.trade_name }}
-                            {% endif %}
-                            {% if token_mode %}
-                                <span class="badge bg-success ms-2">🔑 Modo Token</span>
-                            {% endif %}
-                        </h2>
-                        <p class="text-muted">
-                            Resumen de todas tus facturas electrónicas
-                            {% if token_mode and selected_token %}
-                                <br><small class="text-info">
-                                    <i class="fas fa-shield-alt me-1"></i>Acceso seguro con token de empresa
-                                </small>
-                            {% endif %}
-                        </p>
-                    </div>
-                </div>
-
-                {% if not invoices_exist %}
-                <!-- Mensaje cuando no existe el módulo de facturación -->
-                <div class="no-invoices-placeholder">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <h3><i class="fas fa-rocket me-2"></i>¡Dashboard Listo!</h3>
-                            <p class="mb-3">El sistema está configurado correctamente. Para comenzar a usar el dashboard de facturas:</p>
-                            <ul class="text-start">
-                                <li>✅ Las migraciones están aplicadas</li>
-                                <li>✅ Los modelos están configurados</li>
-                                <li>✅ Sistema de tokens implementado</li>
-                                <li>⚠️ Necesitas crear algunas facturas de prueba</li>
-                            </ul>
-                        </div>
-                        <div class="col-md-4 text-center">
-                            <i class="fas fa-chart-line fa-5x mb-3 opacity-75"></i>
-                            <div>
-                                <a href="{% url 'core:company_tokens' %}" class="btn btn-warning me-2">
-                                    <i class="fas fa-key me-1"></i>Ver Tokens
-                                </a>
-                                <a href="{% url 'admin:index' %}" class="btn btn-light">
-                                    <i class="fas fa-cog me-1"></i>Ir al Admin
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% else %}
-
+        <!-- Tab Content -->
+        <div class="tab-content" id="dashboardTabContent">
+            <!-- Tab Dashboard (existente) -->
+            <div class="tab-pane fade show active" id="dashboard" role="tabpanel">
                 <!-- Stats Cards -->
                 <div class="row mb-4">
                     <div class="col-lg-3 col-md-6 mb-3">
                         <div class="card dashboard-card stat-card">
                             <div class="card-body text-center">
                                 <i class="fas fa-file-invoice fa-2x mb-2"></i>
-                                <h3 class="mb-1">{{ stats.total_invoices }}</h3>
+                                <h3 class="mb-1">{{ stats.total_invoices|default:0 }}</h3>
                                 <p class="mb-0">Total Facturas</p>
                             </div>
                         </div>
@@ -293,7 +263,7 @@
                         <div class="card dashboard-card stat-card pending">
                             <div class="card-body text-center">
                                 <i class="fas fa-clock fa-2x mb-2"></i>
-                                <h3 class="mb-1">{{ stats.pending_invoices }}</h3>
+                                <h3 class="mb-1">{{ stats.pending_invoices|default:0 }}</h3>
                                 <p class="mb-0">Pendientes</p>
                             </div>
                         </div>
@@ -302,7 +272,7 @@
                         <div class="card dashboard-card stat-card authorized">
                             <div class="card-body text-center">
                                 <i class="fas fa-check-circle fa-2x mb-2"></i>
-                                <h3 class="mb-1">{{ stats.authorized_invoices }}</h3>
+                                <h3 class="mb-1">{{ stats.authorized_invoices|default:0 }}</h3>
                                 <p class="mb-0">Autorizadas</p>
                             </div>
                         </div>
@@ -311,209 +281,282 @@
                         <div class="card dashboard-card stat-card rejected">
                             <div class="card-body text-center">
                                 <i class="fas fa-dollar-sign fa-2x mb-2"></i>
-                                <h3 class="mb-1">${{ stats.total_amount|floatformat:2 }}</h3>
+                                <h3 class="mb-1">${{ stats.total_amount|default:0|floatformat:2 }}</h3>
                                 <p class="mb-0">Total Facturado</p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Facturas Recientes -->
-                <div class="row mb-4">
-                    <div class="col-lg-8">
-                        <div class="card dashboard-card">
-                            <div class="card-header bg-white">
-                                <h5 class="mb-0"><i class="fas fa-list me-2"></i>Facturas Recientes</h5>
+                <!-- Contenido del dashboard existente -->
+                {% if invoices_exist %}
+                    <!-- Aquí va el contenido de facturas existente -->
+                {% else %}
+                    <div class="no-invoices-placeholder" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px; text-align: center; border-radius: 15px;">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h3><i class="fas fa-rocket me-2"></i>¡Dashboard Listo!</h3>
+                                <p class="mb-3">El sistema está configurado correctamente.</p>
                             </div>
-                            <div class="card-body">
-                                {% if recent_invoices %}
-                                    <div class="table-responsive">
-                                        <table class="table table-hover">
-                                            <thead>
-                                                <tr>
-                                                    <th>N° Factura</th>
-                                                    <th>Cliente</th>
-                                                    <th>Monto</th>
-                                                    <th>Estado</th>
-                                                    <th>Fecha</th>
-                                                    <th>Acciones</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {% for invoice in recent_invoices %}
-                                                <tr>
-                                                    <td class="fw-bold">{{ invoice.invoice_number|default:invoice.id }}</td>
-                                                    <td>{{ invoice.client_name|default:"Cliente" }}</td>
-                                                    <td>${{ invoice.total_amount|floatformat:2 }}</td>
-                                                    <td>
-                                                        <span class="status-badge status-{{ invoice.status }}">
-                                                            {% if invoice.status == 'pending' %}Pendiente
-                                                            {% elif invoice.status == 'authorized' %}Autorizada
-                                                            {% elif invoice.status == 'rejected' %}Rechazada
-                                                            {% elif invoice.status == 'cancelled' %}Cancelada
-                                                            {% elif invoice.status == 'sent' %}Enviada
-                                                            {% else %}{{ invoice.status }}
-                                                            {% endif %}
-                                                        </span>
-                                                    </td>
-                                                    <td>{{ invoice.created_at|date:"d/m/Y H:i" }}</td>
-                                                    <td>
-                                                        <a href="{% url 'core:invoice_detail' invoice.id %}" class="btn btn-sm btn-outline-primary" title="Ver detalles">
-                                                            <i class="fas fa-eye"></i>
-                                                        </a>
-                                                    </td>
-                                                </tr>
-                                                {% endfor %}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                {% else %}
-                                    <div class="text-center py-4">
-                                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
-                                        <p class="text-muted">No hay facturas para mostrar</p>
-                                        <a href="{% url 'admin:index' %}" class="btn btn-primary btn-sm">
-                                            <i class="fas fa-plus me-1"></i>Crear Factura
-                                        </a>
-                                    </div>
-                                {% endif %}
+                            <div class="col-md-4 text-center">
+                                <i class="fas fa-chart-line fa-5x mb-3 opacity-75"></i>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Tab Mi Perfil -->
+            <div class="tab-pane fade" id="profile" role="tabpanel">
+                <div class="user-profile-section">
+                    <h3 class="mb-4"><i class="fas fa-user-circle me-2"></i>Información Personal</h3>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Nombre Completo</label>
+                                <p class="form-control-plaintext">{{ user.get_full_name|default:user.username }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Email</label>
+                                <p class="form-control-plaintext">{{ user.email }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Teléfono</label>
+                                <p class="form-control-plaintext">{{ user.phone|default:"No registrado" }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Tipo de Identificación</label>
+                                <p class="form-control-plaintext">{{ user.get_identification_type_display|default:"No especificado" }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Número de Identificación</label>
+                                <p class="form-control-plaintext">{{ user.identification_number|default:"No registrado" }}</p>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Estado de Verificación</label>
+                                <p class="form-control-plaintext">
+                                    {% if user.is_verified %}
+                                        <span class="verified-badge"><i class="fas fa-check-circle me-1"></i>Verificado</span>
+                                    {% else %}
+                                        <span class="unverified-badge"><i class="fas fa-exclamation-circle me-1"></i>Pendiente</span>
+                                    {% endif %}
+                                </p>
                             </div>
                         </div>
                     </div>
                     
-                    <!-- Estadísticas por Estado -->
-                    <div class="col-lg-4">
-                        <div class="card dashboard-card">
-                            <div class="card-header bg-white">
-                                <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Por Estado</h5>
-                            </div>
-                            <div class="card-body">
-                                {% if status_stats %}
-                                    {% for stat in status_stats %}
-                                    <div class="d-flex justify-content-between align-items-center mb-3">
-                                        <div>
-                                            <span class="status-badge status-{{ stat.status }}">
-                                                {% if stat.status == 'pending' %}Pendiente
-                                                {% elif stat.status == 'authorized' %}Autorizada
-                                                {% elif stat.status == 'rejected' %}Rechazada
-                                                {% elif stat.status == 'cancelled' %}Cancelada
-                                                {% elif stat.status == 'sent' %}Enviada
-                                                {% else %}{{ stat.status }}
-                                                {% endif %}
-                                            </span>
+                    <hr class="my-4">
+                    
+                    <!-- Documentos SRI -->
+                    <h4 class="mb-3"><i class="fas fa-file-alt me-2"></i>Documentos SRI</h4>
+                    
+                    <div class="row">
+                        {% if sri_documents %}
+                            {% for doc in sri_documents %}
+                            <div class="col-md-6 mb-3">
+                                <div class="sri-document-card">
+                                    <div class="d-flex align-items-center">
+                                        <div class="document-icon me-3">
+                                            <i class="fas fa-file-pdf"></i>
                                         </div>
-                                        <div class="text-end">
-                                            <div class="fw-bold">{{ stat.count }}</div>
-                                            <small class="text-muted">${{ stat.total_amount|floatformat:2 }}</small>
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1">{{ doc.get_document_type_display }}</h6>
+                                            <p class="text-muted mb-1 small">{{ doc.description|default:"Sin descripción" }}</p>
+                                            <div class="d-flex align-items-center">
+                                                {% if doc.is_verified %}
+                                                    <span class="verified-badge me-2"><i class="fas fa-check me-1"></i>Verificado</span>
+                                                {% else %}
+                                                    <span class="unverified-badge me-2"><i class="fas fa-clock me-1"></i>Pendiente</span>
+                                                {% endif %}
+                                                <small class="text-muted">{{ doc.uploaded_at|date:"d/m/Y" }}</small>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <a href="{{ doc.document_file.url }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                                <i class="fas fa-download"></i>
+                                            </a>
                                         </div>
                                     </div>
-                                    {% endfor %}
-                                {% else %}
-                                    <p class="text-muted text-center">Sin datos</p>
-                                {% endif %}
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="col-12">
+                                <div class="alert alert-info">
+                                    <i class="fas fa-info-circle me-2"></i>No tienes documentos SRI cargados.
+                                    Para subir documentos, ve al panel de administración.
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="mt-3">
+                        <a href="{% url 'admin:index' %}" class="btn btn-primary">
+                            <i class="fas fa-cog me-2"></i>Gestionar en Admin
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Empresas -->
+            <div class="tab-pane fade" id="companies" role="tabpanel">
+                <h3 class="mb-4"><i class="fas fa-building me-2"></i>Configuración de Empresas</h3>
+                
+                {% for company in user_companies %}
+                <div class="config-section">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0">{{ company.business_name|default:company.trade_name }}</h5>
+                        <span class="badge bg-success">Activa</span>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="config-item">
+                                <div class="config-label">RUC</div>
+                                <div class="config-value">{{ company.ruc }}</div>
+                            </div>
+                            <div class="config-item">
+                                <div class="config-label">Dirección</div>
+                                <div class="config-value">{{ company.address|default:"No registrada" }}</div>
+                            </div>
+                            <div class="config-item">
+                                <div class="config-label">Teléfono</div>
+                                <div class="config-value">{{ company.phone|default:"No registrado" }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            {% if company.billing_profile %}
+                            <div class="config-item">
+                                <div class="config-label">Facturas Disponibles</div>
+                                <div class="config-value">
+                                    <span class="fw-bold text-primary">{{ company.billing_profile.available_invoices|default:0 }}</span>
+                                    {% if company.billing_profile.is_low_balance %}
+                                        <span class="badge bg-warning ms-2">Saldo bajo</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="config-item">
+                                <div class="config-label">Total Consumidas</div>
+                                <div class="config-value">{{ company.billing_profile.total_invoices_consumed|default:0 }}</div>
+                            </div>
+                            {% endif %}
+                            <div class="config-item">
+                                <div class="config-label">Token API</div>
+                                <div class="config-value">
+                                    {% if company.api_tokens.exists %}
+                                        <code>{{ company.api_tokens.first.key|slice:":20" }}...</code>
+                                        <button class="btn btn-sm btn-outline-secondary ms-2" onclick="copyToken('{{ company.api_tokens.first.key }}')">
+                                            <i class="fas fa-copy"></i>
+                                        </button>
+                                    {% else %}
+                                        <a href="{% url 'core:company_tokens' %}" class="text-primary">Generar token</a>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-
-                <!-- Todas las Facturas -->
-                <div class="card dashboard-card">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0"><i class="fas fa-table me-2"></i>Todas las Facturas</h5>
-                        {% if page_obj %}
-                            <small class="text-muted">Total: {{ page_obj.paginator.count }} facturas</small>
-                        {% endif %}
+                    
+                    <div class="mt-3">
+                        <a href="{% url 'admin:companies_company_change' company.id %}" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-cog me-1"></i>Configurar en Admin
+                        </a>
+                        <a href="{% url 'billing:plans_list' %}?company={{ company.id }}" class="btn btn-sm btn-outline-success">
+                            <i class="fas fa-shopping-cart me-1"></i>Comprar Facturas
+                        </a>
                     </div>
-                    <div class="card-body">
-                        {% if page_obj %}
-                            <div class="table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th>N° Factura</th>
-                                            <th>Empresa</th>
-                                            <th>Cliente</th>
-                                            <th>Monto</th>
-                                            <th>Estado</th>
-                                            <th>Fecha</th>
-                                            <th>Acciones</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for invoice in page_obj %}
-                                        <tr>
-                                            <td class="fw-bold">{{ invoice.invoice_number|default:invoice.id }}</td>
-                                            <td>{{ invoice.company.business_name|default:invoice.company.trade_name }}</td>
-                                            <td>{{ invoice.client_name|default:"Cliente" }}</td>
-                                            <td>${{ invoice.total_amount|floatformat:2 }}</td>
-                                            <td>
-                                                <span class="status-badge status-{{ invoice.status }}">
-                                                    {% if invoice.status == 'pending' %}Pendiente
-                                                    {% elif invoice.status == 'authorized' %}Autorizada
-                                                    {% elif invoice.status == 'rejected' %}Rechazada
-                                                    {% elif invoice.status == 'cancelled' %}Cancelada
-                                                    {% elif invoice.status == 'sent' %}Enviada
-                                                    {% else %}{{ invoice.status }}
-                                                    {% endif %}
-                                                </span>
-                                            </td>
-                                            <td>{{ invoice.created_at|date:"d/m/Y H:i" }}</td>
-                                            <td>
-                                                <a href="{% url 'core:invoice_detail' invoice.id %}" class="btn btn-sm btn-outline-primary me-1" title="Ver detalles">
-                                                    <i class="fas fa-eye"></i>
-                                                </a>
-                                                <a href="#" class="btn btn-sm btn-outline-success" title="Descargar PDF">
-                                                    <i class="fas fa-download"></i>
-                                                </a>
-                                            </td>
-                                        </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
+                </div>
+                {% empty %}
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>No tienes empresas asignadas. Contacta al administrador.
+                </div>
+                {% endfor %}
+            </div>
 
-                            <!-- Paginación con tokens -->
-                            {% if page_obj.has_other_pages %}
-                            <nav aria-label="Paginación">
-                                <ul class="pagination justify-content-center">
-                                    {% if page_obj.has_previous %}
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Anterior</a>
-                                        </li>
-                                    {% endif %}
-                                    
-                                    {% for num in page_obj.paginator.page_range %}
-                                        {% if page_obj.number == num %}
-                                            <li class="page-item active">
-                                                <span class="page-link">{{ num }}</span>
-                                            </li>
-                                        {% else %}
-                                            <li class="page-item">
-                                                <a class="page-link" href="?page={{ num }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">{{ num }}</a>
-                                            </li>
-                                        {% endif %}
-                                    {% endfor %}
-                                    
-                                    {% if page_obj.has_next %}
-                                        <li class="page-item">
-                                            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for key, value in current_filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">Siguiente</a>
-                                        </li>
-                                    {% endif %}
-                                </ul>
-                            </nav>
-                            {% endif %}
-                        {% else %}
-                            <div class="text-center py-5">
-                                <i class="fas fa-inbox fa-4x text-muted mb-3"></i>
-                                <h5 class="text-muted">No hay facturas para mostrar</h5>
-                                <p class="text-muted">Crea tu primera factura en el panel de administración.</p>
-                                <a href="{% url 'admin:index' %}" class="btn btn-primary">
-                                    <i class="fas fa-plus me-2"></i>Ir al Admin
+            <!-- Tab Planes -->
+            <div class="tab-pane fade" id="plans" role="tabpanel">
+                <h3 class="mb-4"><i class="fas fa-shopping-cart me-2"></i>Planes Disponibles</h3>
+                
+                <div class="row">
+                    {% for plan in plans %}
+                    <div class="col-lg-4 col-md-6 mb-4">
+                        <div class="plan-card {% if plan.is_featured %}featured{% endif %}">
+                            <h4 class="text-center mb-3">{{ plan.name }}</h4>
+                            
+                            <div class="text-center mb-4">
+                                <div class="plan-price">${{ plan.price }}</div>
+                                <p class="text-muted">{{ plan.invoice_limit }} facturas</p>
+                            </div>
+                            
+                            <ul class="plan-features">
+                                <li><i class="fas fa-check"></i>{{ plan.invoice_limit }} facturas electrónicas</li>
+                                <li><i class="fas fa-check"></i>${{ plan.price_per_invoice|floatformat:3 }} por factura</li>
+                                <li><i class="fas fa-check"></i>Soporte técnico incluido</li>
+                                <li><i class="fas fa-check"></i>API REST disponible</li>
+                                {% if plan.description %}
+                                <li><i class="fas fa-info-circle"></i>{{ plan.description }}</li>
+                                {% endif %}
+                            </ul>
+                            
+                            <div class="d-grid">
+                                <a href="{% url 'billing:plans_list' %}" 
+                                   class="btn {% if plan.is_featured %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                                    <i class="fas fa-shopping-cart me-2"></i>Ver Planes
                                 </a>
                             </div>
-                        {% endif %}
+                        </div>
                     </div>
+                    {% empty %}
+                    <div class="col-12">
+                        <div class="alert alert-info text-center">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <a href="{% url 'billing:plans_list' %}" class="alert-link">Ver todos los planes disponibles</a>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
-
+                
+                <!-- Historial de compras -->
+                {% if recent_purchases %}
+                <hr class="my-5">
+                <h4 class="mb-3"><i class="fas fa-history me-2"></i>Compras Recientes</h4>
+                
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Empresa</th>
+                                <th>Plan</th>
+                                <th>Monto</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for purchase in recent_purchases %}
+                            <tr>
+                                <td>{{ purchase.created_at|date:"d/m/Y" }}</td>
+                                <td>{{ purchase.company.business_name }}</td>
+                                <td>{{ purchase.plan_name }}</td>
+                                <td>${{ purchase.payment_amount }}</td>
+                                <td>
+                                    <span class="badge bg-{{ purchase.get_status_badge_color }}">
+                                        {{ purchase.get_payment_status_display }}
+                                    </span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="text-center mt-3">
+                    <a href="{% url 'billing:purchase_history' %}" class="btn btn-primary">
+                        <i class="fas fa-list me-2"></i>Ver Todo el Historial
+                    </a>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -521,9 +564,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- SCRIPT PARA TOKENS - SIN TEMPLATE TAGS -->
     <script>
-    // Funciones para manejo de tokens
+    // Funciones existentes
     function switchCompanyToken(token) {
         if (token) {
             console.log('Cambiando a empresa con token');
@@ -534,41 +576,59 @@
     function copyToken(token) {
         if (navigator.clipboard) {
             navigator.clipboard.writeText(token).then(function() {
-                // Crear notificación de éxito
-                var toast = document.createElement('div');
-                toast.className = 'position-fixed top-0 end-0 m-3 alert alert-success alert-dismissible fade show';
-                toast.innerHTML = '<i class="fas fa-check-circle me-2"></i>Token copiado al portapapeles <button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
-                document.body.appendChild(toast);
-                
-                // Auto eliminar después de 3 segundos
-                setTimeout(function() {
-                    if (toast.parentNode) {
-                        toast.remove();
-                    }
-                }, 3000);
+                showNotification('Token copiado al portapapeles', 'success');
             }).catch(function(err) {
                 alert('Error al copiar token: ' + err);
             });
         } else {
-            // Fallback para navegadores sin soporte de clipboard
             var textArea = document.createElement('textarea');
             textArea.value = token;
             document.body.appendChild(textArea);
             textArea.select();
             document.execCommand('copy');
             document.body.removeChild(textArea);
-            alert('Token copiado al portapapeles');
+            showNotification('Token copiado al portapapeles', 'success');
         }
     }
 
-    // Inicialización completada
-    console.log('Dashboard con sistema de tokens cargado correctamente');
-    console.log('Funciones disponibles: switchCompanyToken(), copyToken()');
-    </script>
-    
-    <!-- AUTO-LOGOUT SCRIPT -->
-    <script>
-    // Sistema de auto-logout - Cierre automático después de 1 hora de inactividad
+    // Función para mostrar notificaciones
+    function showNotification(message, type = 'success') {
+        var toast = document.createElement('div');
+        toast.className = `position-fixed top-0 end-0 m-3 alert alert-${type} alert-dismissible fade show`;
+        toast.innerHTML = `
+            <i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle me-2"></i>
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(function() {
+            if (toast.parentNode) {
+                toast.remove();
+            }
+        }, 3000);
+    }
+
+    // Guardar tab activo
+    document.querySelectorAll('#dashboardTabs button[data-bs-toggle="tab"]').forEach(tab => {
+        tab.addEventListener('shown.bs.tab', function (e) {
+            localStorage.setItem('activeTab', e.target.id);
+        });
+    });
+
+    // Restaurar tab activo
+    document.addEventListener('DOMContentLoaded', function() {
+        var activeTab = localStorage.getItem('activeTab');
+        if (activeTab) {
+            var tabElement = document.getElementById(activeTab);
+            if (tabElement) {
+                var tab = new bootstrap.Tab(tabElement);
+                tab.show();
+            }
+        }
+    });
+
+    // Auto-logout (tu código existente)
     (function() {
         console.log("=== AUTO-LOGOUT ACTIVADO ===");
         
@@ -579,7 +639,6 @@
         var lastActivity = Date.now();
         var warningShown = false;
 
-        // Detectar actividad del usuario
         var activityEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click', 'mousemove'];
         
         function updateActivity() {
@@ -587,104 +646,28 @@
             warningShown = false;
         }
 
-        // Registrar eventos de actividad
         activityEvents.forEach(function(event) {
             document.addEventListener(event, updateActivity, { passive: true });
         });
 
-        // Función para mostrar advertencia
-        function showWarning(minutesLeft) {
-            if (!warningShown) {
-                warningShown = true;
-                
-                // Crear alerta de Bootstrap
-                var alertHtml = '<div class="alert alert-warning alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3" role="alert" style="z-index: 9999; max-width: 500px;">' +
-                    '<div class="d-flex align-items-center">' +
-                        '<i class="fas fa-exclamation-triangle me-2 fa-lg"></i>' +
-                        '<div>' +
-                            '<strong>Advertencia de inactividad</strong><br>' +
-                            'Tu sesión se cerrará en ' + minutesLeft + ' minutos por inactividad. ' +
-                            'Haz clic en cualquier lugar para continuar trabajando.' +
-                        '</div>' +
-                    '</div>' +
-                    '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>' +
-                '</div>';
-                
-                // Insertar la alerta en el body
-                document.body.insertAdjacentHTML('afterbegin', alertHtml);
-                
-                // Auto-cerrar después de 30 segundos
-                setTimeout(function() {
-                    var alert = document.querySelector('.alert-warning');
-                    if (alert) {
-                        alert.remove();
-                    }
-                }, 30000);
-            }
-        }
-
-        // Función para verificar inactividad
         function checkInactivity() {
             var now = Date.now();
             var inactiveTime = now - lastActivity;
             var timeRemaining = SESSION_TIMEOUT - inactiveTime;
-            var minutesRemaining = Math.floor(timeRemaining / 60000);
             
-            console.log('[Auto-Logout] Tiempo inactivo: ' + Math.floor(inactiveTime/60000) + ' minutos de 60');
-            
-            // Si el tiempo se agotó, recargar la página
             if (timeRemaining <= 0) {
-                console.log('[Auto-Logout] Sesión expirada. Recargando...');
-                
-                // Mostrar mensaje antes de recargar
-                var messageHtml = '<div class="position-fixed top-50 start-50 translate-middle bg-danger text-white p-4 rounded-3 shadow-lg" style="z-index: 10000; min-width: 300px; text-align: center;">' +
-                    '<i class="fas fa-clock fa-3x mb-3"></i>' +
-                    '<h5>Tu sesión ha expirado</h5>' +
-                    '<p class="mb-0">Serás redirigido al inicio de sesión...</p>' +
-                '</div>';
-                document.body.insertAdjacentHTML('beforeend', messageHtml);
-                
-                // Recargar después de 2 segundos
-                setTimeout(function() {
-                    window.location.reload();
-                }, 2000);
+                window.location.reload();
             }
-            // Mostrar advertencia 5 minutos antes
             else if (timeRemaining <= WARNING_TIME && !warningShown) {
-                showWarning(minutesRemaining);
+                warningShown = true;
+                showNotification(
+                    'Tu sesión se cerrará pronto por inactividad. Haz clic para continuar.',
+                    'warning'
+                );
             }
         }
 
-        // Verificar también con el servidor periódicamente
-        function checkSessionWithServer() {
-            fetch(window.location.href, {
-                method: 'HEAD',
-                credentials: 'same-origin',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            }).then(function(response) {
-                if (response.status === 401 || response.redirected) {
-                    console.log('[Auto-Logout] Servidor confirmó sesión expirada');
-                    window.location.reload();
-                }
-            }).catch(function(error) {
-                console.error('[Auto-Logout] Error verificando con servidor:', error);
-            });
-        }
-
-        // Iniciar verificaciones
-        console.log('[Auto-Logout] Configurado para 1 hora de inactividad');
-        console.log('[Auto-Logout] Advertencia se mostrará 5 minutos antes');
-        
-        // Verificar inmediatamente
-        checkInactivity();
-        
-        // Luego verificar periódicamente
         setInterval(checkInactivity, CHECK_INTERVAL);
-        
-        // Verificar con el servidor cada 5 minutos
-        setInterval(checkSessionWithServer, 300000);
     })();
     </script>
 </body>

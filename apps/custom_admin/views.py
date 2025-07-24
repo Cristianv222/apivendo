@@ -30,7 +30,6 @@ from django.db.models import Sum, Avg, Count, Q
 from decimal import Decimal
 
 
-
 def staff_required(view_func):
     """Decorator to require staff/admin access"""
     @wraps(view_func)
@@ -889,23 +888,234 @@ def certificate_upload(request):
     }
     return render(request, 'custom_admin/certificates/upload_modal.html', context)
 
-
 @login_required
 @staff_required
 def certificate_view(request, certificate_id):
     """View certificate details - Modal"""
-    certificate = get_object_or_404(DigitalCertificate, id=certificate_id)
-    
-    # Calculate additional info
-    certificate.is_expired = certificate.valid_to < timezone.now()
-    certificate.days_until_expiry = (certificate.valid_to - timezone.now()).days
-    
-    context = {
-        'certificate': certificate
-    }
-    return render(request, 'custom_admin/certificates/view_modal.html', context)
-
-
+    try:
+        certificate = get_object_or_404(DigitalCertificate, id=certificate_id)
+        
+        # Calcular días hasta expiración
+        days_until_expiry = 0
+        is_expired = False
+        try:
+            if hasattr(certificate, 'valid_to') and certificate.valid_to:
+                from datetime import datetime
+                if timezone.is_aware(certificate.valid_to):
+                    now = timezone.now()
+                else:
+                    now = datetime.now()
+                days_until_expiry = (certificate.valid_to - now).days
+                is_expired = certificate.valid_to < now
+        except:
+            pass
+        
+        # Calcular porcentaje de tiempo usado
+        percentage = 70  # Default
+        try:
+            if hasattr(certificate, 'valid_from') and hasattr(certificate, 'valid_to'):
+                total_days = (certificate.valid_to - certificate.valid_from).days
+                used_days = (timezone.now() - certificate.valid_from).days
+                if total_days > 0:
+                    percentage = min(100, max(0, int((used_days / total_days) * 100)))
+        except:
+            pass
+        
+        # Devolver HTML directo mejorado
+        html = f"""
+        <style>
+            .info-group {{
+                padding: 0.75rem;
+                background: #f8f9fa;
+                border-radius: 0.25rem;
+                margin-bottom: 0.75rem;
+            }}
+            .info-group label {{
+                display: block;
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-bottom: 0.25rem;
+                color: #6c757d;
+            }}
+            .info-group p {{
+                margin-bottom: 0;
+                font-weight: 500;
+            }}
+            .technical-details {{
+                background: #f8f9fa;
+                padding: 1rem;
+                border-radius: 0.5rem;
+            }}
+            code {{
+                background: #e9ecef;
+                padding: 0.2rem 0.4rem;
+                border-radius: 0.25rem;
+                font-size: 0.875rem;
+            }}
+        </style>
+        
+        <div class="certificate-view-content">
+            <div class="row">
+                <!-- Información del Certificado -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-3"><i class="fas fa-certificate me-2"></i>Información del Certificado</h6>
+                    
+                    <div class="info-group">
+                        <label>Nombre del Sujeto</label>
+                        <p><strong>{getattr(certificate, 'subject_name', 'N/A')}</strong></p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Número de Serie</label>
+                        <p class="text-monospace"><code>{getattr(certificate, 'serial_number', 'N/A')}</code></p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Emisor</label>
+                        <p>{getattr(certificate, 'issuer_name', 'N/A')}</p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Empresa</label>
+                        <p>
+                            {f'<span class="badge bg-info">{certificate.company.business_name}</span>' if hasattr(certificate, 'company') and certificate.company else '<span class="text-muted">Sin empresa asignada</span>'}
+                        </p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Estado del Certificado</label>
+                        <p>
+                            {'<span class="badge bg-danger"><i class="fas fa-times-circle"></i> Expirado</span>' if is_expired else (f'<span class="badge bg-warning"><i class="fas fa-exclamation-triangle"></i> Por Expirar</span>' if days_until_expiry <= 30 else '<span class="badge bg-success"><i class="fas fa-check-circle"></i> Activo</span>')}
+                            <span class="badge bg-secondary ms-2">{getattr(certificate, 'status', 'N/A')}</span>
+                        </p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Ambiente</label>
+                        <p>
+                            <span class="badge bg-{('danger' if getattr(certificate, 'environment', '') == 'PRODUCTION' else 'warning')}">
+                                {getattr(certificate, 'environment', 'N/A')}
+                            </span>
+                        </p>
+                    </div>
+                </div>
+                
+                <!-- Información de Validez -->
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-3"><i class="fas fa-calendar-alt me-2"></i>Información de Validez</h6>
+                    
+                    <div class="info-group">
+                        <label>Válido Desde</label>
+                        <p>
+                            <i class="fas fa-calendar-check text-success"></i>
+                            {certificate.valid_from.strftime('%d/%m/%Y %H:%M') if hasattr(certificate, 'valid_from') and certificate.valid_from else 'N/A'}
+                        </p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Válido Hasta</label>
+                        <p>
+                            <i class="fas fa-calendar-times text-danger"></i>
+                            {certificate.valid_to.strftime('%d/%m/%Y %H:%M') if hasattr(certificate, 'valid_to') and certificate.valid_to else 'N/A'}
+                        </p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Días Restantes</label>
+                        <p>
+                            {'<span class="text-danger fw-bold">Expirado hace ' + str(abs(days_until_expiry)) + ' días</span>' if is_expired else (f'<span class="text-danger fw-bold">Expira hoy</span>' if days_until_expiry == 0 else (f'<span class="text-warning fw-bold">Expira mañana</span>' if days_until_expiry == 1 else (f'<span class="text-warning fw-bold">{days_until_expiry} días restantes</span>' if days_until_expiry <= 30 else f'<span class="text-success fw-bold">{days_until_expiry} días restantes</span>')))}
+                        </p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Fecha de Carga</label>
+                        <p>{certificate.created_at.strftime('%d/%m/%Y %H:%M') if hasattr(certificate, 'created_at') and certificate.created_at else 'N/A'}</p>
+                    </div>
+                    
+                    <div class="info-group">
+                        <label>Fingerprint</label>
+                        <p><code>{getattr(certificate, 'fingerprint', 'N/A')}</code></p>
+                    </div>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <!-- Detalles Técnicos -->
+            <div class="row">
+                <div class="col-12">
+                    <h6 class="text-muted mb-3"><i class="fas fa-info-circle me-2"></i>Detalles Técnicos</h6>
+                    
+                    <div class="technical-details">
+                        <p class="mb-2"><strong>CN (Common Name):</strong> {getattr(certificate, 'subject_name', 'N/A')}</p>
+                        <p class="mb-2"><strong>Autoridad Certificadora:</strong> {getattr(certificate, 'issuer_name', 'N/A')}</p>
+                        <p class="mb-2"><strong>Serial Completo:</strong></p>
+                        <pre class="bg-white p-2 rounded text-monospace small" style="white-space: pre-wrap; word-break: break-all;">{getattr(certificate, 'serial_number', 'N/A')}</pre>
+                        {f'<p class="mb-0"><strong>Archivo:</strong> <code>{certificate.certificate_file.name}</code></p>' if hasattr(certificate, 'certificate_file') and certificate.certificate_file else ''}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Barra de Progreso -->
+            <hr>
+            <div class="row">
+                <div class="col-12">
+                    <h6 class="text-muted mb-3"><i class="fas fa-chart-line me-2"></i>Progreso de Validez</h6>
+                    {'<div class="progress" style="height: 25px;"><div class="progress-bar bg-danger" role="progressbar" style="width: 100%">Certificado Expirado</div></div>' if is_expired else f'<div class="progress" style="height: 25px;"><div class="progress-bar {"bg-warning" if days_until_expiry <= 30 else "bg-success"}" role="progressbar" style="width: {percentage}%" aria-valuenow="{percentage}" aria-valuemin="0" aria-valuemax="100">Válido por {days_until_expiry} días más ({percentage}% usado)</div></div>'}
+                    <small class="text-muted">
+                        Período de validez: {certificate.valid_from.strftime('%d/%m/%Y') if hasattr(certificate, 'valid_from') and certificate.valid_from else 'N/A'} - {certificate.valid_to.strftime('%d/%m/%Y') if hasattr(certificate, 'valid_to') and certificate.valid_to else 'N/A'}
+                    </small>
+                </div>
+            </div>
+            
+            <div class="modal-footer px-0 pb-0 mt-4">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cerrar
+                </button>
+                {'<button class="btn btn-warning" onclick="validateCertFromView(' + str(certificate.id) + ')"><i class="fas fa-check me-1"></i>Validar Certificado</button>' if not is_expired else ''}
+            </div>
+        </div>
+        
+        <script>
+        function validateCertFromView(certId) {{
+            // Cerrar el modal actual
+            bootstrap.Modal.getInstance(document.getElementById('certificateModal')).hide();
+            
+            // Trigger el click en el botón de validar
+            setTimeout(function() {{
+                $('.btn-validate[data-cert-id="' + certId + '"]').click();
+            }}, 300);
+        }}
+        </script>
+        """
+        
+        return HttpResponse(html)
+        
+    except DigitalCertificate.DoesNotExist:
+        return HttpResponse("""
+            <div class="p-4">
+                <div class="alert alert-danger">
+                    <h4>Error</h4>
+                    <p>No se encontró el certificado</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        """)
+    except Exception as e:
+        return HttpResponse(f"""
+            <div class="p-4">
+                <div class="alert alert-danger">
+                    <h4>Error</h4>
+                    <p>{str(e)}</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        """)
 @login_required
 @staff_required
 @require_http_methods(["POST"])
@@ -966,6 +1176,78 @@ def certificate_validate(request, certificate_id):
             'success': False,
             'error': str(e)
         })
+# En apps/custom_admin/views.py - Reemplaza la función certificate_edit con esta versión corregida
+
+@login_required
+@staff_required
+def certificate_edit(request, certificate_id):
+    """Edit certificate environment - Modal"""
+    try:
+        # Intenta convertir certificate_id a entero
+        cert_id = int(certificate_id)
+        certificate = get_object_or_404(DigitalCertificate, id=cert_id)
+        
+        if request.method == 'POST':
+            new_environment = request.POST.get('environment')
+            
+            if new_environment in ['TEST', 'PRODUCTION']:
+                old_environment = certificate.environment
+                certificate.environment = new_environment
+                certificate.save()
+                
+                # Log the change
+                AuditLog.objects.create(
+                    user=request.user,
+                    action='UPDATE',
+                    model_name='DigitalCertificate',
+                    object_id=str(certificate.id),
+                    object_representation=f'Certificate environment changed from {old_environment} to {new_environment}',
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                
+                messages.success(request, f'Ambiente cambiado a {new_environment} exitosamente')
+                return HttpResponse('<script>window.parent.location.reload();</script>')
+            else:
+                messages.error(request, 'Ambiente inválido')
+        
+        context = {
+            'certificate': certificate
+        }
+        return render(request, 'custom_admin/certificates/edit_modal.html', context)
+        
+    except ValueError:
+        # Si el certificate_id no es un número válido
+        return HttpResponse("""
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+                <p>ID de certificado inválido</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        """)
+    except DigitalCertificate.DoesNotExist:
+        # Si el certificado no existe
+        return HttpResponse("""
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+                <p>No se encontró el certificado solicitado</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        """)
+    except Exception as e:
+        # Para cualquier otro error
+        return HttpResponse(f"""
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+                <p>Error al cargar el formulario: {str(e)}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        """)
 # ========== INVOICES ==========
 # Agrega estas funciones en views.py:
 @login_required

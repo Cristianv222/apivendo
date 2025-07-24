@@ -197,6 +197,12 @@
                                 title="Ver detalles">
                             <i class="fas fa-eye"></i>
                         </button>
+                        <button class="btn btn-sm btn-outline-primary btn-action btn-edit" 
+                                data-cert-id="{{ cert.id }}"
+                                data-cert-name="{{ cert.subject_name }}"
+                                title="Editar ambiente">
+                            <i class="fas fa-edit"></i>
+                        </button>
                         <button class="btn btn-sm btn-outline-warning btn-action btn-validate" 
                                 data-cert-id="{{ cert.id }}"
                                 title="Validar">
@@ -344,6 +350,69 @@ $(document).ready(function() {
         });
     });
     
+    // Edit Certificate (solo ambiente) - CORREGIDO
+    $(document).on('click', '.btn-edit', function() {
+        var certId = $(this).data('cert-id');
+        var certName = $(this).data('cert-name');
+        
+        console.log("Editando certificado ID:", certId); // Debug
+        
+        $('#certificateModalTitle').html('<i class="fas fa-edit me-2"></i>Editar Ambiente del Certificado');
+        
+        // Mostrar loading
+        $('#certificateModalBody').html(`
+            <div class="text-center p-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="mt-3 text-muted">Cargando formulario...</p>
+            </div>
+        `);
+        
+        // Mostrar el modal con el loading
+        certificateModal.show();
+        
+        // Hacer la petición AJAX
+        $.ajax({
+            url: "{% url 'custom_admin:certificate_edit' 0 %}".replace('0', certId),
+            type: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function(html) {
+                console.log("Respuesta recibida"); // Debug
+                $('#certificateModalBody').html(html);
+                
+                // Re-inicializar cualquier componente necesario
+                initializeEditFormHandlers();
+            },
+            error: function(xhr, status, error) {
+                console.error("Error AJAX:", status, error); // Debug
+                console.error("Respuesta:", xhr.responseText); // Debug
+                
+                var errorMsg = 'Error desconocido al cargar el formulario';
+                
+                if (xhr.status === 404) {
+                    errorMsg = 'Certificado no encontrado';
+                } else if (xhr.status === 500) {
+                    errorMsg = 'Error interno del servidor';
+                } else if (xhr.status === 403) {
+                    errorMsg = 'No tiene permisos para editar este certificado';
+                }
+                
+                $('#certificateModalBody').html(`
+                    <div class="alert alert-danger">
+                        <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+                        <p>${errorMsg}</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                `);
+            }
+        });
+    });
+    
     // Initialize form handlers
     function initializeFormHandlers() {
         $('#certificateUploadForm').off('submit').on('submit', function(e) {
@@ -386,6 +455,53 @@ $(document).ready(function() {
                 error: function(xhr) {
                     Swal.close();
                     Swal.fire('Error', 'Error al subir el certificado', 'error');
+                }
+            });
+        });
+    }
+    
+    // Initialize edit form handlers - NUEVA FUNCIÓN
+    function initializeEditFormHandlers() {
+        // Handler para el formulario de edición cuando se cargue
+        $('#editCertificateForm').off('submit').on('submit', function(e) {
+            e.preventDefault();
+            
+            var form = this;
+            var formData = new FormData(form);
+            
+            // Deshabilitar el botón de submit
+            $(form).find('button[type="submit"]').prop('disabled', true)
+                .html('<i class="fas fa-spinner fa-spin me-1"></i>Guardando...');
+            
+            $.ajax({
+                url: $(form).attr('action') || window.location.pathname,
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.includes('window.parent.location.reload()')) {
+                        certificateModal.hide();
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Éxito',
+                            text: 'Ambiente actualizado correctamente',
+                            timer: 1500,
+                            showConfirmButton: false
+                        }).then(function() {
+                            location.reload();
+                        });
+                    } else {
+                        // Si la respuesta es HTML, mostrarla en el modal
+                        $('#certificateModalBody').html(response);
+                        initializeEditFormHandlers(); // Re-inicializar handlers
+                    }
+                },
+                error: function(xhr) {
+                    $(form).find('button[type="submit"]').prop('disabled', false)
+                        .html('<i class="fas fa-save me-1"></i>Guardar Cambios');
+                    
+                    Swal.fire('Error', 'Error al actualizar el ambiente', 'error');
                 }
             });
         });
