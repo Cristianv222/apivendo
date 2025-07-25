@@ -1,0 +1,597 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Configuraciones{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-nav {
+        background: #f8f9fa;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        margin-bottom: 2rem;
+    }
+    
+    .settings-nav .nav-link {
+        color: #495057;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.375rem;
+        transition: all 0.3s;
+        margin: 0 0.25rem;
+    }
+    
+    .settings-nav .nav-link:hover {
+        background: #e9ecef;
+        color: #212529;
+    }
+    
+    .settings-nav .nav-link.active {
+        background: #007bff;
+        color: white;
+    }
+    
+    .settings-section {
+        background: white;
+        border-radius: 0.5rem;
+        padding: 2rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        margin-bottom: 2rem;
+    }
+    
+    .settings-section h3 {
+        margin-bottom: 1.5rem;
+        color: #212529;
+        font-size: 1.5rem;
+        font-weight: 600;
+    }
+    
+    .setting-item {
+        padding: 1.5rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .setting-item:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+    
+    .setting-label {
+        font-weight: 600;
+        color: #495057;
+        margin-bottom: 0.5rem;
+    }
+    
+    .setting-description {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin-bottom: 1rem;
+    }
+    
+    .setting-value {
+        font-size: 0.875rem;
+        color: #212529;
+    }
+    
+    .switch-container {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .form-switch {
+        padding-left: 0;
+    }
+    
+    .form-switch .form-check-input {
+        width: 3rem;
+        height: 1.5rem;
+        cursor: pointer;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border-radius: 0.25rem;
+    }
+    
+    .status-badge.active {
+        background-color: #d4edda;
+        color: #155724;
+    }
+    
+    .status-badge.inactive {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+    
+    .config-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s;
+    }
+    
+    .config-card:hover {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+    
+    .config-card h5 {
+        margin-bottom: 0.5rem;
+        color: #212529;
+    }
+    
+    .config-card p {
+        margin-bottom: 0;
+        color: #6c757d;
+        font-size: 0.875rem;
+    }
+    
+    .btn-edit-setting {
+        padding: 0.375rem 0.75rem;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Configuraciones del Sistema</h2>
+        <p class="text-muted mb-0">Administra las configuraciones generales de tu sistema</p>
+    </div>
+    <div>
+        <button class="btn btn-admin btn-admin-primary" onclick="saveAllSettings()">
+            <i class="fas fa-save"></i> Guardar Cambios
+        </button>
+    </div>
+</div>
+
+<!-- Settings Navigation -->
+<div class="settings-nav">
+    <ul class="nav nav-pills">
+        <li class="nav-item">
+            <a class="nav-link active" href="#general" data-bs-toggle="pill">
+                <i class="fas fa-cog"></i> General
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#email" data-bs-toggle="pill">
+                <i class="fas fa-envelope"></i> Email
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#sri" data-bs-toggle="pill">
+                <i class="fas fa-file-invoice"></i> SRI
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#security" data-bs-toggle="pill">
+                <i class="fas fa-shield-alt"></i> Seguridad
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" href="#notifications" data-bs-toggle="pill">
+                <i class="fas fa-bell"></i> Notificaciones
+            </a>
+        </li>
+    </ul>
+</div>
+
+<!-- Settings Content -->
+<div class="tab-content">
+    <!-- General Settings -->
+    <div class="tab-pane fade show active" id="general">
+        <div class="settings-section">
+            <h3><i class="fas fa-cog"></i> Configuraciones Generales</h3>
+            
+            <div class="setting-item">
+                <div class="setting-label">Nombre del Sistema</div>
+                <div class="setting-description">El nombre que aparecerá en el panel de administración</div>
+                <input type="text" class="form-control" id="system_name" value="{{ settings.system_name|default:'Mi Sistema' }}">
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Zona Horaria</div>
+                <div class="setting-description">Zona horaria predeterminada para el sistema</div>
+                <select class="form-select" id="timezone">
+                    <option value="America/Guayaquil" {% if settings.timezone == 'America/Guayaquil' %}selected{% endif %}>Ecuador - Guayaquil</option>
+                    <option value="America/Lima" {% if settings.timezone == 'America/Lima' %}selected{% endif %}>Perú - Lima</option>
+                    <option value="America/Bogota" {% if settings.timezone == 'America/Bogota' %}selected{% endif %}>Colombia - Bogotá</option>
+                    <option value="America/Mexico_City" {% if settings.timezone == 'America/Mexico_City' %}selected{% endif %}>México - Ciudad de México</option>
+                </select>
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Idioma Predeterminado</div>
+                <div class="setting-description">Idioma principal del sistema</div>
+                <select class="form-select" id="language">
+                    <option value="es" {% if settings.language == 'es' %}selected{% endif %}>Español</option>
+                    <option value="en" {% if settings.language == 'en' %}selected{% endif %}>English</option>
+                </select>
+            </div>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Modo de Mantenimiento</div>
+                        <div class="setting-description">Activar para mostrar página de mantenimiento a los usuarios</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="maintenance_mode" {% if settings.maintenance_mode %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Email Settings -->
+    <div class="tab-pane fade" id="email">
+        <div class="settings-section">
+            <h3><i class="fas fa-envelope"></i> Configuración de Email</h3>
+            
+            <div class="setting-item">
+                <div class="setting-label">Servidor SMTP</div>
+                <div class="setting-description">Servidor para envío de correos electrónicos</div>
+                <input type="text" class="form-control" id="smtp_host" value="{{ settings.smtp_host|default:'smtp.gmail.com' }}">
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Puerto SMTP</div>
+                <div class="setting-description">Puerto del servidor SMTP (587 para TLS, 465 para SSL)</div>
+                <input type="number" class="form-control" id="smtp_port" value="{{ settings.smtp_port|default:587 }}">
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Usuario SMTP</div>
+                <div class="setting-description">Email o usuario para autenticación SMTP</div>
+                <input type="email" class="form-control" id="smtp_user" value="{{ settings.smtp_user|default:'' }}">
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Contraseña SMTP</div>
+                <div class="setting-description">Contraseña de aplicación para Gmail o contraseña SMTP</div>
+                <input type="password" class="form-control" id="smtp_password" placeholder="••••••••">
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Email Remitente</div>
+                <div class="setting-description">Dirección desde la que se enviarán los correos</div>
+                <input type="email" class="form-control" id="from_email" value="{{ settings.from_email|default:'' }}">
+            </div>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Usar TLS</div>
+                        <div class="setting-description">Habilitar TLS para conexión segura</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="use_tls" {% if settings.use_tls %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="setting-item">
+                <button class="btn btn-admin btn-admin-secondary" onclick="testEmailSettings()">
+                    <i class="fas fa-paper-plane"></i> Probar Configuración
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- SRI Settings -->
+    <div class="tab-pane fade" id="sri">
+        <div class="settings-section">
+            <h3><i class="fas fa-file-invoice"></i> Configuración SRI</h3>
+            
+            <div class="setting-item">
+                <div class="setting-label">Ambiente SRI</div>
+                <div class="setting-description">Ambiente de trabajo con el SRI</div>
+                <select class="form-select" id="sri_environment">
+                    <option value="1" {% if settings.sri_environment == '1' %}selected{% endif %}>Pruebas</option>
+                    <option value="2" {% if settings.sri_environment == '2' %}selected{% endif %}>Producción</option>
+                </select>
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">URL Recepción</div>
+                <div class="setting-description">URL del servicio de recepción de comprobantes</div>
+                <input type="url" class="form-control" id="sri_reception_url" value="{{ settings.sri_reception_url|default:'' }}">
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">URL Autorización</div>
+                <div class="setting-description">URL del servicio de autorización de comprobantes</div>
+                <input type="url" class="form-control" id="sri_authorization_url" value="{{ settings.sri_authorization_url|default:'' }}">
+            </div>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Envío Automático</div>
+                        <div class="setting-description">Enviar automáticamente los documentos al SRI al crearlos</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="sri_auto_send" {% if settings.sri_auto_send %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Email Automático</div>
+                        <div class="setting-description">Enviar email automáticamente al cliente cuando se autoriza el documento</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="sri_auto_email" {% if settings.sri_auto_email %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Security Settings -->
+    <div class="tab-pane fade" id="security">
+        <div class="settings-section">
+            <h3><i class="fas fa-shield-alt"></i> Configuración de Seguridad</h3>
+            
+            <div class="setting-item">
+                <div class="setting-label">Tiempo de Sesión</div>
+                <div class="setting-description">Minutos de inactividad antes de cerrar sesión</div>
+                <input type="number" class="form-control" id="session_timeout" value="{{ settings.session_timeout|default:30 }}" min="5" max="1440">
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Intentos de Login</div>
+                <div class="setting-description">Máximo número de intentos fallidos antes de bloquear</div>
+                <input type="number" class="form-control" id="max_login_attempts" value="{{ settings.max_login_attempts|default:5 }}" min="3" max="10">
+            </div>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Autenticación de Dos Factores</div>
+                        <div class="setting-description">Requerir código adicional al iniciar sesión</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="two_factor_auth" {% if settings.two_factor_auth %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Registro de Actividad</div>
+                        <div class="setting-description">Registrar todas las acciones de los usuarios</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="activity_logging" {% if settings.activity_logging %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Notifications Settings -->
+    <div class="tab-pane fade" id="notifications">
+        <div class="settings-section">
+            <h3><i class="fas fa-bell"></i> Configuración de Notificaciones</h3>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Notificaciones por Email</div>
+                        <div class="setting-description">Enviar notificaciones importantes por correo electrónico</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="email_notifications" {% if settings.email_notifications %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Notificaciones del Sistema</div>
+                        <div class="setting-description">Mostrar notificaciones en el panel de administración</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="system_notifications" {% if settings.system_notifications %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="setting-item">
+                <div class="setting-label">Emails de Notificación</div>
+                <div class="setting-description">Correos que recibirán notificaciones del sistema (uno por línea)</div>
+                <textarea class="form-control" id="notification_emails" rows="4">{{ settings.notification_emails|default:'' }}</textarea>
+            </div>
+            
+            <div class="setting-item">
+                <h5>Tipos de Notificaciones</h5>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="notify_new_orders" {% if settings.notify_new_orders %}checked{% endif %}>
+                    <label class="form-check-label" for="notify_new_orders">
+                        Nuevas órdenes
+                    </label>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="notify_low_stock" {% if settings.notify_low_stock %}checked{% endif %}>
+                    <label class="form-check-label" for="notify_low_stock">
+                        Stock bajo
+                    </label>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="notify_errors" {% if settings.notify_errors %}checked{% endif %}>
+                    <label class="form-check-label" for="notify_errors">
+                        Errores del sistema
+                    </label>
+                </div>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" id="notify_sri_issues" {% if settings.notify_sri_issues %}checked{% endif %}>
+                    <label class="form-check-label" for="notify_sri_issues">
+                        Problemas con SRI
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize tooltips
+    $('[data-bs-toggle="tooltip"]').tooltip();
+});
+
+function saveAllSettings() {
+    // Recopilar todas las configuraciones
+    const settings = {
+        // General
+        system_name: $('#system_name').val(),
+        timezone: $('#timezone').val(),
+        language: $('#language').val(),
+        maintenance_mode: $('#maintenance_mode').is(':checked'),
+        
+        // Email
+        smtp_host: $('#smtp_host').val(),
+        smtp_port: $('#smtp_port').val(),
+        smtp_user: $('#smtp_user').val(),
+        smtp_password: $('#smtp_password').val(),
+        from_email: $('#from_email').val(),
+        use_tls: $('#use_tls').is(':checked'),
+        
+        // SRI
+        sri_environment: $('#sri_environment').val(),
+        sri_reception_url: $('#sri_reception_url').val(),
+        sri_authorization_url: $('#sri_authorization_url').val(),
+        sri_auto_send: $('#sri_auto_send').is(':checked'),
+        sri_auto_email: $('#sri_auto_email').is(':checked'),
+        
+        // Security
+        session_timeout: $('#session_timeout').val(),
+        max_login_attempts: $('#max_login_attempts').val(),
+        two_factor_auth: $('#two_factor_auth').is(':checked'),
+        activity_logging: $('#activity_logging').is(':checked'),
+        
+        // Notifications
+        email_notifications: $('#email_notifications').is(':checked'),
+        system_notifications: $('#system_notifications').is(':checked'),
+        notification_emails: $('#notification_emails').val(),
+        notify_new_orders: $('#notify_new_orders').is(':checked'),
+        notify_low_stock: $('#notify_low_stock').is(':checked'),
+        notify_errors: $('#notify_errors').is(':checked'),
+        notify_sri_issues: $('#notify_sri_issues').is(':checked')
+    };
+    
+    // Enviar al servidor
+    $.ajax({
+        url: "{% url 'custom_admin:settings' %}save/",  // URL temporal
+        method: 'POST',
+        data: JSON.stringify(settings),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        success: function(response) {
+            if (response.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Guardado',
+                    text: 'Las configuraciones se han guardado correctamente',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            } else {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Error',
+                    text: response.error || 'Error al guardar las configuraciones'
+                });
+            }
+        },
+        error: function() {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'Error al comunicarse con el servidor'
+            });
+        }
+    });
+}
+
+function testEmailSettings() {
+    Swal.fire({
+        title: 'Probar Configuración de Email',
+        input: 'email',
+        inputLabel: 'Email de prueba',
+        inputPlaceholder: 'correo@ejemplo.com',
+        showCancelButton: true,
+        confirmButtonText: 'Enviar Prueba',
+        cancelButtonText: 'Cancelar',
+        showLoaderOnConfirm: true,
+        inputValidator: (value) => {
+            if (!value) {
+                return 'Debes ingresar un email';
+            }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+                return 'Email inválido';
+            }
+        },
+        preConfirm: (email) => {
+            return $.ajax({
+                url: "{% url 'custom_admin:settings' %}test-email/",  // URL temporal
+                method: 'POST',
+                data: JSON.stringify({
+                    test_email: email,
+                    smtp_host: $('#smtp_host').val(),
+                    smtp_port: $('#smtp_port').val(),
+                    smtp_user: $('#smtp_user').val(),
+                    smtp_password: $('#smtp_password').val(),
+                    from_email: $('#from_email').val(),
+                    use_tls: $('#use_tls').is(':checked')
+                }),
+                contentType: 'application/json',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            }).catch(error => {
+                Swal.showValidationMessage(`Error: ${error.responseJSON?.error || 'Error al enviar'}`);
+            });
+        },
+        allowOutsideClick: () => !Swal.isLoading()
+    }).then((result) => {
+        if (result.isConfirmed && result.value.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Email Enviado',
+                text: 'El email de prueba se envió correctamente'
+            });
+        }
+    });
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}

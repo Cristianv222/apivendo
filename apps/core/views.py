@@ -434,7 +434,8 @@ def user_dashboard(request):
         except Exception as e:
             logger.error(f"Error loading billing data: {e}")
             BILLING_AVAILABLE = False
-    
+    # En la sección de ESTADÍSTICAS, reemplaza desde la línea que dice "# ==================== ESTADÍSTICAS ====================" hasta "except Exception as e:"
+
     # ==================== ESTADÍSTICAS ====================
     stats = {
         'total_invoices': 0,
@@ -444,40 +445,70 @@ def user_dashboard(request):
     }
     
     recent_invoices = []
+    document_stats = {
+        'facturas': 0,
+        'retenciones': 0,
+        'liquidaciones': 0,
+        'notas_credito': 0,
+        'notas_debito': 0,
+    }
     
     try:
         from apps.sri_integration.models import ElectronicDocument
         
         if selected_company:
+            # Obtener TODOS los tipos de documentos, no solo facturas
+            all_documents = ElectronicDocument.objects.filter(
+                company=selected_company
+            )
+            
+            # Estadísticas generales (manteniendo compatibilidad)
             stats = {
-                'total_invoices': ElectronicDocument.objects.filter(
-                    company=selected_company,
-                    document_type='INVOICE'
-                ).count(),
-                'authorized_invoices': ElectronicDocument.objects.filter(
-                    company=selected_company,
-                    document_type='INVOICE',
+                'total_invoices': all_documents.count(),  # Total de TODOS los documentos
+                'authorized_invoices': all_documents.filter(
                     status='AUTHORIZED'
                 ).count(),
-                'pending_invoices': ElectronicDocument.objects.filter(
-                    company=selected_company,
-                    document_type='INVOICE',
+                'pending_invoices': all_documents.filter(
                     status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']
                 ).count(),
-                'total_amount': ElectronicDocument.objects.filter(
-                    company=selected_company,
-                    document_type='INVOICE',
+                'total_amount': all_documents.filter(
                     status='AUTHORIZED'
                 ).aggregate(
                     total=Sum('total_amount')
                 )['total'] or 0
             }
             
-            # Facturas recientes
-            recent_invoices = ElectronicDocument.objects.filter(
-                company=selected_company,
-                document_type='INVOICE'
-            ).order_by('-created_at')[:10]
+            # Estadísticas por tipo de documento
+            document_stats = {
+                'facturas': all_documents.filter(document_type='INVOICE').count(),
+                'retenciones': all_documents.filter(document_type='RETENTION').count(),
+                'liquidaciones': all_documents.filter(document_type='PURCHASE_SETTLEMENT').count(),
+                'notas_credito': all_documents.filter(document_type='CREDIT_NOTE').count(),
+                'notas_debito': all_documents.filter(document_type='DEBIT_NOTE').count(),
+            }
+            
+            # Documentos recientes - TODOS los tipos
+            recent_invoices = all_documents.order_by('-created_at')[:50]
+            
+            # Agregar campo mapped_type para el filtro del template
+            for doc in recent_invoices:
+                # Mapear los tipos de documento del modelo a los valores del filtro
+                type_mapping = {
+                    'INVOICE': 'factura',
+                    'RETENTION': 'retencion',
+                    'PURCHASE_SETTLEMENT': 'liquidacion',
+                    'CREDIT_NOTE': 'nota_credito',
+                    'DEBIT_NOTE': 'nota_debito',
+                    'REMISSION_GUIDE': 'guia_remision',
+                }
+                doc.mapped_type = type_mapping.get(doc.document_type, 'factura')
+                
+                # También agregar el nombre del cliente/proveedor según el tipo
+                if doc.document_type in ['RETENTION', 'PURCHASE_SETTLEMENT']:
+                    # Para retenciones y liquidaciones, buscar el campo supplier
+                    doc.client_name = getattr(doc, 'supplier_name', doc.customer_name)
+                else:
+                    doc.client_name = doc.customer_name
             
     except Exception as e:
         logger.error(f"Error obteniendo estadísticas: {e}")
@@ -507,6 +538,7 @@ def user_dashboard(request):
         'certificate_issuer': certificate_info.get('issuer'),
         'stats': stats,
         'recent_invoices': recent_invoices,
+        'document_stats': document_stats,
         'status_choices': INVOICE_STATUS_CHOICES,
         'is_admin': False,
         'current_filters': {

@@ -101,3 +101,108 @@ def handle_assignment_change(sender, instance, created, **kwargs):
         ).update(is_read=True)
         
         print(f"✅ Usuario {instance.user.email} asignado exitosamente")
+        # Agregar al final de apps/users/signals.py
+
+# Importar el modelo de notificaciones
+from apps.notifications.models import Notification, NotificationTemplate
+
+@receiver(post_save, sender=User)
+def create_notification_for_new_user(sender, instance, created, **kwargs):
+    """
+    Crear notificación en el sistema de notificaciones cuando se registra un nuevo usuario
+    """
+    if created and not instance.is_staff and not instance.is_superuser:
+        # Obtener o crear la plantilla
+        template, _ = NotificationTemplate.objects.get_or_create(
+            notification_type='WELCOME',
+            defaults={
+                'name': 'Nuevo Usuario Registrado',
+                'description': 'Notificación cuando un nuevo usuario se registra',
+                'browser_title': 'Nuevo usuario en sala de espera',
+                'browser_message': 'Usuario esperando aprobación',
+                'email_subject': 'Nuevo usuario registrado: {user_name}',
+                'email_template': 'Se ha registrado un nuevo usuario: {user_name} ({user_email})',
+                'priority': 'HIGH',
+                'email_enabled': True,
+                'browser_enabled': True,
+            }
+        )
+        
+        # Obtener todos los administradores activos
+        admins = User.objects.filter(is_staff=True, is_active=True)
+        
+        # Crear una notificación para cada administrador
+        for admin in admins:
+            Notification.objects.create(
+                template=template,
+                recipient=admin,
+                title=f'Nuevo usuario en sala de espera: {instance.get_full_name() or instance.email}',
+                message=f'El usuario {instance.email} se ha registrado el {instance.date_joined.strftime("%d/%m/%Y %H:%M")} y está esperando aprobación.',
+                context_data={
+                    'user_id': instance.id,
+                    'user_email': instance.email,
+                    'user_name': instance.get_full_name() or instance.email,
+                },
+                action_url=f'/admin-panel/users/{instance.id}/edit/',
+                action_text='Revisar usuario',
+                sent_via_browser=True,
+                status='SENT'
+            )
+        
+        print(f"📧 Notificación creada en panel de notificaciones para: {instance.email}")
+
+@receiver(user_logged_in)
+def create_notification_for_waiting_user(sender, request, user, **kwargs):
+    """
+    Crear notificación cuando un usuario en sala de espera intenta iniciar sesión
+    """
+    if not user.is_staff and not user.is_superuser:
+        try:
+            assignment = UserCompanyAssignment.objects.get(user=user)
+            
+            if assignment.is_waiting():
+                # Verificar si ya existe notificación reciente
+                from django.utils import timezone
+                from datetime import timedelta
+                
+                recent_notification = Notification.objects.filter(
+                    context_data__user_id=user.id,
+                    created_at__gte=timezone.now() - timedelta(hours=24)
+                ).exists()
+                
+                if not recent_notification:
+                    # Obtener plantilla
+                    template, _ = NotificationTemplate.objects.get_or_create(
+                        notification_type='LOGIN_ALERT',
+                        defaults={
+                            'name': 'Intento de Login - Usuario en Espera',
+                            'description': 'Usuario en sala de espera intentó iniciar sesión',
+                            'browser_title': 'Usuario esperando acceso',
+                            'browser_message': 'Un usuario en sala de espera intentó acceder',
+                            'priority': 'HIGH',
+                        }
+                    )
+                    
+                    # Crear notificación para admins
+                    admins = User.objects.filter(is_staff=True, is_active=True)
+                    
+                    for admin in admins:
+                        Notification.objects.create(
+                            template=template,
+                            recipient=admin,
+                            title=f'Usuario esperando: {user.get_full_name() or user.email}',
+                            message=f'El usuario {user.email} intentó iniciar sesión pero está en sala de espera.',
+                            context_data={
+                                'user_id': user.id,
+                                'user_email': user.email,
+                            },
+                            action_url=f'/admin-panel/users/{user.id}/edit/',
+                            action_text='Revisar usuario',
+                            sent_via_browser=True,
+                            status='SENT'
+                        )
+                    
+                    print(f"🔔 Notificación de login creada para: {user.email}")
+                    
+        except UserCompanyAssignment.DoesNotExist:
+            pass

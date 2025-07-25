@@ -554,20 +554,6 @@
                 <div class="menu-section-title">Facturación SRI</div>
                 
                 <div class="menu-item">
-                    <a href="{% url 'custom_admin:invoices' %}" class="menu-link {% if 'invoice' in request.resolver_match.url_name %}active{% endif %}">
-                        <i class="fas fa-file-invoice menu-icon"></i>
-                        <span>Facturas</span>
-                    </a>
-                </div>
-                
-                <div class="menu-item">
-                    <a href="{% url 'custom_admin:customers' %}" class="menu-link {% if 'customer' in request.resolver_match.url_name %}active{% endif %}">
-                        <i class="fas fa-address-book menu-icon"></i>
-                        <span>Clientes</span>
-                    </a>
-                </div>
-             
-                <div class="menu-item">
                     <a href="{% url 'custom_admin:sri_documents' %}" class="menu-link {% if 'sri' in request.resolver_match.url_name %}active{% endif %}">
                         <i class="fas fa-file-alt menu-icon"></i>
                         <span>Documentos SRI</span>

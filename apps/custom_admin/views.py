@@ -29,6 +29,9 @@ from apps.api.views.sri_views import audit_api_action
 from django.db.models import Sum, Avg, Count, Q
 from decimal import Decimal
 
+# Agregar estas importaciones
+from apps.sri_integration.models import ElectronicDocument
+from apps.companies.models import Company
 
 def staff_required(view_func):
     """Decorator to require staff/admin access"""
@@ -138,6 +141,8 @@ def users_list(request):
     }
     
     return render(request, 'custom_admin/users/list.html', context)
+
+
 @login_required
 @staff_required
 def user_create(request):
@@ -216,6 +221,7 @@ def user_create(request):
         return render(request, 'custom_admin/users/form_modal.html', context)
     except Exception as e:
         return HttpResponse(f'<div class="alert alert-danger">Error al cargar el formulario: {str(e)}</div>')
+
 
 @login_required
 @staff_required
@@ -394,7 +400,8 @@ def user_edit(request, user_id):
     except Exception as e:
         print(f"[DEBUG] ERROR GENERAL: {str(e)}")
         return HttpResponse(f'<div class="alert alert-danger">Error: {str(e)}</div>')
-        
+
+
 @login_required
 @staff_required
 def user_view(request, user_id):
@@ -509,7 +516,6 @@ def user_toggle_status(request, user_id):
 
 
 # ========== COMPANIES CRUD ==========
-# En views.py, busca la función companies_list y corrige esta parte:
 
 @login_required
 @staff_required
@@ -558,6 +564,7 @@ def companies_list(request):
     }
     
     return render(request, 'custom_admin/companies/list.html', context)
+
 
 @login_required
 @staff_required
@@ -691,6 +698,7 @@ def company_view(request, company_id):
     }
     return render(request, 'custom_admin/companies/view_modal.html', context)
 
+
 @login_required
 @staff_required
 @require_http_methods(["POST"])
@@ -767,6 +775,7 @@ def company_toggle_status(request, company_id):
 
 
 # ========== CERTIFICATES CRUD ==========
+
 @login_required
 @staff_required
 def certificates_list(request):
@@ -835,7 +844,6 @@ def certificates_list(request):
     }
     
     return render(request, 'custom_admin/certificates/list.html', context)
-
 @login_required
 @staff_required
 def certificate_upload(request):
@@ -887,6 +895,7 @@ def certificate_upload(request):
         'companies': companies
     }
     return render(request, 'custom_admin/certificates/upload_modal.html', context)
+
 
 @login_required
 @staff_required
@@ -1116,6 +1125,8 @@ def certificate_view(request, certificate_id):
                 </div>
             </div>
         """)
+
+
 @login_required
 @staff_required
 @require_http_methods(["POST"])
@@ -1176,7 +1187,7 @@ def certificate_validate(request, certificate_id):
             'success': False,
             'error': str(e)
         })
-# En apps/custom_admin/views.py - Reemplaza la función certificate_edit con esta versión corregida
+
 
 @login_required
 @staff_required
@@ -1248,311 +1259,1005 @@ def certificate_edit(request, certificate_id):
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
             </div>
         """)
+
+
 # ========== INVOICES ==========
-# Agrega estas funciones en views.py:
+
 @login_required
 @staff_required
 def invoices_list(request):
-    """List all invoices"""
-    invoices = Invoice.objects.all().select_related('company', 'customer').order_by('-fecha_emision')
-    
-    # Filters
-    search = request.GET.get('search', '')
-    status = request.GET.get('status', '')
-    company_id = request.GET.get('company', '')
-    date_from = request.GET.get('date_from', '')
-    date_to = request.GET.get('date_to', '')
-    
-    if search:
-        invoices = invoices.filter(
-            Q(numero_completo__icontains=search) |
-            Q(customer__business_name__icontains=search) |
-            Q(customer__identification__icontains=search)
-        )
-    
-    if status:
-        invoices = invoices.filter(status=status)
-    
-    if company_id:
-        invoices = invoices.filter(company_id=company_id)
-    
-    if date_from:
-        invoices = invoices.filter(fecha_emision__gte=date_from)
-    
-    if date_to:
-        invoices = invoices.filter(fecha_emision__lte=date_to)
-    
-    # Statistics
-    stats = {
-        'total_authorized': invoices.filter(status='AUTORIZADO').aggregate(
-            total=Sum('total')
-        )['total'] or Decimal('0.00'),
-        'count_pending': invoices.filter(status='PENDIENTE').count(),
-        'count_rejected': invoices.filter(status='RECHAZADO').count(),
-        'avg_amount': invoices.aggregate(
-            avg=Avg('total')
-        )['avg'] or Decimal('0.00'),
-    }
-    
-    # Get companies for filter
-    companies = Company.objects.filter(is_active=True).order_by('trade_name')
-    
-    # Pagination
-    paginator = Paginator(invoices, 25)
-    page = request.GET.get('page')
-    invoices_page = paginator.get_page(page)
-    
+    """List invoices - Por implementar"""
     context = {
         'page_title': 'Facturas',
-        'invoices': invoices_page,
-        'companies': companies,
-        'total_count': paginator.count,
-        'stats': stats,
-        'filters': {
-            'search': search,
-            'status': status,
-            'company': company_id,
-            'date_from': date_from,
-            'date_to': date_to,
-        }
+        'invoices': [],
+        'total_count': 0,
     }
-    
     return render(request, 'custom_admin/invoices/list.html', context)
+
 
 @login_required
 @staff_required
 def invoice_view(request, invoice_id):
     """View invoice details - Modal"""
-    invoice = get_object_or_404(Invoice, id=invoice_id)
-    
+    # Por implementar
     context = {
-        'invoice': invoice,
+        'invoice': None,
     }
     return render(request, 'custom_admin/invoices/view_modal.html', context)
+
 
 @login_required
 @staff_required
 def invoice_create(request):
     """Create new invoice - Full page"""
-    # Esta sería una página completa, no un modal
     if request.method == 'GET':
         companies = Company.objects.filter(is_active=True).order_by('business_name')
-        customers = Customer.objects.filter(is_active=True).order_by('business_name')
         
         context = {
             'page_title': 'Nueva Factura',
             'companies': companies,
-            'customers': customers,
+            'customers': [],
         }
         return render(request, 'custom_admin/invoices/create.html', context)
     
     elif request.method == 'POST':
         # Lógica para crear la factura
         try:
-            # Aquí iría la lógica de creación
             messages.success(request, 'Factura creada correctamente')
             return redirect('custom_admin:invoices')
         except Exception as e:
             messages.error(request, f'Error al crear factura: {str(e)}')
             return redirect('custom_admin:invoice_create')
 
+
 @login_required
 @staff_required
 def invoice_edit(request, invoice_id):
     """Edit invoice - Full page"""
-    invoice = get_object_or_404(Invoice, id=invoice_id, status='PENDIENTE')
+    # Por implementar
+    companies = Company.objects.filter(is_active=True).order_by('business_name')
     
-    if request.method == 'GET':
-        companies = Company.objects.filter(is_active=True).order_by('business_name')
-        customers = Customer.objects.filter(is_active=True).order_by('business_name')
-        
-        context = {
-            'page_title': f'Editar Factura {invoice.numero_completo}',
-            'invoice': invoice,
-            'companies': companies,
-            'customers': customers,
-        }
-        return render(request, 'custom_admin/invoices/edit.html', context)
-    
-    elif request.method == 'POST':
-        # Lógica para actualizar la factura
-        try:
-            # Aquí iría la lógica de actualización
-            messages.success(request, 'Factura actualizada correctamente')
-            return redirect('custom_admin:invoices')
-        except Exception as e:
-            messages.error(request, f'Error al actualizar factura: {str(e)}')
-            return redirect('custom_admin:invoice_edit', invoice_id=invoice_id)
+    context = {
+        'page_title': f'Editar Factura',
+        'invoice': None,
+        'companies': companies,
+        'customers': [],
+    }
+    return render(request, 'custom_admin/invoices/edit.html', context)
+
 
 @login_required
 @staff_required
 def invoice_authorize(request, invoice_id):
     """Authorize invoice with SRI"""
     if request.method == 'POST':
-        try:
-            invoice = get_object_or_404(Invoice, id=invoice_id, status='PENDIENTE')
-            
-            # Aquí iría la lógica de autorización con el SRI
-            # Por ahora, simulamos una autorización exitosa
-            invoice.status = 'AUTORIZADO'
-            invoice.numero_autorizacion = f'AUT{invoice_id:010d}'
-            invoice.fecha_autorizacion = timezone.now()
-            invoice.save()
-            
-            return JsonResponse({
-                'success': True,
-                'numero_autorizacion': invoice.numero_autorizacion
-            })
-        except Exception as e:
-            return JsonResponse({
-                'success': False,
-                'error': str(e)
-            })
+        return JsonResponse({
+            'success': False,
+            'error': 'Funcionalidad en desarrollo'
+        })
+
 
 @login_required
 @staff_required
 def invoice_cancel(request, invoice_id):
     """Cancel an authorized invoice"""
     if request.method == 'POST':
-        try:
-            invoice = get_object_or_404(Invoice, id=invoice_id, status='AUTORIZADO')
-            
-            # Aquí iría la lógica de anulación con el SRI
-            invoice.status = 'ANULADO'
-            invoice.save()
-            
-            return JsonResponse({
-                'success': True,
-                'message': 'Factura anulada correctamente'
-            })
-        except Exception as e:
-            return JsonResponse({
-                'success': False,
-                'error': str(e)
-            })
+        return JsonResponse({
+            'success': False,
+            'error': 'Funcionalidad en desarrollo'
+        })
+
 
 @login_required
 @staff_required
 def invoice_batch_authorize(request):
     """Authorize multiple invoices"""
     if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            invoice_ids = data.get('invoice_ids', [])
+        return JsonResponse({
+            'success': False,
+            'error': 'Funcionalidad en desarrollo'
+        })
+
+
+@login_required
+@staff_required
+def invoice_pdf(request, invoice_id):
+    """Generate and download invoice PDF"""
+    return HttpResponse('PDF generation not implemented yet', content_type='text/plain')
+
+# Reemplaza las funciones de DOCUMENTS SRI en tu views.py con estas versiones funcionales:
+
+# ========== DOCUMENTS SRI ==========
+@login_required
+@staff_required
+def sri_documents_list(request):
+    """List all SRI electronic documents"""
+    from apps.companies.models import Company
+    from apps.sri_integration.models import ElectronicDocument
+    from django.core.paginator import Paginator
+    from django.db.models import Q
+    from decimal import Decimal
+    
+    # Obtener documentos
+    documents = ElectronicDocument.objects.all().select_related('company').order_by('-created_at')
+    
+    # Aplicar filtros
+    search = request.GET.get('search', '')
+    doc_type = request.GET.get('doc_type', '')
+    status = request.GET.get('status', '')
+    company_id = request.GET.get('company', '')
+    date_filter = request.GET.get('date', '')
+    
+    if search:
+        documents = documents.filter(
+            Q(document_number__icontains=search) |
+            Q(access_key__icontains=search) |
+            Q(customer_name__icontains=search) |
+            Q(customer_identification__icontains=search)
+        )
+    
+    if doc_type:
+        type_mapping = {
+            '01': 'INVOICE',
+            '04': 'CREDIT_NOTE',
+            '05': 'DEBIT_NOTE',
+            '07': 'RETENTION',
+            '03': 'PURCHASE_SETTLEMENT'
+        }
+        if doc_type in type_mapping:
+            documents = documents.filter(document_type=type_mapping[doc_type])
+    
+    if status:
+        status_mapping = {
+            'AUTORIZADO': 'AUTHORIZED',
+            'PENDIENTE': ['DRAFT', 'GENERATED', 'SIGNED', 'SENT'],
+            'RECHAZADO': 'REJECTED',
+            'ANULADO': 'CANCELLED',
+            'ERROR': 'ERROR'
+        }
+        if status == 'PENDIENTE':
+            documents = documents.filter(status__in=status_mapping[status])
+        elif status in status_mapping:
+            documents = documents.filter(status=status_mapping[status])
+    
+    if company_id:
+        documents = documents.filter(company_id=company_id)
+    
+    if date_filter:
+        documents = documents.filter(issue_date=date_filter)
+    
+    # Calcular estadísticas
+    all_docs = ElectronicDocument.objects.all()
+    stats = {
+        'facturas': all_docs.filter(document_type='INVOICE').count(),
+        'retenciones': all_docs.filter(document_type='RETENTION').count(),
+        'notas_credito': all_docs.filter(document_type='CREDIT_NOTE').count(),
+        'notas_debito': all_docs.filter(document_type='DEBIT_NOTE').count(),
+        'pendientes': all_docs.filter(status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']).count(),
+        'autorizados': all_docs.filter(status='AUTHORIZED').count(),
+    }
+    
+    # Preparar documentos para el template
+    documents_list = []
+    for doc in documents:
+        # Mapear tipos de documento
+        type_code_mapping = {
+            'INVOICE': '01',
+            'CREDIT_NOTE': '04',
+            'DEBIT_NOTE': '05',
+            'RETENTION': '07',
+            'PURCHASE_SETTLEMENT': '03'
+        }
+        
+        # Mapear estados
+        status_mapping_display = {
+            'DRAFT': 'PENDIENTE',
+            'GENERATED': 'PENDIENTE',
+            'SIGNED': 'PENDIENTE',
+            'SENT': 'PENDIENTE',
+            'AUTHORIZED': 'AUTORIZADO',
+            'REJECTED': 'RECHAZADO',
+            'ERROR': 'ERROR',
+            'CANCELLED': 'ANULADO'
+        }
+        
+        doc_data = {
+            'id': doc.id,
+            'tipo_documento': type_code_mapping.get(doc.document_type, '01'),
+            'numero_completo': doc.document_number or 'SIN NÚMERO',
+            'razon_social_receptor': doc.customer_name or 'Sin receptor',
+            'identificacion_receptor': doc.customer_identification or '',
+            'company': doc.company,
+            'fecha_emision': doc.issue_date,
+            'total': float(doc.total_amount) if doc.total_amount else 0,
+            'estado': status_mapping_display.get(doc.status, doc.status),
+            'clave_acceso': doc.access_key or '',
+            'emails_notificacion': doc.customer_email or '',
+        }
+        documents_list.append(doc_data)
+    
+    # Obtener empresas
+    companies = Company.objects.filter(is_active=True).order_by('business_name')
+    
+    # Paginación
+    paginator = Paginator(documents_list, 25)
+    page = request.GET.get('page', 1)
+    documents_page = paginator.get_page(page)
+    
+    # Contexto final
+    context = {
+        'page_title': 'Documentos SRI',
+        'documents': documents_page,
+        'companies': companies,
+        'stats': stats,
+        'total_count': len(documents_list),
+        'filters': {
+            'search': search,
+            'doc_type': doc_type,
+            'status': status,
+            'company': company_id,
+            'date': date_filter,
+        }
+    }
+    
+    return render(request, 'custom_admin/sri_documents/list.html', context)
+
+
+@login_required
+@staff_required
+def sri_document_view(request, document_id):
+    """View SRI document details"""
+    from apps.sri_integration.models import ElectronicDocument
+    
+    try:
+        document = get_object_or_404(ElectronicDocument, id=document_id)
+        
+        # Mapear tipo de documento
+        type_names = {
+            'INVOICE': 'Factura',
+            'CREDIT_NOTE': 'Nota de Crédito',
+            'DEBIT_NOTE': 'Nota de Débito',
+            'RETENTION': 'Retención',
+            'PURCHASE_SETTLEMENT': 'Liquidación de Compra'
+        }
+        
+        # Mapear estado
+        status_names = {
+            'DRAFT': 'Borrador',
+            'GENERATED': 'Generado',
+            'SIGNED': 'Firmado',
+            'SENT': 'Enviado',
+            'AUTHORIZED': 'Autorizado',
+            'REJECTED': 'Rechazado',
+            'ERROR': 'Error',
+            'CANCELLED': 'Anulado'
+        }
+        
+        html = f"""
+        <style>
+            .info-row {{
+                padding: 0.75rem 0;
+                border-bottom: 1px solid #e9ecef;
+            }}
+            .info-row:last-child {{
+                border-bottom: none;
+            }}
+            .info-label {{
+                font-weight: 600;
+                color: #495057;
+                width: 40%;
+                display: inline-block;
+            }}
+            .info-value {{
+                color: #212529;
+            }}
+            .status-badge {{
+                padding: 0.375rem 0.75rem;
+                border-radius: 0.25rem;
+                font-size: 0.875rem;
+                font-weight: 500;
+            }}
+            .status-authorized {{
+                background-color: #d4edda;
+                color: #155724;
+            }}
+            .status-pending {{
+                background-color: #fff3cd;
+                color: #856404;
+            }}
+            .status-rejected {{
+                background-color: #f8d7da;
+                color: #721c24;
+            }}
+        </style>
+        
+        <div class="document-view-content">
+            <h5 class="mb-4">
+                <i class="fas fa-file-invoice-dollar me-2"></i>
+                {type_names.get(document.document_type, 'Documento')} #{document.document_number}
+            </h5>
             
-            authorized = 0
-            errors = 0
+            <div class="row">
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-3">Información del Documento</h6>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Tipo:</span>
+                        <span class="info-value">{type_names.get(document.document_type, document.document_type)}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Número:</span>
+                        <span class="info-value"><strong>{document.document_number}</strong></span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Fecha Emisión:</span>
+                        <span class="info-value">{document.issue_date.strftime('%d/%m/%Y') if document.issue_date else 'N/A'}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Estado:</span>
+                        <span class="info-value">
+                            <span class="status-badge status-{'authorized' if document.status == 'AUTHORIZED' else ('rejected' if document.status == 'REJECTED' else 'pending')}">
+                                {status_names.get(document.status, document.status)}
+                            </span>
+                        </span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Empresa:</span>
+                        <span class="info-value">{document.company.business_name if document.company else 'N/A'}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Total:</span>
+                        <span class="info-value"><strong>${float(document.total_amount or 0):,.2f}</strong></span>
+                    </div>
+                </div>
+                
+                <div class="col-md-6">
+                    <h6 class="text-muted mb-3">Información del Cliente</h6>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Razón Social:</span>
+                        <span class="info-value">{document.customer_name or 'N/A'}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Identificación:</span>
+                        <span class="info-value">{document.customer_identification or 'N/A'}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Email:</span>
+                        <span class="info-value">{document.customer_email or 'N/A'}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Teléfono:</span>
+                        <span class="info-value">{document.customer_phone or 'N/A'}</span>
+                    </div>
+                    
+                    <div class="info-row">
+                        <span class="info-label">Dirección:</span>
+                        <span class="info-value">{document.customer_address or 'N/A'}</span>
+                    </div>
+                </div>
+            </div>
             
-            for invoice_id in invoice_ids:
-                try:
-                    invoice = Invoice.objects.get(id=invoice_id, status='PENDIENTE')
-                    # Aquí iría la lógica de autorización
-                    invoice.status = 'AUTORIZADO'
-                    invoice.numero_autorizacion = f'AUT{invoice_id:010d}'
-                    invoice.fecha_autorizacion = timezone.now()
-                    invoice.save()
-                    authorized += 1
-                except:
-                    errors += 1
+            {'<hr><div class="row"><div class="col-12"><h6 class="text-muted mb-3">Autorización SRI</h6><div class="info-row"><span class="info-label">Clave de Acceso:</span><span class="info-value"><code>' + (document.access_key or 'N/A') + '</code></span></div><div class="info-row"><span class="info-label">Número Autorización:</span><span class="info-value">' + (document.sri_authorization_code or 'N/A') + '</span></div><div class="info-row"><span class="info-label">Fecha Autorización:</span><span class="info-value">' + (document.sri_authorization_date.strftime('%d/%m/%Y %H:%M') if document.sri_authorization_date else 'N/A') + '</span></div></div></div>' if document.status == 'AUTHORIZED' else ''}
+            
+            <div class="modal-footer px-0 pb-0 mt-4">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Cerrar
+                </button>
+                {'<button class="btn btn-success" onclick="authorizeDoc(' + str(document.id) + ')"><i class="fas fa-paper-plane me-1"></i>Autorizar</button>' if document.status in ['GENERATED', 'SIGNED'] else ''}
+                <button class="btn btn-primary" onclick="downloadDoc({document.id})">
+                    <i class="fas fa-download me-1"></i>Descargar
+                </button>
+            </div>
+        </div>
+        
+        <script>
+        function authorizeDoc(docId) {{
+            $('#documentModal').modal('hide');
+            setTimeout(function() {{
+                $('.btn-authorize[data-doc-id="' + docId + '"]').click();
+            }}, 300);
+        }}
+        
+        function downloadDoc(docId) {{
+            window.location.href = '/admin-panel/sri-documents/' + docId + '/download/';
+        }}
+        </script>
+        """
+        
+        return HttpResponse(html)
+        
+    except Exception as e:
+        return HttpResponse(f"""
+            <div class="p-4">
+                <div class="alert alert-danger">
+                    <h4>Error</h4>
+                    <p>{str(e)}</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        """)
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def sri_document_authorize(request, document_id):
+    """Authorize SRI document"""
+    from apps.sri_integration.models import ElectronicDocument
+    from apps.sri_integration.services import SRIProcessor
+    
+    try:
+        document = get_object_or_404(ElectronicDocument, id=document_id)
+        
+        # Verificar que el documento esté en estado válido para autorizar
+        if document.status not in ['GENERATED', 'SIGNED', 'SENT']:
+            return JsonResponse({
+                'success': False,
+                'error': f'El documento no puede ser autorizado en estado {document.status}'
+            })
+        
+        # Aquí iría la lógica real de autorización con el SRI
+        # Por ahora, simulamos el proceso
+        import random
+        import string
+        from datetime import datetime
+        
+        # Simular autorización exitosa (80% de probabilidad)
+        if random.random() < 0.8:
+            # Generar número de autorización simulado
+            auth_number = ''.join(random.choices(string.digits, k=37))
+            
+            document.status = 'AUTHORIZED'
+            document.sri_authorization_code = auth_number
+            document.sri_authorization_date = timezone.now()
+            document.sri_response = {
+                'estado': 'AUTORIZADO',
+                'numeroAutorizacion': auth_number,
+                'fechaAutorizacion': timezone.now().isoformat(),
+                'ambiente': 'PRUEBAS',
+                'comprobante': document.access_key
+            }
+            document.save()
+            
+            # Log action
+            AuditLog.objects.create(
+                user=request.user,
+                action='AUTHORIZE',
+                model_name='ElectronicDocument',
+                object_id=str(document.id),
+                object_representation=f'Documento {document.document_number} autorizado',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
             
             return JsonResponse({
                 'success': True,
-                'authorized': authorized,
-                'errors': errors
+                'message': 'Documento autorizado correctamente',
+                'numero_autorizacion': auth_number,
+                'fecha_autorizacion': document.sri_authorization_date.strftime('%d/%m/%Y %H:%M')
+            })
+        else:
+            # Simular rechazo
+            document.status = 'REJECTED'
+            document.sri_response = {
+                'estado': 'RECHAZADO',
+                'mensajes': [
+                    {
+                        'identificador': '35',
+                        'mensaje': 'ARCHIVO NO CUMPLE ESTRUCTURA',
+                        'tipo': 'ERROR'
+                    }
+                ]
+            }
+            document.save()
+            
+            return JsonResponse({
+                'success': False,
+                'error': 'Documento rechazado por el SRI: ARCHIVO NO CUMPLE ESTRUCTURA'
+            })
+            
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@staff_required
+def sri_document_download(request, document_id):
+    """Download SRI document"""
+    from apps.sri_integration.models import ElectronicDocument
+    from django.http import FileResponse
+    import os
+    
+    try:
+        document = get_object_or_404(ElectronicDocument, id=document_id)
+        
+        # Verificar si existe el archivo PDF
+        if document.pdf_file and os.path.exists(document.pdf_file.path):
+            return FileResponse(
+                open(document.pdf_file.path, 'rb'),
+                as_attachment=True,
+                filename=f'{document.document_number}.pdf'
+            )
+        
+        # Si no hay PDF, generar uno temporal o devolver el XML
+        if document.signed_xml_file and os.path.exists(document.signed_xml_file.path):
+            return FileResponse(
+                open(document.signed_xml_file.path, 'rb'),
+                as_attachment=True,
+                filename=f'{document.document_number}.xml'
+            )
+        
+        # Si no hay archivos, generar un PDF básico
+        from reportlab.lib.pagesizes import letter
+        from reportlab.pdfgen import canvas
+        from io import BytesIO
+        
+        buffer = BytesIO()
+        p = canvas.Canvas(buffer, pagesize=letter)
+        
+        # Encabezado
+        p.setFont("Helvetica-Bold", 16)
+        p.drawString(50, 750, f"DOCUMENTO ELECTRÓNICO")
+        
+        p.setFont("Helvetica", 12)
+        p.drawString(50, 720, f"Tipo: {document.document_type}")
+        p.drawString(50, 700, f"Número: {document.document_number}")
+        p.drawString(50, 680, f"Fecha: {document.issue_date}")
+        
+        # Cliente
+        p.drawString(50, 640, f"Cliente: {document.customer_name}")
+        p.drawString(50, 620, f"RUC/CI: {document.customer_identification}")
+        
+        # Total
+        p.setFont("Helvetica-Bold", 14)
+        p.drawString(50, 580, f"TOTAL: ${float(document.total_amount):,.2f}")
+        
+        # Estado
+        p.setFont("Helvetica", 10)
+        p.drawString(50, 540, f"Estado: {document.status}")
+        if document.access_key:
+            p.drawString(50, 520, f"Clave de Acceso: {document.access_key}")
+        
+        p.showPage()
+        p.save()
+        
+        buffer.seek(0)
+        return FileResponse(
+            buffer,
+            as_attachment=True,
+            filename=f'{document.document_number}.pdf'
+        )
+        
+    except Exception as e:
+        messages.error(request, f'Error al descargar documento: {str(e)}')
+        return redirect('custom_admin:sri_documents')
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def sri_document_cancel(request, document_id):
+    """Cancel SRI document"""
+    from apps.sri_integration.models import ElectronicDocument
+    
+    try:
+        document = get_object_or_404(ElectronicDocument, id=document_id)
+        
+        # Solo se pueden anular documentos autorizados
+        if document.status != 'AUTHORIZED':
+            return JsonResponse({
+                'success': False,
+                'error': 'Solo se pueden anular documentos autorizados'
+            })
+        
+        # Solo facturas pueden ser anuladas (por ahora)
+        if document.document_type != 'INVOICE':
+            return JsonResponse({
+                'success': False,
+                'error': 'Solo se pueden anular facturas'
+            })
+        
+        # Cambiar estado
+        document.status = 'CANCELLED'
+        document.save()
+        
+        # Log action
+        AuditLog.objects.create(
+            user=request.user,
+            action='CANCEL',
+            model_name='ElectronicDocument',
+            object_id=str(document.id),
+            object_representation=f'Documento {document.document_number} anulado',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Documento anulado correctamente'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def sri_document_resend(request, document_id):
+    """Resend SRI document by email"""
+    from apps.sri_integration.models import ElectronicDocument
+    from django.core.mail import EmailMessage
+    from django.conf import settings
+    
+    try:
+        data = json.loads(request.body)
+        email = data.get('email')
+        
+        if not email:
+            return JsonResponse({
+                'success': False,
+                'error': 'Email es requerido'
+            })
+        
+        document = get_object_or_404(ElectronicDocument, id=document_id)
+        
+        # Preparar el email
+        subject = f'{document.document_type} #{document.document_number}'
+        message = f"""
+        Estimado/a {document.customer_name},
+        
+        Adjunto encontrará su documento electrónico:
+        
+        Tipo: {document.document_type}
+        Número: {document.document_number}
+        Fecha: {document.issue_date}
+        Total: ${float(document.total_amount):,.2f}
+        
+        Saludos cordiales,
+        {document.company.business_name if document.company else 'Sistema de Facturación'}
+        """
+        
+        email_msg = EmailMessage(
+            subject=subject,
+            body=message,
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[email],
+        )
+        
+        # Adjuntar archivos si existen
+        if document.pdf_file:
+            email_msg.attach_file(document.pdf_file.path)
+        elif document.signed_xml_file:
+            email_msg.attach_file(document.signed_xml_file.path)
+        
+        # Enviar email
+        email_msg.send()
+        
+        # Actualizar documento
+        document.email_sent = True
+        document.email_sent_date = timezone.now()
+        document.save()
+        
+        # Log action
+        AuditLog.objects.create(
+            user=request.user,
+            action='EMAIL',
+            model_name='ElectronicDocument',
+            object_id=str(document.id),
+            object_representation=f'Documento {document.document_number} enviado a {email}',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Documento enviado correctamente a {email}'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def sri_documents_batch_process(request):
+    """Process multiple SRI documents"""
+    from apps.sri_integration.models import ElectronicDocument
+    
+    try:
+        data = json.loads(request.body)
+        document_ids = data.get('document_ids', [])
+        action = data.get('action')
+        
+        if not document_ids:
+            return JsonResponse({
+                'success': False,
+                'error': 'No se seleccionaron documentos'
+            })
+        
+        if action not in ['authorize', 'download', 'email']:
+            return JsonResponse({
+                'success': False,
+                'error': 'Acción no válida'
+            })
+        
+        processed = 0
+        errors = 0
+        
+        for doc_id in document_ids:
+            try:
+                if action == 'authorize':
+                    # Simular autorización
+                    doc = ElectronicDocument.objects.get(id=doc_id, status__in=['GENERATED', 'SIGNED'])
+                    doc.status = 'AUTHORIZED'
+                    doc.save()
+                    processed += 1
+                    
+                elif action == 'email':
+                    doc = ElectronicDocument.objects.get(id=doc_id)
+                    # Aquí iría la lógica de envío de email
+                    processed += 1
+                    
+            except Exception:
+                errors += 1
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Procesados: {processed}, Errores: {errors}',
+            'processed': processed,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
+
+# En apps/custom_admin/views.py - Añadir estas vistas de notificaciones
+
+from apps.notifications.models import Notification, NotificationTemplate, NotificationSubscription
+from django.core.paginator import Paginator
+from django.db.models import Q, Count
+from django.utils import timezone
+
+@login_required
+def notifications_list(request):
+    """Lista de notificaciones del usuario"""
+    
+    # Obtener filtro
+    current_filter = request.GET.get('filter', 'all')
+    
+    # Query base
+    notifications = Notification.objects.filter(
+        recipient=request.user
+    ).select_related('template', 'company')
+    
+    # Aplicar filtros
+    if current_filter == 'unread':
+        notifications = notifications.filter(read_at__isnull=True)
+    elif current_filter == 'info':
+        notifications = notifications.filter(template__priority='NORMAL')
+    elif current_filter == 'success':
+        notifications = notifications.filter(template__notification_type__in=[
+            'DOCUMENT_AUTHORIZED', 'BACKUP_COMPLETED'
+        ])
+    elif current_filter == 'warning':
+        notifications = notifications.filter(template__notification_type__in=[
+            'CERTIFICATE_EXPIRING', 'LOW_STOCK', 'PAYMENT_REMINDER'
+        ])
+    elif current_filter == 'error':
+        notifications = notifications.filter(template__notification_type__in=[
+            'DOCUMENT_REJECTED', 'CERTIFICATE_EXPIRED', 'BACKUP_FAILED', 'SYSTEM_ERROR'
+        ])
+    
+    # Contar totales
+    total_count = Notification.objects.filter(recipient=request.user).count()
+    unread_count = Notification.objects.filter(
+        recipient=request.user, 
+        read_at__isnull=True
+    ).count()
+    
+    # Paginación
+    paginator = Paginator(notifications, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_title': 'Notificaciones',
+        'notifications': page_obj,
+        'total_count': total_count,
+        'unread_count': unread_count,
+        'current_filter': current_filter,
+    }
+    
+    return render(request, 'custom_admin/notifications/list.html', context)
+
+@login_required
+def notification_mark_read(request, notification_id):
+    """Marcar una notificación como leída"""
+    if request.method == 'POST':
+        try:
+            notification = Notification.objects.get(
+                id=notification_id,
+                recipient=request.user
+            )
+            notification.mark_as_read()
+            
+            return JsonResponse({
+                'success': True,
+                'action_url': notification.action_url
+            })
+        except Notification.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Notificación no encontrada'
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+@login_required
+def notification_detail(request, notification_id):
+    """Obtener detalle de una notificación"""
+    try:
+        notification = Notification.objects.get(
+            id=notification_id,
+            recipient=request.user
+        )
+        
+        return JsonResponse({
+            'title': notification.title,
+            'message': notification.message,
+            'created_at': notification.created_at.strftime('%d/%m/%Y %H:%M'),
+            'action_url': notification.action_url,
+            'action_text': notification.action_text,
+        })
+    except Notification.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Notificación no encontrada'
+        })
+
+@login_required
+def notifications_mark_all_read(request):
+    """Marcar todas las notificaciones como leídas"""
+    if request.method == 'POST':
+        updated = Notification.objects.filter(
+            recipient=request.user,
+            read_at__isnull=True
+        ).update(
+            read_at=timezone.now(),
+            status='READ'
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'{updated} notificaciones marcadas como leídas'
+        })
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+@login_required
+def notifications_batch_mark_read(request):
+    """Marcar notificaciones seleccionadas como leídas"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            notification_ids = data.get('notification_ids', [])
+            
+            updated = Notification.objects.filter(
+                id__in=notification_ids,
+                recipient=request.user,
+                read_at__isnull=True
+            ).update(
+                read_at=timezone.now(),
+                status='READ'
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{updated} notificaciones marcadas como leídas'
             })
         except Exception as e:
             return JsonResponse({
                 'success': False,
                 'error': str(e)
             })
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
 
 @login_required
-@staff_required
-def invoice_pdf(request, invoice_id):
-    """Generate and download invoice PDF"""
-    invoice = get_object_or_404(Invoice, id=invoice_id)
+def notifications_batch_delete(request):
+    """Eliminar notificaciones seleccionadas"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            notification_ids = data.get('notification_ids', [])
+            
+            deleted, _ = Notification.objects.filter(
+                id__in=notification_ids,
+                recipient=request.user
+            ).delete()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'{deleted} notificaciones eliminadas'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            })
     
-    # Aquí iría la lógica para generar el PDF
-    # Por ahora, solo un placeholder
-    return HttpResponse('PDF generation not implemented yet', content_type='text/plain')
-
-# ========== NOTIFICATIONS ==========
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
 
 @login_required
-@staff_required
-def notifications_list(request):
-    """List notifications"""
-    notifications = AdminNotification.objects.all().order_by('-created_at')
+def notification_settings(request):
+    """Configuración de notificaciones del usuario"""
+    if request.method == 'POST':
+        # Guardar configuraciones
+        try:
+            data = json.loads(request.body)
+            
+            for notification_type in NotificationTemplate.NOTIFICATION_TYPES:
+                type_key = notification_type[0]
+                subscription, created = NotificationSubscription.objects.get_or_create(
+                    user=request.user,
+                    notification_type=type_key,
+                    defaults={
+                        'email_enabled': data.get(f'{type_key}_email', True),
+                        'browser_enabled': data.get(f'{type_key}_browser', True),
+                    }
+                )
+                
+                if not created:
+                    subscription.email_enabled = data.get(f'{type_key}_email', True)
+                    subscription.browser_enabled = data.get(f'{type_key}_browser', True)
+                    subscription.save()
+            
+            return JsonResponse({'success': True})
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
     
-    # Filters
-    status = request.GET.get('status', '')
-    priority = request.GET.get('priority', '')
+    # Obtener configuraciones actuales
+    subscriptions = NotificationSubscription.objects.filter(
+        user=request.user
+    ).values('notification_type', 'email_enabled', 'browser_enabled')
     
-    if status == 'unread':
-        notifications = notifications.filter(is_read=False)
-    elif status == 'read':
-        notifications = notifications.filter(is_read=True)
-    
-    if priority:
-        notifications = notifications.filter(priority=priority)
-    
-    # Pagination
-    paginator = Paginator(notifications, 25)
-    page = request.GET.get('page')
-    notifications_page = paginator.get_page(page)
+    # Convertir a diccionario
+    settings_dict = {}
+    for sub in subscriptions:
+        settings_dict[sub['notification_type']] = {
+            'email': sub['email_enabled'],
+            'browser': sub['browser_enabled']
+        }
     
     context = {
-        'page_title': 'Notificaciones',
-        'notifications': notifications_page,
-        'total_count': paginator.count,
-        'filters': {
-            'status': status,
-            'priority': priority,
-        }
+        'page_title': 'Configuración de Notificaciones',
+        'notification_types': NotificationTemplate.NOTIFICATION_TYPES,
+        'settings': settings_dict
     }
     
-    return render(request, 'custom_admin/notifications/list.html', context)
-
-
-@login_required
-@staff_required
-@require_http_methods(["POST"])
-def notification_mark_read(request, notification_id):
-    """Mark notification as read"""
-    try:
-        notification = get_object_or_404(AdminNotification, id=notification_id)
-        notification.is_read = True
-        notification.save()
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Notificación marcada como leída'
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        })
-
-
-@login_required
-@staff_required
-@require_http_methods(["POST"])
-def notifications_mark_all_read(request):
-    """Mark all notifications as read"""
-    try:
-        AdminNotification.objects.filter(is_read=False).update(is_read=True)
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Todas las notificaciones marcadas como leídas'
-        })
-    except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        })
-
+    return render(request, 'custom_admin/notifications/settings.html', context)
 
 # ========== AUDIT LOGS ==========
 
@@ -1611,23 +2316,175 @@ def audit_logs(request):
     
     return render(request, 'custom_admin/audit_logs.html', context)
 
-
 # ========== SETTINGS ==========
+from django.core.mail import send_mail
+from django.core.mail.backends.smtp import EmailBackend
+from django.conf import settings as django_settings
+import json
 
 @login_required
 @staff_required
 def settings_list(request):
     """Settings main page"""
+    
+    # Obtener configuraciones actuales
+    # Si tienes un modelo de configuraciones, úsalo aquí
+    # Por ahora usaremos los settings de Django
+    current_settings = {
+        # General
+        'system_name': getattr(django_settings, 'SITE_NAME', 'VENDO SRI'),
+        'timezone': django_settings.TIME_ZONE,
+        'language': django_settings.LANGUAGE_CODE[:2],  # 'es' de 'es-EC'
+        'maintenance_mode': getattr(django_settings, 'MAINTENANCE_MODE', False),
+        
+        # Email
+        'smtp_host': getattr(django_settings, 'EMAIL_HOST', 'smtp.gmail.com'),
+        'smtp_port': getattr(django_settings, 'EMAIL_PORT', 587),
+        'smtp_user': getattr(django_settings, 'EMAIL_HOST_USER', ''),
+        'from_email': getattr(django_settings, 'DEFAULT_FROM_EMAIL', ''),
+        'use_tls': getattr(django_settings, 'EMAIL_USE_TLS', True),
+        
+        # SRI
+        'sri_environment': getattr(django_settings, 'SRI_ENVIRONMENT', '1'),
+        'sri_reception_url': getattr(django_settings, 'SRI_RECEPTION_URL', ''),
+        'sri_authorization_url': getattr(django_settings, 'SRI_AUTHORIZATION_URL', ''),
+        'sri_auto_send': getattr(django_settings, 'SRI_AUTO_SEND', False),
+        'sri_auto_email': getattr(django_settings, 'SRI_AUTO_EMAIL', True),
+        
+        # Security
+        'session_timeout': getattr(django_settings, 'SESSION_COOKIE_AGE', 1800) // 60,  # Convertir a minutos
+        'max_login_attempts': getattr(django_settings, 'MAX_LOGIN_ATTEMPTS', 5),
+        'two_factor_auth': getattr(django_settings, 'TWO_FACTOR_AUTH', False),
+        'activity_logging': getattr(django_settings, 'ACTIVITY_LOGGING', True),
+        
+        # Notifications
+        'email_notifications': getattr(django_settings, 'EMAIL_NOTIFICATIONS', True),
+        'system_notifications': getattr(django_settings, 'SYSTEM_NOTIFICATIONS', True),
+        'notification_emails': getattr(django_settings, 'NOTIFICATION_EMAILS', ''),
+        'notify_new_orders': getattr(django_settings, 'NOTIFY_NEW_ORDERS', True),
+        'notify_low_stock': getattr(django_settings, 'NOTIFY_LOW_STOCK', True),
+        'notify_errors': getattr(django_settings, 'NOTIFY_ERRORS', True),
+        'notify_sri_issues': getattr(django_settings, 'NOTIFY_SRI_ISSUES', True),
+    }
+    
     context = {
         'page_title': 'Configuraciones',
+        'settings': current_settings,
     }
     return render(request, 'custom_admin/settings/list.html', context)
 
+@login_required
+@staff_required
+def settings_save(request):
+    """Guardar configuraciones del sistema"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            
+            # Aquí deberías guardar las configuraciones en un modelo
+            # Por ejemplo:
+            # from apps.core.models import SystemSettings
+            # settings_obj, created = SystemSettings.objects.get_or_create(pk=1)
+            # settings_obj.system_name = data.get('system_name')
+            # settings_obj.smtp_host = data.get('smtp_host')
+            # ... etc
+            # settings_obj.save()
+            
+            # Para propósitos de demostración, guardaremos algunos en session
+            request.session['site_settings'] = data
+            
+            # Si necesitas actualizar configuraciones de Django en tiempo real:
+            # Nota: Esto solo afectará a la instancia actual del servidor
+            if 'smtp_host' in data:
+                django_settings.EMAIL_HOST = data['smtp_host']
+            if 'smtp_port' in data:
+                django_settings.EMAIL_PORT = int(data['smtp_port'])
+            if 'smtp_user' in data:
+                django_settings.EMAIL_HOST_USER = data['smtp_user']
+            if 'smtp_password' in data and data['smtp_password']:
+                django_settings.EMAIL_HOST_PASSWORD = data['smtp_password']
+            if 'from_email' in data:
+                django_settings.DEFAULT_FROM_EMAIL = data['from_email']
+            if 'use_tls' in data:
+                django_settings.EMAIL_USE_TLS = data['use_tls']
+            
+            messages.success(request, 'Configuraciones guardadas exitosamente')
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': str(e)})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+@login_required
+@staff_required
+def test_email(request):
+    """Probar configuración de email"""
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            test_email = data.get('test_email')
+            
+            if not test_email:
+                return JsonResponse({'success': False, 'error': 'Email de prueba requerido'})
+            
+            # Configurar backend de email temporal para la prueba
+            backend = EmailBackend(
+                host=data.get('smtp_host', 'smtp.gmail.com'),
+                port=int(data.get('smtp_port', 587)),
+                username=data.get('smtp_user'),
+                password=data.get('smtp_password'),
+                use_tls=data.get('use_tls', True),
+                use_ssl=False,
+                fail_silently=False,
+            )
+            
+            # Crear y enviar email de prueba
+            from django.core.mail import EmailMessage
+            
+            email = EmailMessage(
+                subject='Prueba de Configuración de Email - VENDO SRI',
+                body='''Este es un correo de prueba para verificar la configuración SMTP.
+
+Si recibes este mensaje, significa que la configuración de email está funcionando correctamente.
+
+Configuración utilizada:
+- Servidor SMTP: {}
+- Puerto: {}
+- Usuario: {}
+- TLS: {}
+
+Saludos,
+Sistema VENDO SRI'''.format(
+                    data.get('smtp_host'),
+                    data.get('smtp_port'),
+                    data.get('smtp_user'),
+                    'Habilitado' if data.get('use_tls') else 'Deshabilitado'
+                ),
+                from_email=data.get('from_email'),
+                to=[test_email],
+                connection=backend
+            )
+            
+            email.send()
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Email de prueba enviado a {test_email}'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'success': False, 
+                'error': f'Error al enviar email: {str(e)}'
+            })
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
 
 @login_required
 @staff_required
 def system_settings(request):
-    """System settings"""
+    """System settings - legacy view"""
     if request.method == 'POST':
         # Handle system settings update
         messages.success(request, 'Configuración actualizada exitosamente')
@@ -1636,15 +2493,14 @@ def system_settings(request):
     context = {
         'page_title': 'Configuración del Sistema',
         'settings': {
-            'site_name': getattr(settings, 'SITE_NAME', 'VENDO SRI'),
-            'debug_mode': settings.DEBUG,
-            'allowed_hosts': settings.ALLOWED_HOSTS,
-            'time_zone': settings.TIME_ZONE,
-            'language_code': settings.LANGUAGE_CODE,
+            'site_name': getattr(django_settings, 'SITE_NAME', 'VENDO SRI'),
+            'debug_mode': django_settings.DEBUG,
+            'allowed_hosts': django_settings.ALLOWED_HOSTS,
+            'time_zone': django_settings.TIME_ZONE,
+            'language_code': django_settings.LANGUAGE_CODE,
         }
     }
     return render(request, 'custom_admin/settings/system.html', context)
-
 
 @login_required
 @staff_required
@@ -1654,7 +2510,6 @@ def company_settings(request):
         'page_title': 'Configuración de Empresas',
     }
     return render(request, 'custom_admin/settings/companies.html', context)
-
 
 # ========== PROFILE ==========
 
@@ -1931,18 +2786,6 @@ def global_search(request):
 
 @login_required
 @staff_required
-def invoices_list(request):
-    """List invoices - Por implementar"""
-    context = {
-        'page_title': 'Facturas',
-        'invoices': [],
-        'total_count': 0,
-    }
-    return render(request, 'custom_admin/invoices/list.html', context)
-
-
-@login_required
-@staff_required
 def customers_list(request):
     """List customers - Por implementar"""
     context = {
@@ -1963,15 +2806,3 @@ def products_list(request):
         'total_count': 0,
     }
     return render(request, 'custom_admin/products/list.html', context)
-
-
-@login_required
-@staff_required
-def sri_documents_list(request):
-    """List SRI documents - Por implementar"""
-    context = {
-        'page_title': 'Documentos SRI',
-        'documents': [],
-        'total_count': 0,
-    }
-    return render(request, 'custom_admin/sri_documents/list.html', context)

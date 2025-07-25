@@ -50,19 +50,31 @@ urlpatterns = [
     # Products (placeholder)
     path('products/', views.products_list, name='products'),
     
-    # SRI Documents (placeholder)
+    # SRI Documents (completo)
     path('sri-documents/', views.sri_documents_list, name='sri_documents'),
-    
+    path('sri-documents/<int:document_id>/view/', views.sri_document_view, name='sri_document_view'),
+    path('sri-documents/<int:document_id>/authorize/', views.sri_document_authorize, name='sri_document_authorize'),
+    path('sri-documents/<int:document_id>/download/', views.sri_document_download, name='sri_document_download'),
+    path('sri-documents/<int:document_id>/cancel/', views.sri_document_cancel, name='sri_document_cancel'),
+    path('sri-documents/<int:document_id>/resend/', views.sri_document_resend, name='sri_document_resend'),
+    path('sri-documents/batch-process/', views.sri_documents_batch_process, name='sri_documents_batch_process'),
     # Settings
     path('settings/', views.settings_list, name='settings'),
+    path('settings/save/', views.settings_save, name='settings_save'),
+    path('settings/test-email/', views.test_email, name='test_email'),
     path('settings/system/', views.system_settings, name='system_settings'),
     path('settings/companies/', views.company_settings, name='company_settings'),
     
+
     # Notifications
     path('notifications/', views.notifications_list, name='notifications'),
-    path('notifications/mark-read/<int:notification_id>/', views.notification_mark_read, name='notification_mark_read'),
+    path('notifications/<int:notification_id>/mark-read/', views.notification_mark_read, name='notification_mark_read'),
+    path('notifications/<int:notification_id>/detail/', views.notification_detail, name='notification_detail'),
     path('notifications/mark-all-read/', views.notifications_mark_all_read, name='notifications_mark_all_read'),
-    
+    path('notifications/batch-mark-read/', views.notifications_batch_mark_read, name='notifications_batch_mark_read'),
+    path('notifications/batch-delete/', views.notifications_batch_delete, name='notifications_batch_delete'),
+    path('notifications/settings/', views.notification_settings, name='notification_settings'),
+
     # Audit Logs
     path('audit-logs/', views.audit_logs, name='audit_logs'),
     

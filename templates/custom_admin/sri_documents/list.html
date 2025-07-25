@@ -32,9 +32,9 @@
         color: #e65100;
     }
     
-    .doc-type-badge.guia-remision {
-        background-color: #e0f2f1;
-        color: #00695c;
+    .doc-type-badge.liquidacion {
+        background-color: #e1f5fe;
+        color: #01579b;
     }
     
     .doc-status {
@@ -126,6 +126,10 @@
         font-size: 0.875rem;
         color: #6c757d;
     }
+    
+    .text-purple {
+        color: #6f42c1;
+    }
 </style>
 {% endblock %}
 
@@ -134,37 +138,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h2 class="mb-0">Documentos Electrónicos SRI</h2>
-        <p class="text-muted mb-0">Gestión unificada de todos los comprobantes electrónicos</p>
-    </div>
-    <div>
-        <div class="btn-group" role="group">
-            <button type="button" class="btn btn-admin btn-admin-primary dropdown-toggle" data-bs-toggle="dropdown">
-                <i class="fas fa-plus"></i> Nuevo Documento
-            </button>
-            <ul class="dropdown-menu">
-                <li><a class="dropdown-item" href="{% url 'custom_admin:invoice_create' %}">
-                    <i class="fas fa-file-invoice text-primary"></i> Factura
-                </a></li>
-                <li><a class="dropdown-item" href="#">
-                    <i class="fas fa-hand-holding-usd text-purple"></i> Retención
-                </a></li>
-                <li><a class="dropdown-item" href="#">
-                    <i class="fas fa-undo text-success"></i> Nota de Crédito
-                </a></li>
-                <li><a class="dropdown-item" href="#">
-                    <i class="fas fa-plus-circle text-warning"></i> Nota de Débito
-                </a></li>
-                <li><a class="dropdown-item" href="#">
-                    <i class="fas fa-truck text-info"></i> Guía de Remisión
-                </a></li>
-            </ul>
-        </div>
-        <button class="btn btn-admin btn-admin-warning" id="btnBatchProcess">
-            <i class="fas fa-rocket"></i> Procesar Pendientes
-        </button>
-        <button class="btn btn-admin btn-admin-success" id="btnExportDocuments">
-            <i class="fas fa-download"></i> Exportar
-        </button>
+        <p class="text-muted mb-0">Total: {{ total_count }} documentos</p>
     </div>
 </div>
 
@@ -232,7 +206,7 @@
                         <option value="07" {% if filters.doc_type == '07' %}selected{% endif %}>Retención</option>
                         <option value="04" {% if filters.doc_type == '04' %}selected{% endif %}>Nota de Crédito</option>
                         <option value="05" {% if filters.doc_type == '05' %}selected{% endif %}>Nota de Débito</option>
-                        <option value="06" {% if filters.doc_type == '06' %}selected{% endif %}>Guía de Remisión</option>
+                        <option value="03" {% if filters.doc_type == '03' %}selected{% endif %}>Liquidación de Compra</option>
                     </select>
                 </div>
                 <div class="col-md-2">
@@ -248,11 +222,11 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label">Empresa</label>
-                    <select name="company" class="form-select select2">
+                    <select name="company" class="form-select">
                         <option value="">Todas</option>
                         {% for company in companies %}
                             <option value="{{ company.id }}" {% if filters.company == company.id|stringformat:"s" %}selected{% endif %}>
-                                {{ company.trade_name }}
+                                {{ company.business_name }}
                             </option>
                         {% endfor %}
                     </select>
@@ -298,9 +272,7 @@
                 {% for doc in documents %}
                 <tr data-doc-id="{{ doc.id }}" data-doc-type="{{ doc.tipo_documento }}">
                     <td>
-                        <input type="checkbox" class="doc-select form-check-input" 
-                               value="{{ doc.id }}"
-                               {% if doc.estado != 'PENDIENTE' %}disabled{% endif %}>
+                        <input type="checkbox" class="doc-select form-check-input" value="{{ doc.id }}">
                     </td>
                     <td>
                         {% if doc.tipo_documento == '01' %}
@@ -319,9 +291,9 @@
                             <span class="doc-type-badge nota-debito">
                                 <i class="fas fa-plus-circle"></i> N. Débito
                             </span>
-                        {% elif doc.tipo_documento == '06' %}
-                            <span class="doc-type-badge guia-remision">
-                                <i class="fas fa-truck"></i> Guía
+                        {% elif doc.tipo_documento == '03' %}
+                            <span class="doc-type-badge liquidacion">
+                                <i class="fas fa-file-contract"></i> Liquidación
                             </span>
                         {% endif %}
                     </td>
@@ -335,7 +307,7 @@
                         </div>
                     </td>
                     <td>
-                        <span class="badge bg-info">{{ doc.company.trade_name|truncatechars:20 }}</span>
+                        <span class="badge bg-info">{{ doc.company.business_name|truncatechars:20 }}</span>
                     </td>
                     <td>
                         <small>{{ doc.fecha_emision|date:"d/m/Y" }}</small>
@@ -364,6 +336,8 @@
                             <span class="doc-status error">
                                 <i class="fas fa-exclamation-triangle"></i> Error
                             </span>
+                        {% else %}
+                            <span class="doc-status">{{ doc.estado }}</span>
                         {% endif %}
                     </td>
                     <td>
@@ -378,7 +352,6 @@
                     <td>
                         <button class="btn btn-sm btn-outline-info btn-action btn-view" 
                                 data-doc-id="{{ doc.id }}"
-                                data-doc-type="{{ doc.tipo_documento }}"
                                 title="Ver documento">
                             <i class="fas fa-eye"></i>
                         </button>
@@ -391,7 +364,6 @@
                         {% endif %}
                         <button class="btn btn-sm btn-outline-secondary btn-action btn-download" 
                                 data-doc-id="{{ doc.id }}"
-                                data-doc-type="{{ doc.tipo_documento }}"
                                 title="Descargar">
                             <i class="fas fa-download"></i>
                         </button>
@@ -402,12 +374,6 @@
                             <i class="fas fa-ban"></i>
                         </button>
                         {% endif %}
-                        <button class="btn btn-sm btn-outline-primary btn-action btn-resend" 
-                                data-doc-id="{{ doc.id }}"
-                                data-emails="{{ doc.emails_notificacion }}"
-                                title="Reenviar email">
-                            <i class="fas fa-envelope"></i>
-                        </button>
                     </td>
                 </tr>
                 {% empty %}
@@ -469,67 +435,113 @@
     </div>
     {% endif %}
 </div>
-
-<!-- Document Modal -->
-<div class="modal fade" id="documentModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="documentModalTitle">
-                    <i class="fas fa-file-alt me-2"></i>Documento Electrónico
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="documentModalBody">
-                <!-- Content loaded via AJAX -->
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 $(document).ready(function() {
-    // Variables globales
-    var documentModal = new bootstrap.Modal(document.getElementById('documentModal'));
-    
-    // View Document
-    $(document).on('click', '.btn-view', function() {
-        var docId = $(this).data('doc-id');
-        var docType = $(this).data('doc-type');
-        
-        $('#documentModalTitle').html('<i class="fas fa-eye me-2"></i>Ver Documento');
-        
-        Swal.fire({
-            title: 'Cargando...',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            willOpen: function() {
-                Swal.showLoading();
+    // CSRF Token para peticiones AJAX
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
             }
-        });
-        
-        $.ajax({
-            url: "{% url 'custom_admin:sri_document_view' 0 %}".replace('0', docId),
-            type: 'GET',
-            success: function(html) {
-                Swal.close();
-                $('#documentModalBody').html(html);
-                documentModal.show();
-            },
-            error: function(xhr, status, error) {
-                Swal.close();
-                console.error("Error:", error);
-                Swal.fire('Error', 'No se pudo cargar el documento', 'error');
+        }
+        return cookieValue;
+    }
+    
+    const csrftoken = getCookie('csrftoken');
+    
+    // Configurar AJAX para incluir CSRF
+    $.ajaxSetup({
+        beforeSend: function(xhr, settings) {
+            if (!(/^http:.*/.test(settings.url) || /^https:.*/.test(settings.url))) {
+                xhr.setRequestHeader("X-CSRFToken", csrftoken);
+            }
+        }
+    });
+    
+    // Select all functionality
+    $('#selectAll').on('change', function() {
+        $('.doc-select').prop('checked', $(this).prop('checked'));
+        updateBatchActions();
+    });
+    
+    // Individual checkbox change
+    $('.doc-select').on('change', function() {
+        updateBatchActions();
+    });
+    
+    // Update batch actions visibility
+    function updateBatchActions() {
+        const selectedCount = $('.doc-select:checked').length;
+        if (selectedCount > 0) {
+            // Aquí podrías mostrar botones de acciones masivas
+            console.log(selectedCount + ' documentos seleccionados');
+        }
+    }
+    
+    // New Document dropdown
+    $('#btnNewDocument').on('click', function() {
+        Swal.fire({
+            title: 'Nuevo Documento',
+            text: 'Seleccione el tipo de documento a crear',
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: 'Crear Factura',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                window.location.href = "{% url 'custom_admin:invoice_create' %}";
             }
         });
     });
     
+    // View Document
+    $('.btn-view').on('click', function() {
+        var docId = $(this).data('doc-id');
+        var modal = $('#documentModal');
+        
+        // Si no existe el modal, créalo
+        if (modal.length === 0) {
+            $('body').append(`
+                <div class="modal fade" id="documentModal" tabindex="-1">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Detalle del Documento</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="text-center">
+                                    <div class="spinner-border" role="status">
+                                        <span class="visually-hidden">Cargando...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+            modal = $('#documentModal');
+        }
+        
+        // Cargar contenido
+        modal.find('.modal-body').load("{% url 'custom_admin:sri_document_view' 0 %}".replace('0', docId));
+        modal.modal('show');
+    });
+    
     // Authorize Document
-    $(document).on('click', '.btn-authorize', function() {
+    $('.btn-authorize').on('click', function() {
         var docId = $(this).data('doc-id');
         var button = $(this);
+        var row = button.closest('tr');
         
         Swal.fire({
             title: '¿Autorizar documento?',
@@ -537,255 +549,207 @@ $(document).ready(function() {
             icon: 'question',
             showCancelButton: true,
             confirmButtonText: 'Sí, autorizar',
-            cancelButtonText: 'Cancelar'
-        }).then(function(result) {
-            if (result.isConfirmed) {
-                button.prop('disabled', true);
-                button.html('<i class="fas fa-spinner fa-spin"></i>');
-                
-                $.ajax({
+            cancelButtonText: 'Cancelar',
+            showLoaderOnConfirm: true,
+            preConfirm: () => {
+                return $.ajax({
                     url: "{% url 'custom_admin:sri_document_authorize' 0 %}".replace('0', docId),
-                    type: 'POST',
+                    method: 'POST',
                     headers: {
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Documento autorizado',
-                                text: 'Clave de acceso: ' + response.clave_acceso,
-                                timer: 3000
-                            }).then(function() {
-                                location.reload();
-                            });
-                        } else {
-                            button.prop('disabled', false);
-                            button.html('<i class="fas fa-paper-plane"></i>');
-                            Swal.fire('Error', response.error || 'No se pudo autorizar', 'error');
-                        }
-                    },
-                    error: function() {
-                        button.prop('disabled', false);
-                        button.html('<i class="fas fa-paper-plane"></i>');
-                        Swal.fire('Error', 'Error al autorizar documento', 'error');
+                        'X-CSRFToken': csrftoken
                     }
+                }).catch(error => {
+                    Swal.showValidationMessage(`Error: ${error.responseJSON?.error || 'Error desconocido'}`);
                 });
+            },
+            allowOutsideClick: () => !Swal.isLoading()
+        }).then((result) => {
+            if (result.isConfirmed && result.value.success) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Autorizado!',
+                    html: `
+                        <p>Documento autorizado correctamente</p>
+                        <p><strong>Número de autorización:</strong><br>${result.value.numero_autorizacion}</p>
+                        <p><strong>Fecha:</strong> ${result.value.fecha_autorizacion}</p>
+                    `,
+                    confirmButtonText: 'Aceptar'
+                }).then(() => {
+                    // Recargar la página para ver los cambios
+                    location.reload();
+                });
+            } else if (result.isConfirmed && !result.value.success) {
+                Swal.fire('Error', result.value.error, 'error');
             }
         });
     });
     
     // Download Document
-    $(document).on('click', '.btn-download', function() {
+    $('.btn-download').on('click', function() {
         var docId = $(this).data('doc-id');
-        var docType = $(this).data('doc-type');
-        
-        // Abrir en nueva ventana
-        window.open("{% url 'custom_admin:sri_document_download' 0 %}".replace('0', docId), '_blank');
+        window.location.href = "{% url 'custom_admin:sri_document_download' 0 %}".replace('0', docId);
     });
     
     // Cancel Document
-    $(document).on('click', '.btn-cancel', function() {
+    $('.btn-cancel').on('click', function() {
         var docId = $(this).data('doc-id');
+        var button = $(this);
         
         Swal.fire({
             title: '¿Anular documento?',
-            text: 'Esta acción no se puede deshacer y se notificará al SRI',
+            text: 'Esta acción no se puede deshacer',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#dc3545',
             confirmButtonText: 'Sí, anular',
             cancelButtonText: 'No, cancelar'
-        }).then(function(result) {
+        }).then((result) => {
             if (result.isConfirmed) {
                 $.ajax({
                     url: "{% url 'custom_admin:sri_document_cancel' 0 %}".replace('0', docId),
-                    type: 'POST',
+                    method: 'POST',
                     headers: {
-                        'X-CSRFToken': '{{ csrf_token }}'
+                        'X-CSRFToken': csrftoken
                     },
                     success: function(response) {
                         if (response.success) {
-                            Swal.fire('Anulado', 'El documento ha sido anulado', 'success')
-                                .then(function() {
-                                    location.reload();
-                                });
-                        } else {
-                            Swal.fire('Error', response.error || 'No se pudo anular', 'error');
-                        }
-                    },
-                    error: function() {
-                        Swal.fire('Error', 'Error al anular documento', 'error');
-                    }
-                });
-            }
-        });
-    });
-    
-    // Resend Email
-    $(document).on('click', '.btn-resend', function() {
-        var docId = $(this).data('doc-id');
-        var emails = $(this).data('emails');
-        
-        Swal.fire({
-            title: 'Reenviar documento por email',
-            input: 'email',
-            inputLabel: 'Correo electrónico',
-            inputValue: emails,
-            inputPlaceholder: 'correo@ejemplo.com',
-            showCancelButton: true,
-            confirmButtonText: 'Enviar',
-            cancelButtonText: 'Cancelar',
-            inputValidator: function(value) {
-                if (!value) {
-                    return 'Debes ingresar un email';
-                }
-                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-                    return 'Email inválido';
-                }
-            }
-        }).then(function(result) {
-            if (result.isConfirmed) {
-                $.ajax({
-                    url: "{% url 'custom_admin:sri_document_resend' 0 %}".replace('0', docId),
-                    type: 'POST',
-                    headers: {
-                        'X-CSRFToken': '{{ csrf_token }}'
-                    },
-                    data: {
-                        email: result.value
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'Email enviado',
-                                text: 'El documento fue enviado correctamente',
-                                timer: 2000
+                            Swal.fire('Anulado!', response.message, 'success').then(() => {
+                                location.reload();
                             });
                         } else {
-                            Swal.fire('Error', response.error || 'No se pudo enviar', 'error');
+                            Swal.fire('Error', response.error, 'error');
                         }
                     },
                     error: function() {
-                        Swal.fire('Error', 'Error al enviar email', 'error');
+                        Swal.fire('Error', 'No se pudo anular el documento', 'error');
                     }
                 });
             }
         });
     });
     
-    // Select All
-    $('#selectAll').on('change', function() {
-        $('.doc-select:not(:disabled)').prop('checked', $(this).prop('checked'));
-        updateBatchButtons();
-    });
-    
-    // Individual checkbox
-    $(document).on('change', '.doc-select', function() {
-        updateBatchButtons();
-    });
-    
-    // Update batch buttons
-    function updateBatchButtons() {
-        var selectedCount = $('.doc-select:checked').length;
-        $('#btnBatchProcess').prop('disabled', selectedCount === 0);
-        if (selectedCount > 0) {
-            $('#btnBatchProcess').html('<i class="fas fa-rocket"></i> Procesar ' + selectedCount + ' documentos');
-        } else {
-            $('#btnBatchProcess').html('<i class="fas fa-rocket"></i> Procesar Pendientes');
-        }
-    }
-    
-    // Batch Process
-    $('#btnBatchProcess').on('click', function() {
-        var selectedIds = [];
-        $('.doc-select:checked').each(function() {
-            selectedIds.push($(this).val());
-        });
-        
-        if (selectedIds.length === 0) {
-            // Si no hay seleccionados, procesar todos los pendientes
-            Swal.fire({
-                title: '¿Procesar todos los documentos pendientes?',
-                text: 'Se enviarán todos los documentos pendientes al SRI',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, procesar todos',
-                cancelButtonText: 'Cancelar'
-            }).then(function(result) {
-                if (result.isConfirmed) {
-                    processBatchDocuments([]);
-                }
-            });
-        } else {
-            // Procesar solo los seleccionados
-            Swal.fire({
-                title: '¿Procesar ' + selectedIds.length + ' documentos?',
-                text: 'Se enviarán los documentos seleccionados al SRI',
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, procesar',
-                cancelButtonText: 'Cancelar'
-            }).then(function(result) {
-                if (result.isConfirmed) {
-                    processBatchDocuments(selectedIds);
-                }
-            });
-        }
-    });
-    
-    function processBatchDocuments(documentIds) {
-        Swal.fire({
-            title: 'Procesando...',
-            text: 'Enviando documentos al SRI, por favor espere',
-            allowOutsideClick: false,
-            showConfirmButton: false,
-            willOpen: function() {
-                Swal.showLoading();
-            }
-        });
-        
-        $.ajax({
-            url: "{% url 'custom_admin:sri_documents_batch_process' %}",
-            type: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            contentType: 'application/json',
-            data: JSON.stringify({ document_ids: documentIds }),
-            success: function(response) {
-                Swal.close();
-                if (response.success) {
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Proceso completado',
-                        html: 'Procesados: ' + response.processed + '<br>' +
-                              'Autorizados: ' + response.authorized + '<br>' +
-                              'Errores: ' + response.errors,
-                        timer: 5000
-                    }).then(function() {
-                        location.reload();
-                    });
-                } else {
-                    Swal.fire('Error', response.error || 'Error en el proceso', 'error');
-                }
-            },
-            error: function() {
-                Swal.close();
-                Swal.fire('Error', 'Error al procesar los documentos', 'error');
-            }
-        });
-    }
-    
-    // Export Data
+    // Export Documents
     $('#btnExportDocuments').on('click', function() {
-        var queryString = window.location.search;
-        window.location.href = "{% url 'custom_admin:export_data' 'sri_documents' %}" + queryString;
+        var selectedDocs = $('.doc-select:checked').map(function() {
+            return $(this).val();
+        }).get();
+        
+        if (selectedDocs.length > 0) {
+            Swal.fire({
+                title: 'Exportar Documentos',
+                text: `Se exportarán ${selectedDocs.length} documentos seleccionados`,
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Exportar',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Crear formulario temporal para enviar los IDs
+                    var form = $('<form>', {
+                        'method': 'POST',
+                        'action': "{% url 'custom_admin:export_data' 'sri_documents' %}"
+                    });
+                    
+                    form.append($('<input>', {
+                        'type': 'hidden',
+                        'name': 'csrfmiddlewaretoken',
+                        'value': csrftoken
+                    }));
+                    
+                    selectedDocs.forEach(function(id) {
+                        form.append($('<input>', {
+                            'type': 'hidden',
+                            'name': 'document_ids[]',
+                            'value': id
+                        }));
+                    });
+                    
+                    $('body').append(form);
+                    form.submit();
+                }
+            });
+        } else {
+            Swal.fire({
+                title: 'Exportar Todos los Documentos',
+                text: 'Se exportarán todos los documentos con los filtros actuales',
+                icon: 'info',
+                showCancelButton: true,
+                confirmButtonText: 'Exportar Todo',
+                cancelButtonText: 'Cancelar'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // Obtener parámetros actuales de búsqueda
+                    var queryString = window.location.search;
+                    window.location.href = "{% url 'custom_admin:export_data' 'sri_documents' %}" + queryString;
+                }
+            });
+        }
     });
     
-    // Initialize
-    updateBatchButtons();
+    // Batch Actions
+    $('#batchAuthorize').on('click', function() {
+        var selectedDocs = $('.doc-select:checked').map(function() {
+            return $(this).val();
+        }).get();
+        
+        if (selectedDocs.length === 0) {
+            Swal.fire('Atención', 'Seleccione al menos un documento', 'warning');
+            return;
+        }
+        
+        Swal.fire({
+            title: '¿Autorizar documentos seleccionados?',
+            text: `Se autorizarán ${selectedDocs.length} documentos`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, autorizar todos',
+            cancelButtonText: 'Cancelar',
+            showLoaderOnConfirm: true,
+            preConfirm: () => {
+                return $.ajax({
+                    url: "{% url 'custom_admin:sri_documents_batch_process' %}",
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        document_ids: selectedDocs,
+                        action: 'authorize'
+                    }),
+                    headers: {
+                        'X-CSRFToken': csrftoken
+                    }
+                }).catch(error => {
+                    Swal.showValidationMessage(`Error: ${error.responseJSON?.error || 'Error desconocido'}`);
+                });
+            },
+            allowOutsideClick: () => !Swal.isLoading()
+        }).then((result) => {
+            if (result.isConfirmed && result.value.success) {
+                Swal.fire('Completado!', result.value.message, 'success').then(() => {
+                    location.reload();
+                });
+            }
+        });
+    });
 });
+
+// Función global para ser llamada desde el modal
+window.authorizeDocFromModal = function(docId) {
+    $('.btn-authorize[data-doc-id="' + docId + '"]').click();
+};
 </script>
+
+<!-- Modal container -->
+<div id="documentModal" class="modal fade" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Detalle del Documento</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

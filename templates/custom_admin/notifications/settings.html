@@ -1,0 +1,651 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Configuración de Notificaciones{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-card {
+        background: white;
+        border-radius: 0.5rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        margin-bottom: 2rem;
+    }
+    
+    .settings-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .settings-header h3 {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #212529;
+    }
+    
+    .settings-header p {
+        margin: 0.5rem 0 0;
+        color: #6c757d;
+        font-size: 0.875rem;
+    }
+    
+    .notification-type-item {
+        padding: 1.5rem;
+        border-bottom: 1px solid #dee2e6;
+        transition: background-color 0.3s;
+    }
+    
+    .notification-type-item:last-child {
+        border-bottom: none;
+    }
+    
+    .notification-type-item:hover {
+        background-color: #f8f9fa;
+    }
+    
+    .notification-info {
+        display: flex;
+        align-items: start;
+        gap: 1rem;
+    }
+    
+    .notification-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .notification-icon.document {
+        background-color: #e3f2fd;
+        color: #1976d2;
+    }
+    
+    .notification-icon.certificate {
+        background-color: #fce4ec;
+        color: #c2185b;
+    }
+    
+    .notification-icon.backup {
+        background-color: #e8f5e9;
+        color: #388e3c;
+    }
+    
+    .notification-icon.system {
+        background-color: #fff3e0;
+        color: #f57c00;
+    }
+    
+    .notification-icon.stock {
+        background-color: #f3e5f5;
+        color: #7b1fa2;
+    }
+    
+    .notification-icon.payment {
+        background-color: #e1f5fe;
+        color: #0277bd;
+    }
+    
+    .notification-icon.account {
+        background-color: #e0f2f1;
+        color: #00695c;
+    }
+    
+    .notification-details {
+        flex: 1;
+    }
+    
+    .notification-title {
+        font-weight: 600;
+        color: #212529;
+        margin-bottom: 0.25rem;
+    }
+    
+    .notification-description {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin: 0;
+    }
+    
+    .notification-channels {
+        display: flex;
+        gap: 2rem;
+        margin-top: 1rem;
+    }
+    
+    .channel-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .channel-toggle label {
+        margin: 0;
+        cursor: pointer;
+        color: #495057;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .form-switch {
+        padding-left: 0;
+    }
+    
+    .form-switch .form-check-input {
+        width: 2.5rem;
+        height: 1.25rem;
+        cursor: pointer;
+    }
+    
+    .global-settings {
+        background: #f8f9fa;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 2rem;
+    }
+    
+    .global-settings h4 {
+        font-size: 1.125rem;
+        margin-bottom: 1rem;
+        color: #212529;
+    }
+    
+    .setting-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .setting-row:last-child {
+        border-bottom: none;
+    }
+    
+    .setting-label {
+        font-weight: 500;
+        color: #495057;
+    }
+    
+    .setting-description {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+    
+    .save-notice {
+        background: #d1ecf1;
+        color: #0c5460;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .save-notice i {
+        font-size: 1.25rem;
+    }
+    
+    .frequency-select {
+        width: auto;
+        min-width: 150px;
+    }
+    
+    .quiet-hours {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .time-input {
+        width: auto;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Configuración de Notificaciones</h2>
+        <p class="text-muted mb-0">Personaliza cómo y cuándo recibir notificaciones</p>
+    </div>
+    <div>
+        <button class="btn btn-admin btn-admin-primary" onclick="saveSettings()">
+            <i class="fas fa-save"></i> Guardar Cambios
+        </button>
+        <a href="{% url 'custom_admin:notifications' %}" class="btn btn-admin btn-admin-light">
+            <i class="fas fa-arrow-left"></i> Volver
+        </a>
+    </div>
+</div>
+
+<!-- Save Notice -->
+<div class="save-notice" id="saveNotice" style="display: none;">
+    <i class="fas fa-info-circle"></i>
+    <span>Los cambios se guardarán automáticamente al modificar las opciones</span>
+</div>
+
+<!-- Global Settings -->
+<div class="global-settings">
+    <h4><i class="fas fa-globe"></i> Configuración Global</h4>
+    
+    <div class="setting-row">
+        <div>
+            <div class="setting-label">Frecuencia de Notificaciones</div>
+            <div class="setting-description">Con qué frecuencia recibir resúmenes de notificaciones</div>
+        </div>
+        <select class="form-select frequency-select" id="notificationFrequency">
+            <option value="IMMEDIATE">Inmediata</option>
+            <option value="HOURLY">Cada hora</option>
+            <option value="DAILY">Diaria</option>
+            <option value="WEEKLY">Semanal</option>
+        </select>
+    </div>
+    
+    <div class="setting-row">
+        <div>
+            <div class="setting-label">Horario Silencioso</div>
+            <div class="setting-description">No recibir notificaciones durante este horario</div>
+        </div>
+        <div class="quiet-hours">
+            <input type="time" class="form-control time-input" id="quietStart" value="22:00">
+            <span>hasta</span>
+            <input type="time" class="form-control time-input" id="quietEnd" value="08:00">
+        </div>
+    </div>
+    
+    <div class="setting-row">
+        <div>
+            <div class="setting-label">Notificaciones del Navegador</div>
+            <div class="setting-description">Permitir notificaciones push del navegador</div>
+        </div>
+        <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" id="browserNotifications" checked>
+        </div>
+    </div>
+</div>
+
+<!-- Notification Types Settings -->
+<div class="settings-card">
+    <div class="settings-header">
+        <h3>Tipos de Notificaciones</h3>
+        <p>Selecciona qué notificaciones deseas recibir y por qué canal</p>
+    </div>
+    
+    <div class="notification-types-list">
+        <!-- Documentos -->
+        <div class="notification-type-item">
+            <div class="notification-info">
+                <div class="notification-icon document">
+                    <i class="fas fa-file-invoice"></i>
+                </div>
+                <div class="notification-details">
+                    <div class="notification-title">Documentos Electrónicos</div>
+                    <p class="notification-description">
+                        Notificaciones sobre autorización y rechazo de documentos SRI
+                    </p>
+                    <div class="notification-channels">
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="DOCUMENT_AUTHORIZED_email" 
+                                       {% if settings.DOCUMENT_AUTHORIZED.email %}checked{% endif %}>
+                            </div>
+                            <label for="DOCUMENT_AUTHORIZED_email">
+                                <i class="fas fa-envelope"></i> Email
+                            </label>
+                        </div>
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="DOCUMENT_AUTHORIZED_browser" 
+                                       {% if settings.DOCUMENT_AUTHORIZED.browser %}checked{% endif %}>
+                            </div>
+                            <label for="DOCUMENT_AUTHORIZED_browser">
+                                <i class="fas fa-desktop"></i> Navegador
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Certificados -->
+        <div class="notification-type-item">
+            <div class="notification-info">
+                <div class="notification-icon certificate">
+                    <i class="fas fa-certificate"></i>
+                </div>
+                <div class="notification-details">
+                    <div class="notification-title">Certificados Digitales</div>
+                    <p class="notification-description">
+                        Alertas sobre vencimiento de certificados digitales
+                    </p>
+                    <div class="notification-channels">
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="CERTIFICATE_EXPIRING_email" 
+                                       {% if settings.CERTIFICATE_EXPIRING.email %}checked{% endif %}>
+                            </div>
+                            <label for="CERTIFICATE_EXPIRING_email">
+                                <i class="fas fa-envelope"></i> Email
+                            </label>
+                        </div>
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="CERTIFICATE_EXPIRING_browser" 
+                                       {% if settings.CERTIFICATE_EXPIRING.browser %}checked{% endif %}>
+                            </div>
+                            <label for="CERTIFICATE_EXPIRING_browser">
+                                <i class="fas fa-desktop"></i> Navegador
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Respaldos -->
+        <div class="notification-type-item">
+            <div class="notification-info">
+                <div class="notification-icon backup">
+                    <i class="fas fa-database"></i>
+                </div>
+                <div class="notification-details">
+                    <div class="notification-title">Respaldos del Sistema</div>
+                    <p class="notification-description">
+                        Notificaciones sobre el estado de los respaldos automáticos
+                    </p>
+                    <div class="notification-channels">
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="BACKUP_COMPLETED_email" 
+                                       {% if settings.BACKUP_COMPLETED.email %}checked{% endif %}>
+                            </div>
+                            <label for="BACKUP_COMPLETED_email">
+                                <i class="fas fa-envelope"></i> Email
+                            </label>
+                        </div>
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="BACKUP_COMPLETED_browser" 
+                                       {% if settings.BACKUP_COMPLETED.browser %}checked{% endif %}>
+                            </div>
+                            <label for="BACKUP_COMPLETED_browser">
+                                <i class="fas fa-desktop"></i> Navegador
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Errores del Sistema -->
+        <div class="notification-type-item">
+            <div class="notification-info">
+                <div class="notification-icon system">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="notification-details">
+                    <div class="notification-title">Errores del Sistema</div>
+                    <p class="notification-description">
+                        Alertas sobre errores críticos y problemas del sistema
+                    </p>
+                    <div class="notification-channels">
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="SYSTEM_ERROR_email" 
+                                       {% if settings.SYSTEM_ERROR.email %}checked{% endif %}>
+                            </div>
+                            <label for="SYSTEM_ERROR_email">
+                                <i class="fas fa-envelope"></i> Email
+                            </label>
+                        </div>
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="SYSTEM_ERROR_browser" 
+                                       {% if settings.SYSTEM_ERROR.browser %}checked{% endif %}>
+                            </div>
+                            <label for="SYSTEM_ERROR_browser">
+                                <i class="fas fa-desktop"></i> Navegador
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Stock Bajo -->
+        <div class="notification-type-item">
+            <div class="notification-info">
+                <div class="notification-icon stock">
+                    <i class="fas fa-box"></i>
+                </div>
+                <div class="notification-details">
+                    <div class="notification-title">Control de Inventario</div>
+                    <p class="notification-description">
+                        Alertas cuando el stock de productos está bajo
+                    </p>
+                    <div class="notification-channels">
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="LOW_STOCK_email" 
+                                       {% if settings.LOW_STOCK.email %}checked{% endif %}>
+                            </div>
+                            <label for="LOW_STOCK_email">
+                                <i class="fas fa-envelope"></i> Email
+                            </label>
+                        </div>
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="LOW_STOCK_browser" 
+                                       {% if settings.LOW_STOCK.browser %}checked{% endif %}>
+                            </div>
+                            <label for="LOW_STOCK_browser">
+                                <i class="fas fa-desktop"></i> Navegador
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recordatorios de Pago -->
+        <div class="notification-type-item">
+            <div class="notification-info">
+                <div class="notification-icon payment">
+                    <i class="fas fa-dollar-sign"></i>
+                </div>
+                <div class="notification-details">
+                    <div class="notification-title">Recordatorios de Pago</div>
+                    <p class="notification-description">
+                        Recordatorios sobre facturas pendientes de pago
+                    </p>
+                    <div class="notification-channels">
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="PAYMENT_REMINDER_email" 
+                                       {% if settings.PAYMENT_REMINDER.email %}checked{% endif %}>
+                            </div>
+                            <label for="PAYMENT_REMINDER_email">
+                                <i class="fas fa-envelope"></i> Email
+                            </label>
+                        </div>
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="PAYMENT_REMINDER_browser" 
+                                       {% if settings.PAYMENT_REMINDER.browser %}checked{% endif %}>
+                            </div>
+                            <label for="PAYMENT_REMINDER_browser">
+                                <i class="fas fa-desktop"></i> Navegador
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cuenta y Seguridad -->
+        <div class="notification-type-item">
+            <div class="notification-info">
+                <div class="notification-icon account">
+                    <i class="fas fa-user-shield"></i>
+                </div>
+                <div class="notification-details">
+                    <div class="notification-title">Cuenta y Seguridad</div>
+                    <p class="notification-description">
+                        Alertas sobre cambios en la cuenta e inicios de sesión
+                    </p>
+                    <div class="notification-channels">
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="LOGIN_ALERT_email" 
+                                       {% if settings.LOGIN_ALERT.email %}checked{% endif %}>
+                            </div>
+                            <label for="LOGIN_ALERT_email">
+                                <i class="fas fa-envelope"></i> Email
+                            </label>
+                        </div>
+                        <div class="channel-toggle">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" 
+                                       id="LOGIN_ALERT_browser" 
+                                       {% if settings.LOGIN_ALERT.browser %}checked{% endif %}>
+                            </div>
+                            <label for="LOGIN_ALERT_browser">
+                                <i class="fas fa-desktop"></i> Navegador
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Auto-save en cambios
+    $('.form-check-input, select').on('change', function() {
+        saveSettings(true);
+    });
+    
+    // Solicitar permisos de notificaciones del navegador
+    if ($('#browserNotifications').is(':checked') && 'Notification' in window) {
+        if (Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }
+});
+
+function saveSettings(autoSave = false) {
+    // Recopilar configuraciones
+    const settings = {
+        // Global settings
+        frequency: $('#notificationFrequency').val(),
+        quiet_start: $('#quietStart').val(),
+        quiet_end: $('#quietEnd').val(),
+        browser_enabled: $('#browserNotifications').is(':checked'),
+    };
+    
+    // Notification types
+    const notificationTypes = [
+        'DOCUMENT_AUTHORIZED',
+        'DOCUMENT_REJECTED',
+        'CERTIFICATE_EXPIRING',
+        'CERTIFICATE_EXPIRED',
+        'BACKUP_COMPLETED',
+        'BACKUP_FAILED',
+        'SYSTEM_ERROR',
+        'LOW_STOCK',
+        'PAYMENT_REMINDER',
+        'LOGIN_ALERT'
+    ];
+    
+    notificationTypes.forEach(type => {
+        settings[`${type}_email`] = $(`#${type}_email`).is(':checked');
+        settings[`${type}_browser`] = $(`#${type}_browser`).is(':checked');
+    });
+    
+    // Enviar al servidor
+    $.ajax({
+        url: "{% url 'custom_admin:notification_settings' %}",
+        method: 'POST',
+        data: JSON.stringify(settings),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        success: function(response) {
+            if (response.success) {
+                if (!autoSave) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Guardado',
+                        text: 'Las configuraciones se han guardado correctamente',
+                        timer: 2000,
+                        showConfirmButton: false
+                    });
+                } else {
+                    // Mostrar indicador de guardado
+                    showSaveIndicator();
+                }
+            }
+        },
+        error: function() {
+            Swal.fire({
+                icon: 'error',
+                title: 'Error',
+                text: 'No se pudieron guardar las configuraciones'
+            });
+        }
+    });
+}
+
+function showSaveIndicator() {
+    const icon = $('<i class="fas fa-check text-success ms-2"></i>');
+    $('.page-header h2').append(icon);
+    
+    setTimeout(() => {
+        icon.fadeOut(() => icon.remove());
+    }, 2000);
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>
+{% endblock %}
