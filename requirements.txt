@@ -11,7 +11,7 @@ tzdata==2025.2
 # Database
 psycopg2-binary==2.9.10
 
-# Authentication & OAuth (AGREGADO)
+# Authentication & OAuth
 django-allauth==65.9.0
 PyJWT==2.10.1
 oauthlib==3.3.1
@@ -50,10 +50,21 @@ reportlab==4.4.2
 lxml==5.4.0
 xmltodict==0.14.2
 
-# Celery & Redis (si planeas usarlos)
-# celery==5.5.3
-# redis==6.2.0
-# django-redis==6.0.0
+# Celery & Redis - CORREGIDO
+celery[redis]==5.3.4
+redis==4.6.0
+django-redis==5.4.0
+django-celery-beat==2.7.0
+django-celery-results==2.5.1
 
-# Rate limiting (si planeas usarlo)
+# QR Code generation
+qrcode==8.2
+
+# SOAP client para SRI
+zeep==4.3.0
+
+# File type detection - CORREGIDO
+python-magic==0.4.27
+
+# Rate limiting (opcional)
 # django-ratelimit==4.1.0

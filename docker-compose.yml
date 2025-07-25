@@ -20,7 +20,7 @@ services:
     restart: unless-stopped
 
   web:
-    build: .  # ← CAMBIO AQUÍ: construir desde Dockerfile local
+    image: vendo_sri_web  # ← CAMBIO AQUÍ
     container_name: vendo_sri_web
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
