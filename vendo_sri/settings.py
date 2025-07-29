@@ -26,6 +26,10 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 # Hosts permitidos - mejor gestión con .env
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,0.0.0.0,testserver').split(',')
 
+
+
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+
 # ==========================================
 # APPLICATION DEFINITION
 # ==========================================
