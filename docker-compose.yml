@@ -1,39 +1,47 @@
 services:
   db:
-    image: postgres:15
-    container_name: vendo_sri_db
+    image: postgres:13
+    container_name: pg13-sitemadefacturacion
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data/
     ports:
       - "5432:5432"
     restart: unless-stopped
+    networks:
+      - django-facturacion
 
   redis:
+    container_name: redis-sistemadefacturacion
     image: redis:7-alpine
-    container_name: vendo_sri_redis
     ports:
       - "6379:6379"
     restart: unless-stopped
+    networks:
+      - django-facturacion
 
   web:
-    image: vendo_sri_web  # ← CAMBIO AQUÍ
+    image: vendo_sri_web  
     container_name: vendo_sri_web
-    command: python manage.py runserver 0.0.0.0:8000
+    command: gunicorn vendo_sri.wsgi:application --bind
     volumes:
-      - .:/app
-    ports:
-      - "8000:8000"
+      - static_volumen:/app/staticfiles
+      - media_volumen:/app/mediafiles
+    expose:
+      - "8000"
     depends_on:
       - db
       - redis
     env_file:
       - .env
     restart: unless-stopped
-
+    networks:
+      - django-facturacion
+      - general-net
+    
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: vendo_sri_pgadmin
@@ -48,3 +56,11 @@ services:
 
 volumes:
   postgres_data:
+  static_volumen:
+  media_volumen:
+
+networks:
+  django-facturacion:
+    driver: bridge
+  general-net:
+    external: true

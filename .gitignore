@@ -30,6 +30,7 @@ secrets.json
 # =============================================================================
 
 # Logs del sistema
+storage/
 storage/logs/
 logs/
 *.log

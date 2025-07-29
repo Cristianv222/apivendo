@@ -1,7 +1,7 @@
 # ============================================
 # REQUIREMENTS.TXT PARA VENDO_SRI CON OAUTH
 # ============================================
-
+gunicorn==21.2.0
 # Django Core
 Django==5.2.3
 asgiref==3.8.1
@@ -9,7 +9,7 @@ sqlparse==0.5.3
 tzdata==2025.2
 
 # Database
-psycopg2-binary==2.9.10
+psycopg2==2.9.10
 
 # Authentication & OAuth
 django-allauth==65.9.0
