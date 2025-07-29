@@ -1,48 +1,43 @@
-# Usar imagen base oficial de Python
-FROM python:3.1-slim
+# Imagen base oficial
+FROM python:3.10-slim
 
 # Variables de entorno
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-
-
 # Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y \
-    # Dependencias básicas
     gcc \
     g++ \
     libc6-dev \
-    # PostgreSQL
     libpq-dev \
-    # SSL/TLS
     libssl-dev \
     libffi-dev \
-    # Utilidades
     curl \
     wget \
     gnupg \
-    # Limpieza de imagen
+    libmagic-dev \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /tmp/* \
-    && rm -rf /var/tmp/*
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Directorio de trabajo
+# Crear usuario no root (opcional pero recomendado)
+RUN useradd -ms /bin/bash appuser
+
+# Establecer directorio de trabajo
 WORKDIR /app
 
-# Copiar requirements primero para aprovechar cache de Docker
+# Copiar primero requirements.txt para aprovechar el cache
 COPY requirements.txt .
 
 # Instalar dependencias de Python
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --upgrade pip && 
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Copiar código de la aplicación
+# Copiar el resto del código de la aplicación
 COPY . /app/
 
-# Crear directorios necesarios con permisos correctos
+# Crear directorios necesarios
 RUN mkdir -p \
     /app/storage/logs \
     /app/storage/backups \
@@ -50,25 +45,23 @@ RUN mkdir -p \
     /app/storage/invoices/xml \
     /app/storage/invoices/pdf \
     /app/staticfiles \
+    /app/mediafiles \
     /app/certificates
 
-# Configurar permisos
+# Crear archivos de logs vacíos
+RUN touch /app/storage/logs/vendo_sri.log \
+          /app/storage/logs/celery_worker.log \
+          /app/storage/logs/celery_beat.log \
+          /app/storage/logs/gunicorn_access.log \
+          /app/storage/logs/gunicorn_error.log \
+          /app/storage/logs/sri_integration.log \
+          /app/storage/logs/certificates.log
+
+# Dar permisos a los archivos y carpetas
 RUN chown -R appuser:appuser /app && \
     chmod -R 755 /app && \
-    chmod -R 755 /app/storage/certificates && \
-    chmod -R 755 /app/storage/logs
-# Crear archivos de log iniciales
-RUN touch /app/storage/logs/vendo_sri.log \
-    /app/storage/logs/celery_worker.log \
-    /app/storage/logs/celery_beat.log \
-    /app/storage/logs/gunicorn_access.log \
-    /app/storage/logs/gunicorn_error.log \
-    /app/storage/logs/sri_integration.log \
-    /app/storage/logs/certificates.log
+    chmod -R 644 /app/storage/logs/*.log
 
-# Configurar permisos de logs
-RUN chown -R appuser:appuser /app/storage/logs && \
-    chmod 644 /app/storage/logs/*.log
+# Cambiar a usuario no root
+USER appuser
 
-# Colectar archivos estáticos (se ejecuta también en docker-compose)
-RUN python manage.py collectstatic --noinput --settings=vendo_sri.settings

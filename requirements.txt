@@ -1,70 +1,70 @@
 # ============================================
 # REQUIREMENTS.TXT PARA VENDO_SRI CON OAUTH
 # ============================================
-gunicorn==21.2.0
+gunicorn
 # Django Core
-Django==5.2.3
-asgiref==3.8.1
-sqlparse==0.5.3
-tzdata==2025.2
+Django
+asgiref
+sqlparse
+tzdata
 
 # Database
-psycopg2==2.9.10
+psycopg2
 
 # Authentication & OAuth
-django-allauth==65.9.0
-PyJWT==2.10.1
-oauthlib==3.3.1
-requests-oauthlib==2.0.0
+django-allauth
+PyJWT
+oauthlib
+requests-oauthlib
 
 # API & REST
-djangorestframework==3.16.0
-django-cors-headers==4.7.0
-django-filter==25.1
+djangorestframework
+django-cors-headers
+django-filter
 
 # Forms & UI
-django-crispy-forms==2.4
-crispy-bootstrap5==2025.6
+django-crispy-forms
+crispy-bootstrap5
 
 # Configuration
-python-decouple==3.8
+python-decouple
 
 # Utilities
-Pillow==11.2.1
-requests==2.32.4
-python-dateutil==2.9.0.post0
+Pillow
+requests
+python-dateutil
 
 # Development (opcional)
-django-debug-toolbar==5.2.0
-django-extensions==4.1
+django-debug-toolbar
+django-extensions
 
 # Security & Validation
-cryptography==45.0.4
-certifi==2025.6.15
+cryptography
+certifi
 
 # File processing
-openpyxl==3.1.5
-reportlab==4.4.2
+openpyxl
+reportlab
 
 # XML processing (para SRI)
-lxml==5.4.0
-xmltodict==0.14.2
+lxml
+xmltodict
 
 # Celery & Redis - CORREGIDO
-celery[redis]==5.3.4
-redis==4.6.0
-django-redis==5.4.0
-django-celery-beat==2.7.0
-django-celery-results==2.5.1
+celery[redis]
+redis
+django-redis
+django-celery-beat
+django-celery-results
 
 # QR Code generation
-qrcode==8.2
+qrcode
 
 # SOAP client para SRI
-zeep==4.3.0
+zeep
 
 # File type detection - CORREGIDO
-python-magic==0.4.27
+python-magic
 
 # Rate limiting (opcional)
-# django-ratelimit==4.1.0
+# django-ratelimit
