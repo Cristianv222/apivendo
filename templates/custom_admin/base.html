@@ -548,7 +548,34 @@
                     </a>
                 </div>
             </div>
-            
+            <!-- Billing Menu -->
+<div class="menu-section">
+    <div class="menu-section-title">Planes y Facturación</div>
+    
+    <div class="menu-item">
+        <a href="{% url 'custom_admin:billing_plans' %}" class="menu-link {% if 'billing_plan' in request.resolver_match.url_name %}active{% endif %}">
+            <i class="fas fa-tags menu-icon"></i>
+            <span>Planes</span>
+        </a>
+    </div>
+    
+    <div class="menu-item">
+        <a href="{% url 'custom_admin:billing_purchases' %}" class="menu-link {% if 'billing_purchase' in request.resolver_match.url_name %}active{% endif %}">
+            <i class="fas fa-shopping-cart menu-icon"></i>
+            <span>Compras</span>
+            {% if pending_purchases_count > 0 %}
+                <span class="menu-badge">{{ pending_purchases_count }}</span>
+            {% endif %}
+        </a>
+    </div>
+    
+    <div class="menu-item">
+        <a href="{% url 'custom_admin:billing_profiles' %}" class="menu-link {% if 'billing_profile' in request.resolver_match.url_name %}active{% endif %}">
+            <i class="fas fa-credit-card menu-icon"></i>
+            <span>Perfiles de Facturación</span>
+        </a>
+    </div>
+</div>
             <!-- SRI Menu -->
             <div class="menu-section">
                 <div class="menu-section-title">Facturación SRI</div>

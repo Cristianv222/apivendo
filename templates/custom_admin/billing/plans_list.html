@@ -1,0 +1,455 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Planes de Facturación{% endblock %}
+
+{% block extra_css %}
+<style>
+    .plan-card {
+        border: 2px solid #e9ecef;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .plan-card:hover {
+        border-color: #667eea;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+    }
+    
+    .plan-card.featured {
+        border-color: #ffc107;
+        background: linear-gradient(135deg, #fffdf7 0%, #fff8e1 100%);
+    }
+    
+    .featured-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: #ffc107;
+        color: #000;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .plan-price {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #667eea;
+        margin: 1rem 0;
+    }
+    
+    .plan-price small {
+        font-size: 1rem;
+        color: #6c757d;
+        font-weight: 400;
+    }
+    
+    .invoice-count {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #28a745;
+    }
+    
+    .price-per-invoice {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .plan-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+    
+    .status-switch {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .custom-switch {
+        position: relative;
+        width: 48px;
+        height: 24px;
+        background: #e9ecef;
+        border-radius: 24px;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+    
+    .custom-switch.active {
+        background: #28a745;
+    }
+    
+    .custom-switch::after {
+        content: '';
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        background: white;
+        border-radius: 50%;
+        top: 3px;
+        left: 3px;
+        transition: transform 0.3s;
+    }
+    
+    .custom-switch.active::after {
+        transform: translateX(24px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header con acciones -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Planes de Facturación</h2>
+        <p class="text-muted mb-0">Gestiona los planes disponibles para tus clientes</p>
+    </div>
+    <button class="btn btn-admin btn-admin-primary" onclick="showCreatePlanModal()">
+        <i class="fas fa-plus me-2"></i>Crear Plan
+    </button>
+</div>
+
+<!-- Filtros -->
+<div class="admin-card mb-4">
+    <div class="card-body">
+        <div class="row align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Estado</label>
+                <select class="form-select" id="statusFilter" onchange="applyFilters()">
+                    <option value="">Todos los planes</option>
+                    <option value="true" {% if request.GET.is_active == 'true' %}selected{% endif %}>Activos</option>
+                    <option value="false" {% if request.GET.is_active == 'false' %}selected{% endif %}>Inactivos</option>
+                </select>
+            </div>
+            <div class="col-md-8 text-end">
+                <button class="btn btn-light" onclick="resetFilters()">
+                    <i class="fas fa-redo me-1"></i>Limpiar Filtros
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de Planes -->
+<div class="row">
+    {% for plan in plans %}
+    <div class="col-md-6 col-lg-4">
+        <div class="plan-card {% if plan.is_featured %}featured{% endif %}">
+            {% if plan.is_featured %}
+                <span class="featured-badge">
+                    <i class="fas fa-star me-1"></i>DESTACADO
+                </span>
+            {% endif %}
+            
+            <h4 class="mb-2">{{ plan.name }}</h4>
+            {% if plan.description %}
+                <p class="text-muted small mb-3">{{ plan.description }}</p>
+            {% endif %}
+            
+            <div class="plan-price">
+                ${{ plan.price|floatformat:2 }}
+                <small>USD</small>
+            </div>
+            
+            <div class="mb-3">
+                <div class="invoice-count">
+                    <i class="fas fa-file-invoice me-1"></i>
+                    {{ plan.invoice_limit }} facturas
+                </div>
+                <div class="price-per-invoice">
+                    ${{ plan.price_per_invoice|floatformat:3 }} por factura
+                </div>
+            </div>
+            
+            <div class="status-switch mb-3">
+                <span class="text-muted">Estado:</span>
+                <div class="custom-switch {% if plan.is_active %}active{% endif %}" 
+                     onclick="togglePlanStatus({{ plan.id }}, {{ plan.is_active|lower }})">
+                </div>
+                <span>{{ plan.is_active|yesno:"Activo,Inactivo" }}</span>
+            </div>
+            
+            <div class="plan-actions">
+                <button class="btn btn-sm btn-outline-primary" onclick="editPlan({{ plan.id }})">
+                    <i class="fas fa-edit"></i> Editar
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deletePlan({{ plan.id }}, '{{ plan.name }}')">
+                    <i class="fas fa-trash"></i> Eliminar
+                </button>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="text-center py-5">
+            <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+            <h5 class="text-muted">No hay planes creados</h5>
+            <p class="text-muted">Crea tu primer plan de facturación</p>
+            <button class="btn btn-admin btn-admin-primary" onclick="showCreatePlanModal()">
+                <i class="fas fa-plus me-2"></i>Crear Plan
+            </button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Modal Crear/Editar Plan -->
+<div class="modal fade" id="planModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="planModalTitle">Crear Plan</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="planForm">
+                    <input type="hidden" id="planId">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Nombre del Plan <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="planName" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Descripción</label>
+                        <textarea class="form-control" id="planDescription" rows="2"></textarea>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Cantidad de Facturas <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="planInvoiceLimit" min="1" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Precio (USD) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="planPrice" min="0.01" step="0.01" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Orden de visualización</label>
+                            <input type="number" class="form-control" id="planSortOrder" value="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="form-check mt-4">
+                                <input type="checkbox" class="form-check-input" id="planIsFeatured">
+                                <label class="form-check-label" for="planIsFeatured">
+                                    Plan Destacado
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-check mb-3">
+                        <input type="checkbox" class="form-check-input" id="planIsActive" checked>
+                        <label class="form-check-label" for="planIsActive">
+                            Plan Activo
+                        </label>
+                    </div>
+                    
+                    <div id="pricePerInvoice" class="alert alert-info mb-0" style="display: none;">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Precio por factura: $<span id="pricePerInvoiceValue">0.00</span>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-admin btn-admin-primary" onclick="savePlan()">
+                    <i class="fas fa-save me-1"></i>Guardar Plan
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Variables globales
+let editingPlanId = null;
+
+// Mostrar modal de crear plan
+function showCreatePlanModal() {
+    editingPlanId = null;
+    document.getElementById('planModalTitle').textContent = 'Crear Plan';
+    document.getElementById('planForm').reset();
+    document.getElementById('planIsActive').checked = true;
+    document.getElementById('pricePerInvoice').style.display = 'none';
+    new bootstrap.Modal(document.getElementById('planModal')).show();
+}
+
+// Editar plan
+async function editPlan(planId) {
+    editingPlanId = planId;
+    document.getElementById('planModalTitle').textContent = 'Editar Plan';
+    
+    // Aquí deberías cargar los datos del plan via AJAX
+    // Por ahora usamos los datos del DOM
+    const planCard = document.querySelector(`[data-plan-id="${planId}"]`);
+    if (planCard) {
+        // Llenar el formulario con los datos actuales
+    }
+    
+    new bootstrap.Modal(document.getElementById('planModal')).show();
+}
+
+// Guardar plan
+async function savePlan() {
+    const form = document.getElementById('planForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const data = {
+        name: document.getElementById('planName').value,
+        description: document.getElementById('planDescription').value,
+        invoice_limit: parseInt(document.getElementById('planInvoiceLimit').value),
+        price: parseFloat(document.getElementById('planPrice').value),
+        is_active: document.getElementById('planIsActive').checked,
+        is_featured: document.getElementById('planIsFeatured').checked,
+        sort_order: parseInt(document.getElementById('planSortOrder').value) || 0
+    };
+    
+    try {
+        const url = editingPlanId 
+            ? `{% url 'custom_admin:billing_plan_update' 0 %}`.replace('0', editingPlanId)
+            : `{% url 'custom_admin:billing_plan_create' %}`;
+            
+        const method = editingPlanId ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(result.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('planModal')).hide();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification(result.error || 'Error al guardar el plan', 'error');
+        }
+    } catch (error) {
+        showNotification('Error al procesar la solicitud', 'error');
+    }
+}
+
+// Toggle estado del plan
+async function togglePlanStatus(planId, currentStatus) {
+    try {
+        const response = await fetch(`{% url 'custom_admin:billing_plan_update' 0 %}`.replace('0', planId), {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                is_active: !currentStatus
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            location.reload();
+        } else {
+            showNotification(result.error || 'Error al actualizar el estado', 'error');
+        }
+    } catch (error) {
+        showNotification('Error al procesar la solicitud', 'error');
+    }
+}
+
+// Eliminar plan
+async function deletePlan(planId, planName) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el plan "${planName}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`{% url 'custom_admin:billing_plan_delete' 0 %}`.replace('0', planId), {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(result.message, 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showNotification(result.error || 'Error al eliminar el plan', 'error');
+        }
+    } catch (error) {
+        showNotification('Error al procesar la solicitud', 'error');
+    }
+}
+
+// Calcular precio por factura
+document.getElementById('planInvoiceLimit').addEventListener('input', calculatePricePerInvoice);
+document.getElementById('planPrice').addEventListener('input', calculatePricePerInvoice);
+
+function calculatePricePerInvoice() {
+    const invoiceLimit = parseInt(document.getElementById('planInvoiceLimit').value) || 0;
+    const price = parseFloat(document.getElementById('planPrice').value) || 0;
+    
+    if (invoiceLimit > 0 && price > 0) {
+        const pricePerInvoice = price / invoiceLimit;
+        document.getElementById('pricePerInvoiceValue').textContent = pricePerInvoice.toFixed(3);
+        document.getElementById('pricePerInvoice').style.display = 'block';
+    } else {
+        document.getElementById('pricePerInvoice').style.display = 'none';
+    }
+}
+
+// Aplicar filtros
+function applyFilters() {
+    const params = new URLSearchParams();
+    const status = document.getElementById('statusFilter').value;
+    
+    if (status) params.set('is_active', status);
+    
+    window.location.search = params.toString();
+}
+
+// Resetear filtros
+function resetFilters() {
+    window.location.search = '';
+}
+
+// Notificaciones
+function showNotification(message, type) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+    
+    const alert = document.createElement('div');
+    alert.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+    alert.style.zIndex = '9999';
+    alert.innerHTML = `
+        <i class="fas fa-${icon} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alert);
+    setTimeout(() => alert.remove(), 5000);
+}
+</script>
+{% endblock %}

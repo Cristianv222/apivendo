@@ -1,0 +1,416 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Mi Perfil{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 40px 0;
+        margin: -30px -30px 30px -30px;
+        color: white;
+        text-align: center;
+        border-radius: 0 0 20px 20px;
+    }
+    
+    .profile-avatar {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        border: 4px solid white;
+        margin: 0 auto 20px;
+        background: #f3f4f6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 48px;
+        color: #667eea;
+        font-weight: bold;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .profile-info {
+        margin-bottom: 30px;
+    }
+    
+    .info-label {
+        font-weight: 600;
+        color: #6b7280;
+        margin-bottom: 5px;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .info-value {
+        font-size: 1.1rem;
+        color: #1f2937;
+        margin-bottom: 15px;
+    }
+    
+    .card {
+        border: none;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    .card:hover {
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .card-header {
+        background: #f9fafb;
+        border-bottom: 1px solid #e5e7eb;
+        padding: 1.25rem;
+    }
+    
+    .card-header h5 {
+        margin: 0;
+        color: #1f2937;
+        font-weight: 600;
+    }
+    
+    .security-section {
+        background: #f9fafb;
+        padding: 20px;
+        border-radius: 8px;
+        margin-top: 20px;
+        border: 1px solid #e5e7eb;
+    }
+    
+    .activity-item {
+        padding: 15px 0;
+        border-bottom: 1px solid #e5e7eb;
+        transition: all 0.2s ease;
+    }
+    
+    .activity-item:last-child {
+        border-bottom: none;
+    }
+    
+    .activity-item:hover {
+        background: #f9fafb;
+        margin: 0 -20px;
+        padding: 15px 20px;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 6px 16px;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+    
+    .status-active {
+        background: #d1fae5;
+        color: #065f46;
+    }
+    
+    .api-token-section {
+        background: #f3f4f6;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #e5e7eb;
+    }
+    
+    .token-display {
+        font-family: 'Courier New', monospace;
+        background: white;
+        padding: 12px;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+        word-break: break-all;
+        position: relative;
+        font-size: 0.9rem;
+    }
+    
+    .copy-btn {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+    
+    .btn-admin {
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    .btn-admin-primary {
+        background: #667eea;
+        color: white;
+        border: none;
+    }
+    
+    .btn-admin-primary:hover {
+        background: #5a67d8;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .action-badge {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+        text-transform: uppercase;
+        margin-right: 8px;
+    }
+    
+    .action-badge.create { background: #d1fae5; color: #065f46; }
+    .action-badge.update { background: #dbeafe; color: #1e40af; }
+    .action-badge.delete { background: #fee2e2; color: #991b1b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Profile Header -->
+    <div class="profile-header">
+        <div class="profile-avatar">
+            {% if user.profile_picture %}
+                <img src="{{ user.profile_picture.url }}" alt="{{ user.get_full_name }}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">
+            {% else %}
+                {{ user.first_name.0|default:user.email.0|upper }}
+            {% endif %}
+        </div>
+        <h2 class="mb-1">{{ user.get_full_name|default:user.email }}</h2>
+        <p class="mb-0 opacity-75">{{ user.email }}</p>
+        <span class="status-badge status-active mt-3">
+            <i class="fas fa-check-circle me-1"></i>Cuenta Activa
+        </span>
+    </div>
+
+    <div class="row mt-4">
+        <!-- Información Personal -->
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">
+                        <i class="fas fa-user me-2"></i>Información Personal
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="profile-info">
+                        <div class="info-label">Nombre Completo</div>
+                        <div class="info-value">{{ user.get_full_name|default:"No especificado" }}</div>
+                        
+                        <div class="info-label">Email</div>
+                        <div class="info-value">{{ user.email }}</div>
+                        
+                        {% if user.phone %}
+                        <div class="info-label">Teléfono</div>
+                        <div class="info-value">{{ user.phone }}</div>
+                        {% endif %}
+                        
+                        {% if user.company %}
+                        <div class="info-label">Empresa</div>
+                        <div class="info-value">{{ user.company.name }}</div>
+                        {% endif %}
+                        
+                        <div class="info-label">Rol</div>
+                        <div class="info-value">
+                            {% if user.is_superuser %}
+                                <span class="badge bg-danger">Superusuario</span>
+                            {% elif user.is_staff %}
+                                <span class="badge bg-primary">Administrador</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Usuario</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="info-label">Miembro desde</div>
+                        <div class="info-value">{{ user.date_joined|date:"d/m/Y" }}</div>
+                    </div>
+                    
+                    <a href="{% url 'custom_admin:profile_edit' %}" class="btn btn-admin btn-admin-primary">
+                        <i class="fas fa-edit me-1"></i>Editar Perfil
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Seguridad y Token -->
+        <div class="col-md-6 mb-4">
+            <!-- Seguridad -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title">
+                        <i class="fas fa-shield-alt me-2"></i>Seguridad
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="security-section">
+                        <h6 class="mb-3">
+                            <i class="fas fa-lock me-2"></i>Contraseña
+                        </h6>
+                        <p class="text-muted mb-3">
+                            Mantén tu cuenta segura con una contraseña fuerte
+                        </p>
+                        <a href="{% url 'custom_admin:change_password' %}" class="btn btn-outline-primary">
+                            <i class="fas fa-key me-1"></i>Cambiar Contraseña
+                        </a>
+                    </div>
+                    
+                    <div class="security-section">
+                        <h6 class="mb-3">
+                            <i class="fas fa-desktop me-2"></i>Sesiones
+                        </h6>
+                        <p class="text-muted mb-3">
+                            Gestiona las sesiones activas de tu cuenta
+                        </p>
+                        <a href="{% url 'custom_admin:manage_sessions' %}" class="btn btn-outline-danger">
+                            <i class="fas fa-sign-out-alt me-1"></i>Gestionar Sesiones
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Token -->
+            {% if user.auth_token %}
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">
+                        <i class="fas fa-code me-2"></i>Token API
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="api-token-section">
+                        <p class="text-muted mb-3">
+                            Token de acceso para integración con la API
+                        </p>
+                        <div class="token-display mb-3">
+                            <code id="apiToken">{{ user.auth_token.key }}</code>
+                            <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyToken()">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                        <button class="btn btn-outline-warning" onclick="regenerateToken()">
+                            <i class="fas fa-sync-alt me-1"></i>Regenerar Token
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Actividad Reciente -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">
+                        <i class="fas fa-history me-2"></i>Actividad Reciente
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if recent_activities %}
+                        {% for activity in recent_activities %}
+                        <div class="activity-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <div>
+                                        <span class="action-badge {{ activity.action|lower }}">{{ activity.action }}</span>
+                                        <strong>{{ activity.model_name|default:"Sistema" }}</strong>
+                                        {% if activity.object_representation %}
+                                            - {{ activity.object_representation }}
+                                        {% endif %}
+                                    </div>
+                                    {% if activity.changes %}
+                                    <div class="text-muted small mt-1">
+                                        {{ activity.changes }}
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                <div class="text-muted small">
+                                    {{ activity.created_at|timesince }} atrás
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center py-4 mb-0">
+                            <i class="fas fa-info-circle me-2"></i>
+                            No hay actividad reciente para mostrar
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyToken() {
+    const tokenElement = document.getElementById('apiToken');
+    const token = tokenElement.textContent;
+    
+    navigator.clipboard.writeText(token).then(function() {
+        const btn = event.target.closest('button');
+        const icon = btn.querySelector('i');
+        icon.classList.remove('fa-copy');
+        icon.classList.add('fa-check');
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-success');
+        
+        setTimeout(() => {
+            icon.classList.remove('fa-check');
+            icon.classList.add('fa-copy');
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-secondary');
+        }, 2000);
+    }).catch(function() {
+        // Fallback para navegadores antiguos
+        const textArea = document.createElement("textarea");
+        textArea.value = token;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        alert('Token copiado al portapapeles');
+    });
+}
+
+function regenerateToken() {
+    if (confirm('¿Estás seguro de que quieres regenerar tu token? El token actual dejará de funcionar.')) {
+        fetch('{% url "custom_admin:regenerate_token" %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('apiToken').textContent = data.token;
+                // Mostrar notificación de éxito
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 end-0 m-3';
+                alert.style.zIndex = '9999';
+                alert.innerHTML = `
+                    <i class="fas fa-check-circle me-2"></i>
+                    Token regenerado exitosamente
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.body.appendChild(alert);
+                setTimeout(() => alert.remove(), 5000);
+            } else {
+                alert('Error al regenerar el token: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error al regenerar el token');
+            console.error('Error:', error);
+        });
+    }
+}
+</script>
+{% endblock %}

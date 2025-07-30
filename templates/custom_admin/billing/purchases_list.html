@@ -1,0 +1,460 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Compras de Planes{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        border: 1px solid #e9ecef;
+        transition: all 0.3s ease;
+    }
+    
+    .stats-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .stats-number {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    
+    .stats-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .stats-card.pending .stats-number {
+        color: #ffc107;
+    }
+    
+    .stats-card.approved .stats-number {
+        color: #28a745;
+    }
+    
+    .stats-card.revenue .stats-number {
+        color: #007bff;
+    }
+    
+    .purchase-row {
+        background: white;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        border: 1px solid #e9ecef;
+        transition: all 0.2s ease;
+    }
+    
+    .purchase-row:hover {
+        border-color: #dee2e6;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .company-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .company-avatar {
+        width: 48px;
+        height: 48px;
+        background: #e9ecef;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #495057;
+    }
+    
+    .payment-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        gap: 0.375rem;
+    }
+    
+    .payment-badge.pending {
+        background: #fff3cd;
+        color: #856404;
+    }
+    
+    .payment-badge.approved {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .payment-badge.rejected {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .receipt-thumb {
+        width: 60px;
+        height: 60px;
+        border-radius: 6px;
+        object-fit: cover;
+        border: 2px solid #e9ecef;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .receipt-thumb:hover {
+        border-color: #667eea;
+        transform: scale(1.05);
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+    
+    .filter-section {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Compras de Planes</h2>
+        <p class="text-muted mb-0">Gestiona las compras y aprobaciones de planes</p>
+    </div>
+</div>
+
+<!-- Estadísticas -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="stats-card pending">
+            <div class="stats-number">{{ stats.total_pending|default:0 }}</div>
+            <div class="stats-label">Compras Pendientes</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stats-card approved">
+            <div class="stats-number">{{ stats.total_approved|default:0 }}</div>
+            <div class="stats-label">Compras Aprobadas</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stats-card revenue">
+            <div class="stats-number">${{ stats.total_amount|default:0|floatformat:2 }}</div>
+            <div class="stats-label">Ingresos Totales</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="filter-section">
+    <form method="get" id="filterForm">
+        <div class="row align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select name="status" class="form-select" onchange="document.getElementById('filterForm').submit()">
+                    <option value="">Todos los estados</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pendiente</option>
+                    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Aprobado</option>
+                    <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rechazado</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Fecha desde</label>
+                <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Fecha hasta</label>
+                <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-filter me-1"></i>Filtrar
+                </button>
+                <a href="{% url 'custom_admin:billing_purchases' %}" class="btn btn-light">
+                    <i class="fas fa-redo me-1"></i>Limpiar
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Lista de Compras -->
+<div class="purchases-list">
+    {% for purchase in page_obj %}
+    <div class="purchase-row">
+        <div class="row align-items-center">
+            <div class="col-md-4">
+                <div class="company-info">
+                    <div class="company-avatar">
+                        {{ purchase.company.business_name|slice:":1"|upper }}
+                    </div>
+                    <div>
+                        <h6 class="mb-0">{{ purchase.company.business_name|default:purchase.company.trade_name }}</h6>
+                        <small class="text-muted">RUC: {{ purchase.company.ruc }}</small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="fw-semibold">{{ purchase.plan_name }}</div>
+                    <small class="text-muted">{{ purchase.plan_invoice_limit }} facturas</small>
+                </div>
+            </div>
+            
+            <div class="col-md-2">
+                <div class="text-center">
+                    <div class="fw-semibold text-success">${{ purchase.payment_amount|floatformat:2 }}</div>
+                    <small class="text-muted">{{ purchase.payment_date|date:"d/m/Y" }}</small>
+                </div>
+            </div>
+            
+            <div class="col-md-1">
+                <div class="text-center">
+                    {% if purchase.payment_receipt %}
+                        <img src="{{ purchase.payment_receipt.url }}" 
+                             alt="Comprobante" 
+                             class="receipt-thumb"
+                             onclick="viewPurchaseDetail('{{ purchase.purchase_id }}')">
+                    {% else %}
+                        <span class="text-muted">Sin archivo</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="col-md-1">
+                <div class="text-center">
+                    <span class="payment-badge {{ purchase.payment_status }}">
+                        {% if purchase.payment_status == 'pending' %}
+                            <i class="fas fa-clock"></i> Pendiente
+                        {% elif purchase.payment_status == 'approved' %}
+                            <i class="fas fa-check-circle"></i> Aprobado
+                        {% elif purchase.payment_status == 'rejected' %}
+                            <i class="fas fa-times-circle"></i> Rechazado
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="col-md-2">
+                <div class="action-buttons justify-content-end">
+                    <button class="btn btn-sm btn-outline-primary" 
+                            onclick="viewPurchaseDetail('{{ purchase.purchase_id }}')"
+                            title="Ver detalles">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    
+                    {% if purchase.payment_status == 'pending' %}
+                        <button class="btn btn-sm btn-outline-success" 
+                                onclick="approvePurchase('{{ purchase.purchase_id }}')"
+                                title="Aprobar">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" 
+                                onclick="showRejectModal('{{ purchase.purchase_id }}')"
+                                title="Rechazar">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        {% if purchase.customer_notes %}
+        <div class="mt-2 pt-2 border-top">
+            <small class="text-muted">
+                <i class="fas fa-comment me-1"></i>
+                {{ purchase.customer_notes|truncatewords:20 }}
+            </small>
+        </div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="text-center py-5">
+        <i class="fas fa-shopping-cart fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">No hay compras registradas</h5>
+        <p class="text-muted">Las compras de planes aparecerán aquí</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Paginación -->
+{% if page_obj.has_other_pages %}
+<nav aria-label="Paginación" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+            </li>
+        {% endif %}
+        
+        <li class="page-item active">
+            <span class="page-link">
+                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+            </span>
+        </li>
+        
+        {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+<!-- Modal Rechazar -->
+<div class="modal fade" id="rejectModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Rechazar Compra</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="rejectPurchaseId">
+                <div class="mb-3">
+                    <label class="form-label">Razón del rechazo <span class="text-danger">*</span></label>
+                    <textarea class="form-control" id="rejectReason" rows="3" required
+                              placeholder="Explique el motivo del rechazo..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger" onclick="rejectPurchase()">
+                    <i class="fas fa-times me-1"></i>Rechazar Compra
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Detalle (contenedor) -->
+<div class="modal fade" id="detailModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" id="detailModalContent">
+            <!-- El contenido se carga dinámicamente -->
+        </div>
+    </div>
+</div>
+
+<script>
+// Ver detalle de compra
+async function viewPurchaseDetail(purchaseId) {
+    try {
+        const response = await fetch(`{% url 'custom_admin:billing_purchase_detail' '00000000-0000-0000-0000-000000000000' %}`.replace('00000000-0000-0000-0000-000000000000', purchaseId));
+        const html = await response.text();
+        
+        document.getElementById('detailModalContent').innerHTML = html;
+        new bootstrap.Modal(document.getElementById('detailModal')).show();
+    } catch (error) {
+        showNotification('Error al cargar los detalles', 'error');
+    }
+}
+
+// Aprobar compra
+async function approvePurchase(purchaseId) {
+    if (!confirm('¿Estás seguro de aprobar esta compra? Se asignarán las facturas automáticamente.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`{% url 'custom_admin:billing_purchase_approve' '00000000-0000-0000-0000-000000000000' %}`.replace('00000000-0000-0000-0000-000000000000', purchaseId), {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(result.message, 'success');
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showNotification(result.error || 'Error al aprobar la compra', 'error');
+        }
+    } catch (error) {
+        showNotification('Error al procesar la solicitud', 'error');
+    }
+}
+
+// Mostrar modal de rechazo
+function showRejectModal(purchaseId) {
+    document.getElementById('rejectPurchaseId').value = purchaseId;
+    document.getElementById('rejectReason').value = '';
+    new bootstrap.Modal(document.getElementById('rejectModal')).show();
+}
+
+// Rechazar compra
+async function rejectPurchase() {
+    const purchaseId = document.getElementById('rejectPurchaseId').value;
+    const reason = document.getElementById('rejectReason').value.trim();
+    
+    if (!reason) {
+        alert('Por favor, proporciona una razón para el rechazo');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`{% url 'custom_admin:billing_purchase_reject' '00000000-0000-0000-0000-000000000000' %}`.replace('00000000-0000-0000-0000-000000000000', purchaseId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ reason: reason })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(result.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('rejectModal')).hide();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showNotification(result.error || 'Error al rechazar la compra', 'error');
+        }
+    } catch (error) {
+        showNotification('Error al procesar la solicitud', 'error');
+    }
+}
+
+// Notificaciones
+function showNotification(message, type) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+    
+    const alert = document.createElement('div');
+    alert.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+    alert.style.zIndex = '9999';
+    alert.innerHTML = `
+        <i class="fas fa-${icon} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alert);
+    setTimeout(() => alert.remove(), 5000);
+}
+</script>
+{% endblock %}

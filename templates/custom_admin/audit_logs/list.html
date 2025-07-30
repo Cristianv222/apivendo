@@ -1,0 +1,292 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Logs de Auditoría{% endblock %}
+
+{% block extra_css %}
+<style>
+    .log-item {
+        padding: 15px;
+        border-bottom: 1px solid #e9ecef;
+        transition: background 0.2s ease;
+    }
+    
+    .log-item:hover {
+        background: #f8f9fa;
+    }
+    
+    .log-item:last-child {
+        border-bottom: none;
+    }
+    
+    .action-badge {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+    
+    .action-badge.create { background: #d4edda; color: #155724; }
+    .action-badge.update { background: #cce5ff; color: #004085; }
+    .action-badge.delete { background: #f8d7da; color: #721c24; }
+    .action-badge.login { background: #d1ecf1; color: #0c5460; }
+    .action-badge.logout { background: #e2e3e5; color: #383d41; }
+    .action-badge.authorize { background: #d4edda; color: #155724; }
+    .action-badge.email { background: #fff3cd; color: #856404; }
+    .action-badge.export { background: #e2e3e5; color: #383d41; }
+    
+    .model-badge {
+        background: #f8f9fa;
+        color: #495057;
+        padding: 3px 6px;
+        border-radius: 3px;
+        font-size: 0.8rem;
+    }
+    
+    .filter-card {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    
+    .log-details {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 5px;
+    }
+    
+    .ip-address {
+        font-family: monospace;
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Logs de Auditoría</h2>
+        <p class="text-muted mb-0">Registro de actividades del sistema</p>
+    </div>
+    <div>
+        <button class="btn btn-light" onclick="toggleFilters()">
+            <i class="fas fa-filter me-1"></i>Filtros
+        </button>
+        <button class="btn btn-admin btn-admin-primary" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i> Actualizar
+        </button>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="filter-card" id="filtersCard" style="display: none;">
+    <form method="GET" action="">
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label class="form-label">Acción</label>
+                <select name="action" class="form-select">
+                    <option value="">Todas las acciones</option>
+                    {% for action in actions %}
+                        <option value="{{ action }}" {% if filters.action == action %}selected{% endif %}>
+                            {{ action }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <label class="form-label">Modelo</label>
+                <select name="model" class="form-select">
+                    <option value="">Todos los modelos</option>
+                    {% for model in models %}
+                        <option value="{{ model }}" {% if filters.model == model %}selected{% endif %}>
+                            {{ model }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <label class="form-label">Usuario</label>
+                <select name="user" class="form-select">
+                    <option value="">Todos los usuarios</option>
+                    {% for user in users %}
+                        <option value="{{ user.id }}" {% if filters.user == user.id|stringformat:"s" %}selected{% endif %}>
+                            {{ user.get_full_name|default:user.email }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <label class="form-label">Fecha desde</label>
+                <input type="date" name="date_from" class="form-control" value="{{ filters.date_from }}">
+            </div>
+            
+            <div class="col-md-3 mb-3">
+                <label class="form-label">Fecha hasta</label>
+                <input type="date" name="date_to" class="form-control" value="{{ filters.date_to }}">
+            </div>
+            
+            <div class="col-md-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-search me-1"></i>Aplicar Filtros
+                </button>
+                <a href="{% url 'custom_admin:audit_logs' %}" class="btn btn-secondary">
+                    <i class="fas fa-times me-1"></i>Limpiar
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Logs List -->
+<div class="admin-card">
+    <div class="card-body p-0">
+        {% if logs %}
+            {% for log in logs %}
+            <div class="log-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="mb-2">
+                            <span class="action-badge {{ log.action|lower }}">{{ log.action }}</span>
+                            <span class="model-badge ms-2">{{ log.model_name|default:"Sistema" }}</span>
+                            {% if log.object_id %}
+                                <span class="text-muted ms-2">#{{ log.object_id }}</span>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-1">
+                            <strong>{{ log.user.get_full_name|default:log.user.email|default:"Sistema" }}</strong>
+                            <span class="text-muted">{{ log.get_action_display|default:log.action|lower }}</span>
+                            {% if log.object_representation %}
+                                <em>{{ log.object_representation }}</em>
+                            {% endif %}
+                        </div>
+                        
+                        {% if log.changes %}
+                        <div class="log-details">
+                            <i class="fas fa-info-circle me-1"></i>{{ log.changes }}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="log-details">
+                            <i class="far fa-clock me-1"></i>{{ log.created_at|date:"d/m/Y H:i:s" }}
+                            {% if log.ip_address %}
+                                <span class="mx-2">•</span>
+                                <i class="fas fa-globe me-1"></i>
+                                <span class="ip-address">{{ log.ip_address }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="text-muted small">
+                        {{ log.created_at|timesince }} atrás
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            
+            <!-- Pagination -->
+            {% if logs.has_other_pages %}
+            <div class="p-3">
+                <nav aria-label="Logs pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if logs.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ logs.previous_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                                    <i class="fas fa-chevron-left"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        <li class="page-item disabled">
+                            <span class="page-link">
+                                Página {{ logs.number }} de {{ logs.paginator.num_pages }}
+                            </span>
+                        </li>
+                        
+                        {% if logs.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ logs.next_page_number }}{% for key, value in filters.items %}{% if value %}&{{ key }}={{ value }}{% endif %}{% endfor %}">
+                                    <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        {% else %}
+            <!-- Empty State -->
+            <div class="text-center py-5">
+                <i class="fas fa-clipboard-list fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No hay logs de auditoría</h5>
+                <p class="text-muted">
+                    {% if filters.action or filters.model or filters.user or filters.date_from or filters.date_to %}
+                        No se encontraron logs con los filtros aplicados
+                    {% else %}
+                        El sistema no ha registrado actividad aún
+                    {% endif %}
+                </p>
+                {% if filters.action or filters.model or filters.user or filters.date_from or filters.date_to %}
+                    <a href="{% url 'custom_admin:audit_logs' %}" class="btn btn-primary">
+                        <i class="fas fa-times me-1"></i>Limpiar filtros
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Summary Card -->
+<div class="admin-card mt-4">
+    <div class="card-header">
+        <h5 class="card-title">
+            <i class="fas fa-chart-pie me-2"></i>Resumen
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-3">
+                <h4 class="text-primary">{{ total_count }}</h4>
+                <p class="text-muted mb-0">Total de logs</p>
+            </div>
+            <div class="col-md-3">
+                <h4 class="text-success">{{ logs|length }}</h4>
+                <p class="text-muted mb-0">En esta página</p>
+            </div>
+            <div class="col-md-3">
+                <h4 class="text-info">{{ models|length }}</h4>
+                <p class="text-muted mb-0">Modelos rastreados</p>
+            </div>
+            <div class="col-md-3">
+                <h4 class="text-warning">{{ users|length }}</h4>
+                <p class="text-muted mb-0">Usuarios activos</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleFilters() {
+    let filtersCard = document.getElementById('filtersCard');
+    if (filtersCard.style.display === 'none') {
+        filtersCard.style.display = 'block';
+    } else {
+        filtersCard.style.display = 'none';
+    }
+}
+
+// Mostrar filtros si hay alguno activo
+{% if filters.action or filters.model or filters.user or filters.date_from or filters.date_to %}
+document.getElementById('filtersCard').style.display = 'block';
+{% endif %}
+</script>
+{% endblock %}

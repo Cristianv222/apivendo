@@ -1,0 +1,235 @@
+<div class="modal-header">
+    <h5 class="modal-title">Detalle de Compra</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+    <!-- Estado de la compra -->
+    <div class="alert {% if purchase.payment_status == 'pending' %}alert-warning{% elif purchase.payment_status == 'approved' %}alert-success{% else %}alert-danger{% endif %} mb-4">
+        <div class="d-flex align-items-center">
+            {% if purchase.payment_status == 'pending' %}
+                <i class="fas fa-clock fa-2x me-3"></i>
+                <div>
+                    <h6 class="mb-0">Compra Pendiente de Aprobación</h6>
+                    <small>Esta compra está esperando validación del comprobante de pago</small>
+                </div>
+            {% elif purchase.payment_status == 'approved' %}
+                <i class="fas fa-check-circle fa-2x me-3"></i>
+                <div>
+                    <h6 class="mb-0">Compra Aprobada</h6>
+                    {% if purchase.processed_by %}
+                        <small>Procesada por {% if purchase.processed_by.get_full_name %}{{ purchase.processed_by.get_full_name }}{% else %}{{ purchase.processed_by.email }}{% endif %} el {{ purchase.processed_at|date:"d/m/Y H:i" }}</small>
+                    {% else %}
+                        <small>Procesada el {{ purchase.processed_at|date:"d/m/Y H:i"|default:"fecha no disponible" }}</small>
+                    {% endif %}
+                </div>
+            {% elif purchase.payment_status == 'rejected' %}
+                <i class="fas fa-times-circle fa-2x me-3"></i>
+                <div>
+                    <h6 class="mb-0">Compra Rechazada</h6>
+                    {% if purchase.processed_by %}
+                        <small>Procesada por {% if purchase.processed_by.get_full_name %}{{ purchase.processed_by.get_full_name }}{% else %}{{ purchase.processed_by.email }}{% endif %} el {{ purchase.processed_at|date:"d/m/Y H:i" }}</small>
+                    {% else %}
+                        <small>Procesada el {{ purchase.processed_at|date:"d/m/Y H:i"|default:"fecha no disponible" }}</small>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <!-- Información de la empresa -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Información de la Empresa</h6>
+            <table class="table table-sm">
+                <tr>
+                    <td class="fw-semibold">Empresa:</td>
+                    <td>{{ purchase.company.business_name|default:purchase.company.trade_name }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">RUC:</td>
+                    <td>{{ purchase.company.ruc }}</td>
+                </tr>
+                {% if purchase.company.email %}
+                <tr>
+                    <td class="fw-semibold">Email:</td>
+                    <td>{{ purchase.company.email }}</td>
+                </tr>
+                {% endif %}
+                {% if purchase.company.phone %}
+                <tr>
+                    <td class="fw-semibold">Teléfono:</td>
+                    <td>{{ purchase.company.phone }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+        
+        <!-- Información del plan -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Información del Plan</h6>
+            <table class="table table-sm">
+                <tr>
+                    <td class="fw-semibold">Plan:</td>
+                    <td>{{ purchase.plan_name }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Facturas:</td>
+                    <td>{{ purchase.plan_invoice_limit }} facturas</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Precio del Plan:</td>
+                    <td>${{ purchase.plan_price|floatformat:2 }} USD</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Precio por Factura:</td>
+                    <td>
+                        {% if purchase.plan_invoice_limit and purchase.plan_invoice_limit > 0 %}
+                            {% widthratio purchase.plan_price 1 purchase.plan_invoice_limit as price_per_invoice %}
+                            ${{ price_per_invoice|floatformat:3 }}
+                        {% else %}
+                            N/A
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+    
+    <div class="row mb-4">
+        <!-- Información del pago -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Información del Pago</h6>
+            <table class="table table-sm">
+                <tr>
+                    <td class="fw-semibold">Pagador:</td>
+                    <td>{{ purchase.payer_name }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Documento:</td>
+                    <td>{{ purchase.payer_document }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Monto Pagado:</td>
+                    <td class="text-success fw-bold">${{ purchase.payment_amount|floatformat:2 }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Fecha de Pago:</td>
+                    <td>{{ purchase.payment_date|date:"d/m/Y" }}</td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Método:</td>
+                    <td>{{ purchase.get_payment_method_display }}</td>
+                </tr>
+                {% if purchase.bank_name %}
+                <tr>
+                    <td class="fw-semibold">Banco:</td>
+                    <td>{{ purchase.bank_name }}</td>
+                </tr>
+                {% endif %}
+                {% if purchase.payment_reference %}
+                <tr>
+                    <td class="fw-semibold">Referencia:</td>
+                    <td>{{ purchase.payment_reference }}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+        
+        <!-- Información adicional -->
+        <div class="col-md-6">
+            <h6 class="text-muted mb-3">Información Adicional</h6>
+            <table class="table table-sm">
+                <tr>
+                    <td class="fw-semibold">ID de Compra:</td>
+                    <td><code>{{ purchase.purchase_id }}</code></td>
+                </tr>
+                <tr>
+                    <td class="fw-semibold">Fecha de Solicitud:</td>
+                    <td>{{ purchase.created_at|date:"d/m/Y H:i" }}</td>
+                </tr>
+                {% if purchase.processed_at %}
+                <tr>
+                    <td class="fw-semibold">Fecha de Proceso:</td>
+                    <td>{{ purchase.processed_at|date:"d/m/Y H:i" }}</td>
+                </tr>
+                {% endif %}
+                {% if purchase.processed_by %}
+                <tr>
+                    <td class="fw-semibold">Procesado por:</td>
+                    <td>{% if purchase.processed_by.get_full_name %}{{ purchase.processed_by.get_full_name }}{% else %}{{ purchase.processed_by.email }}{% endif %}</td>
+                </tr>
+                {% endif %}
+            </table>
+        </div>
+    </div>
+    
+    <!-- Notas del cliente -->
+    {% if purchase.customer_notes %}
+    <div class="mb-4">
+        <h6 class="text-muted mb-2">Notas del Cliente</h6>
+        <div class="alert alert-light">
+            <i class="fas fa-comment me-2"></i>
+            {{ purchase.customer_notes }}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Notas del administrador -->
+    {% if purchase.admin_notes %}
+    <div class="mb-4">
+        <h6 class="text-muted mb-2">Notas del Administrador</h6>
+        <div class="alert alert-info">
+            <i class="fas fa-sticky-note me-2"></i>
+            {{ purchase.admin_notes }}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Comprobante de pago -->
+    <div class="mb-4">
+        <h6 class="text-muted mb-3">Comprobante de Pago</h6>
+        {% if purchase.payment_receipt %}
+            <div class="text-center p-3 bg-light rounded">
+                {% with ext=purchase.payment_receipt.url|slice:"-4:"|lower %}
+                {% if ext == ".jpg" or ext == ".png" or ext == "jpeg" or ext == ".gif" or ext == "webp" %}
+                    <img src="{{ purchase.payment_receipt.url }}" 
+                         alt="Comprobante de pago" 
+                         class="img-fluid" 
+                         style="max-height: 400px; cursor: pointer;"
+                         onclick="window.open('{{ purchase.payment_receipt.url }}', '_blank')">
+                {% else %}
+                    <a href="{{ purchase.payment_receipt.url }}" 
+                       target="_blank" 
+                       class="btn btn-primary">
+                        <i class="fas fa-file-pdf me-2"></i>
+                        Ver Comprobante
+                    </a>
+                {% endif %}
+                {% endwith %}
+                <div class="mt-2">
+                    <small class="text-muted">
+                        Archivo: {{ purchase.payment_receipt.name|slice:"19:" }}
+                    </small>
+                </div>
+            </div>
+        {% else %}
+            <div class="alert alert-light text-center">
+                <i class="fas fa-file-invoice fa-2x text-muted mb-2"></i>
+                <p class="mb-0 text-muted">No se ha cargado comprobante</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+<div class="modal-footer">
+    {% if purchase.payment_status == 'pending' %}
+        <button type="button" class="btn btn-success" 
+                onclick="approvePurchase('{{ purchase.purchase_id }}'); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();">
+            <i class="fas fa-check me-1"></i>Aprobar Compra
+        </button>
+        <button type="button" class="btn btn-danger" 
+                onclick="showRejectModal('{{ purchase.purchase_id }}'); bootstrap.Modal.getInstance(document.getElementById('detailModal')).hide();">
+            <i class="fas fa-times me-1"></i>Rechazar Compra
+        </button>
+    {% endif %}
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+</div>

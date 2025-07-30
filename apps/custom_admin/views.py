@@ -32,6 +32,7 @@ from decimal import Decimal
 # Agregar estas importaciones
 from apps.sri_integration.models import ElectronicDocument
 from apps.companies.models import Company
+from apps.users.models import User, UserCompanyAssignment, AdminNotification
 
 def staff_required(view_func):
     """Decorator to require staff/admin access"""
@@ -577,8 +578,6 @@ def company_create(request):
         email = request.POST.get('email', '')
         phone = request.POST.get('phone', '')
         address = request.POST.get('address', '')
-        city = request.POST.get('city', 'Quito')
-        province = request.POST.get('province', '')
         is_active = request.POST.get('is_active') == 'on'
         
         if Company.objects.filter(ruc=ruc).exists():
@@ -595,10 +594,9 @@ def company_create(request):
                 email=email,
                 phone=phone,
                 address=address,
-                city=city,
-                province=province,
                 is_active=is_active
             )
+            # NO incluir city ni province aquí
             
             # If plan field exists
             if hasattr(company, 'plan'):
@@ -2033,12 +2031,7 @@ def sri_documents_batch_process(request):
             'error': str(e)
         })
 
-# En apps/custom_admin/views.py - Añadir estas vistas de notificaciones
-
-from apps.notifications.models import Notification, NotificationTemplate, NotificationSubscription
-from django.core.paginator import Paginator
-from django.db.models import Q, Count
-from django.utils import timezone
+# Reemplaza todas las funciones de notificaciones en views.py con estas versiones:
 
 @login_required
 def notifications_list(request):
@@ -2048,34 +2041,25 @@ def notifications_list(request):
     current_filter = request.GET.get('filter', 'all')
     
     # Query base
-    notifications = Notification.objects.filter(
-        recipient=request.user
-    ).select_related('template', 'company')
+    notifications = AdminNotification.objects.all().order_by('-created_at')
     
     # Aplicar filtros
     if current_filter == 'unread':
-        notifications = notifications.filter(read_at__isnull=True)
+        notifications = notifications.filter(is_read=False)
     elif current_filter == 'info':
-        notifications = notifications.filter(template__priority='NORMAL')
+        notifications = notifications.filter(priority='normal')
     elif current_filter == 'success':
-        notifications = notifications.filter(template__notification_type__in=[
-            'DOCUMENT_AUTHORIZED', 'BACKUP_COMPLETED'
+        notifications = notifications.filter(notification_type__in=[
+            'user_approved', 'document_authorized'
         ])
     elif current_filter == 'warning':
-        notifications = notifications.filter(template__notification_type__in=[
-            'CERTIFICATE_EXPIRING', 'LOW_STOCK', 'PAYMENT_REMINDER'
-        ])
+        notifications = notifications.filter(priority='high')
     elif current_filter == 'error':
-        notifications = notifications.filter(template__notification_type__in=[
-            'DOCUMENT_REJECTED', 'CERTIFICATE_EXPIRED', 'BACKUP_FAILED', 'SYSTEM_ERROR'
-        ])
+        notifications = notifications.filter(priority='urgent')
     
     # Contar totales
-    total_count = Notification.objects.filter(recipient=request.user).count()
-    unread_count = Notification.objects.filter(
-        recipient=request.user, 
-        read_at__isnull=True
-    ).count()
+    total_count = AdminNotification.objects.count()
+    unread_count = AdminNotification.objects.filter(is_read=False).count()
     
     # Paginación
     paginator = Paginator(notifications, 20)
@@ -2097,17 +2081,15 @@ def notification_mark_read(request, notification_id):
     """Marcar una notificación como leída"""
     if request.method == 'POST':
         try:
-            notification = Notification.objects.get(
-                id=notification_id,
-                recipient=request.user
-            )
-            notification.mark_as_read()
+            notification = AdminNotification.objects.get(id=notification_id)
+            notification.is_read = True
+            notification.save()
             
             return JsonResponse({
                 'success': True,
                 'action_url': notification.action_url
             })
-        except Notification.DoesNotExist:
+        except AdminNotification.DoesNotExist:
             return JsonResponse({
                 'success': False,
                 'error': 'Notificación no encontrada'
@@ -2119,10 +2101,7 @@ def notification_mark_read(request, notification_id):
 def notification_detail(request, notification_id):
     """Obtener detalle de una notificación"""
     try:
-        notification = Notification.objects.get(
-            id=notification_id,
-            recipient=request.user
-        )
+        notification = AdminNotification.objects.get(id=notification_id)
         
         return JsonResponse({
             'title': notification.title,
@@ -2131,7 +2110,7 @@ def notification_detail(request, notification_id):
             'action_url': notification.action_url,
             'action_text': notification.action_text,
         })
-    except Notification.DoesNotExist:
+    except AdminNotification.DoesNotExist:
         return JsonResponse({
             'success': False,
             'error': 'Notificación no encontrada'
@@ -2141,12 +2120,10 @@ def notification_detail(request, notification_id):
 def notifications_mark_all_read(request):
     """Marcar todas las notificaciones como leídas"""
     if request.method == 'POST':
-        updated = Notification.objects.filter(
-            recipient=request.user,
-            read_at__isnull=True
+        updated = AdminNotification.objects.filter(
+            is_read=False
         ).update(
-            read_at=timezone.now(),
-            status='READ'
+            is_read=True
         )
         
         return JsonResponse({
@@ -2164,13 +2141,11 @@ def notifications_batch_mark_read(request):
             data = json.loads(request.body)
             notification_ids = data.get('notification_ids', [])
             
-            updated = Notification.objects.filter(
+            updated = AdminNotification.objects.filter(
                 id__in=notification_ids,
-                recipient=request.user,
-                read_at__isnull=True
+                is_read=False
             ).update(
-                read_at=timezone.now(),
-                status='READ'
+                is_read=True
             )
             
             return JsonResponse({
@@ -2193,9 +2168,8 @@ def notifications_batch_delete(request):
             data = json.loads(request.body)
             notification_ids = data.get('notification_ids', [])
             
-            deleted, _ = Notification.objects.filter(
-                id__in=notification_ids,
-                recipient=request.user
+            deleted, _ = AdminNotification.objects.filter(
+                id__in=notification_ids
             ).delete()
             
             return JsonResponse({
@@ -2213,50 +2187,11 @@ def notifications_batch_delete(request):
 @login_required
 def notification_settings(request):
     """Configuración de notificaciones del usuario"""
-    if request.method == 'POST':
-        # Guardar configuraciones
-        try:
-            data = json.loads(request.body)
-            
-            for notification_type in NotificationTemplate.NOTIFICATION_TYPES:
-                type_key = notification_type[0]
-                subscription, created = NotificationSubscription.objects.get_or_create(
-                    user=request.user,
-                    notification_type=type_key,
-                    defaults={
-                        'email_enabled': data.get(f'{type_key}_email', True),
-                        'browser_enabled': data.get(f'{type_key}_browser', True),
-                    }
-                )
-                
-                if not created:
-                    subscription.email_enabled = data.get(f'{type_key}_email', True)
-                    subscription.browser_enabled = data.get(f'{type_key}_browser', True)
-                    subscription.save()
-            
-            return JsonResponse({'success': True})
-        except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)})
-    
-    # Obtener configuraciones actuales
-    subscriptions = NotificationSubscription.objects.filter(
-        user=request.user
-    ).values('notification_type', 'email_enabled', 'browser_enabled')
-    
-    # Convertir a diccionario
-    settings_dict = {}
-    for sub in subscriptions:
-        settings_dict[sub['notification_type']] = {
-            'email': sub['email_enabled'],
-            'browser': sub['browser_enabled']
-        }
-    
+    # Esta vista puede quedar vacía por ahora ya que AdminNotification
+    # no tiene un sistema de suscripciones como el modelo Notification
     context = {
         'page_title': 'Configuración de Notificaciones',
-        'notification_types': NotificationTemplate.NOTIFICATION_TYPES,
-        'settings': settings_dict
     }
-    
     return render(request, 'custom_admin/notifications/settings.html', context)
 
 # ========== AUDIT LOGS ==========
@@ -2289,9 +2224,26 @@ def audit_logs(request):
     if date_to:
         logs = logs.filter(created_at__date__lte=date_to)
     
-    # Get unique values for filters
-    actions = AuditLog.objects.values_list('action', flat=True).distinct()
-    models = AuditLog.objects.values_list('model_name', flat=True).distinct()
+    # Get unique values for filters - CORRECCIÓN AQUÍ
+    actions = (AuditLog.objects
+               .exclude(action__isnull=True)
+               .exclude(action='')
+               .values_list('action', flat=True)
+               .distinct()
+               .order_by('action'))
+    
+    models = (AuditLog.objects
+              .exclude(model_name__isnull=True)
+              .exclude(model_name='')
+              .values_list('model_name', flat=True)
+              .distinct()
+              .order_by('model_name'))
+    
+    # Para usuarios, usar el campo correcto 'audit_logs'
+    users = (User.objects
+             .filter(audit_logs__isnull=False)  # Cambié 'auditlog' por 'audit_logs'
+             .distinct()
+             .order_by('email'))
     
     # Pagination
     paginator = Paginator(logs, 50)
@@ -2304,7 +2256,7 @@ def audit_logs(request):
         'total_count': paginator.count,
         'actions': actions,
         'models': models,
-        'users': User.objects.filter(is_staff=True),
+        'users': users,
         'filters': {
             'action': action,
             'model': model,
@@ -2314,7 +2266,7 @@ def audit_logs(request):
         }
     }
     
-    return render(request, 'custom_admin/audit_logs.html', context)
+    return render(request, 'custom_admin/audit_logs/list.html', context)
 
 # ========== SETTINGS ==========
 from django.core.mail import send_mail
@@ -2512,33 +2464,225 @@ def company_settings(request):
     return render(request, 'custom_admin/settings/companies.html', context)
 
 # ========== PROFILE ==========
+# ========== PROFILE VIEWS COMPLETAS ==========
+
+from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.forms import PasswordChangeForm
+from django.contrib import messages
+from rest_framework.authtoken.models import Token
+from django.contrib.sessions.models import Session
+from django.utils import timezone
+from datetime import datetime
 
 @login_required
 @staff_required
 def profile(request):
     """User profile"""
+    # Obtener actividad reciente del usuario
+    recent_activities = AuditLog.objects.filter(
+        user=request.user
+    ).order_by('-created_at')[:10]
+    
+    # Contar sesiones activas
+    active_sessions = Session.objects.filter(
+        expire_date__gte=timezone.now()
+    ).count()
+    
     context = {
         'page_title': 'Mi Perfil',
+        'user': request.user,
+        'recent_activities': recent_activities,
+        'active_sessions': active_sessions
+    }
+    return render(request, 'custom_admin/profile/profile.html', context)
+
+
+@login_required
+@staff_required
+def profile_edit(request):
+    """Edit profile page"""
+    if request.method == 'POST':
+        # Actualizar datos del usuario
+        user = request.user
+        user.first_name = request.POST.get('first_name', '')
+        user.last_name = request.POST.get('last_name', '')
+        user.phone = request.POST.get('phone', '')
+        
+        # Manejar foto de perfil si se sube una
+        if 'profile_picture' in request.FILES:
+            user.profile_picture = request.FILES['profile_picture']
+        
+        try:
+            user.save()
+            
+            # Log action
+            AuditLog.objects.create(
+                user=request.user,
+                action='UPDATE',
+                model_name='User',
+                object_id=str(user.id),
+                object_representation=f'Perfil actualizado: {user.get_full_name()}',
+                changes=f'Nombre: {user.first_name} {user.last_name}, Teléfono: {user.phone}',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            
+            messages.success(request, 'Perfil actualizado exitosamente')
+            return redirect('custom_admin:profile')
+            
+        except Exception as e:
+            messages.error(request, f'Error al actualizar el perfil: {str(e)}')
+    
+    context = {
+        'page_title': 'Editar Perfil',
         'user': request.user
     }
-    return render(request, 'custom_admin/profile.html', context)
+    return render(request, 'custom_admin/profile/edit.html', context)
+
+
+@login_required
+@staff_required
+def change_password(request):
+    """Change password view"""
+    if request.method == 'POST':
+        form = PasswordChangeForm(request.user, request.POST)
+        if form.is_valid():
+            user = form.save()
+            update_session_auth_hash(request, user)  # Mantiene la sesión activa
+            
+            # Log action
+            AuditLog.objects.create(
+                user=request.user,
+                action='UPDATE',
+                model_name='User',
+                object_id=str(user.id),
+                object_representation='Cambio de contraseña',
+                changes='Contraseña actualizada',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            
+            messages.success(request, 'Tu contraseña ha sido actualizada exitosamente')
+            return redirect('custom_admin:profile')
+        else:
+            messages.error(request, 'Por favor corrige los errores del formulario')
+    else:
+        form = PasswordChangeForm(request.user)
+    
+    context = {
+        'page_title': 'Cambiar Contraseña',
+        'form': form
+    }
+    return render(request, 'custom_admin/profile/change_password.html', context)
+
+
+@login_required
+@staff_required
+def manage_sessions(request):
+    """Manage user sessions"""
+    if request.method == 'POST':
+        # Cerrar todas las sesiones excepto la actual
+        current_session_key = request.session.session_key
+        
+        # Obtener todas las sesiones
+        sessions = Session.objects.filter(expire_date__gte=timezone.now())
+        sessions_closed = 0
+        
+        for session in sessions:
+            session_data = session.get_decoded()
+            if session_data.get('_auth_user_id') == str(request.user.id):
+                if session.session_key != current_session_key:
+                    session.delete()
+                    sessions_closed += 1
+        
+        # Log action
+        AuditLog.objects.create(
+            user=request.user,
+            action='DELETE',
+            model_name='Session',
+            object_representation=f'Cerradas {sessions_closed} sesiones',
+            changes=f'Se cerraron {sessions_closed} sesiones activas',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        messages.success(request, f'Se cerraron {sessions_closed} sesiones activas')
+        return redirect('custom_admin:profile')
+    
+    # Obtener información de sesiones activas
+    sessions = Session.objects.filter(expire_date__gte=timezone.now())
+    user_sessions = []
+    
+    for session in sessions:
+        session_data = session.get_decoded()
+        if session_data.get('_auth_user_id') == str(request.user.id):
+            user_sessions.append({
+                'session_key': session.session_key,
+                'expire_date': session.expire_date,
+                'is_current': session.session_key == request.session.session_key
+            })
+    
+    context = {
+        'page_title': 'Gestionar Sesiones',
+        'user_sessions': user_sessions
+    }
+    return render(request, 'custom_admin/profile/manage_sessions.html', context)
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def regenerate_token(request):
+    """Regenerate API token"""
+    try:
+        # Eliminar token existente si existe
+        Token.objects.filter(user=request.user).delete()
+        
+        # Crear nuevo token
+        token = Token.objects.create(user=request.user)
+        
+        # Log action
+        AuditLog.objects.create(
+            user=request.user,
+            action='CREATE',
+            model_name='Token',
+            object_representation='Token API regenerado',
+            changes=f'Nuevo token generado',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        messages.success(request, 'Token API regenerado exitosamente')
+        return JsonResponse({
+            'success': True,
+            'token': token.key,
+            'message': 'Token regenerado exitosamente'
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })
 
 
 @login_required
 @staff_required
 @require_http_methods(["POST"])
 def profile_update(request):
-    """Update user profile"""
+    """Update user profile via AJAX"""
     try:
         data = json.loads(request.body)
         user = request.user
         
-        user.first_name = data.get('first_name', user.first_name)
-        user.last_name = data.get('last_name', user.last_name)
-        user.phone = data.get('phone', user.phone)
+        # Actualizar campos
+        if 'first_name' in data:
+            user.first_name = data['first_name']
+        if 'last_name' in data:
+            user.last_name = data['last_name']
+        if 'phone' in data:
+            user.phone = data['phone']
         
+        # Si se cambia la contraseña
         if data.get('password'):
             user.set_password(data['password'])
+            update_session_auth_hash(request, user)
         
         user.save()
         
@@ -2548,7 +2692,8 @@ def profile_update(request):
             action='UPDATE',
             model_name='User',
             object_id=str(user.id),
-            object_representation='Profile Update',
+            object_representation='Actualización de perfil',
+            changes=f'Datos actualizados vía API',
             ip_address=request.META.get('REMOTE_ADDR')
         )
         
@@ -2556,12 +2701,12 @@ def profile_update(request):
             'success': True,
             'message': 'Perfil actualizado exitosamente'
         })
+        
     except Exception as e:
         return JsonResponse({
             'success': False,
             'error': str(e)
         })
-
 
 # ========== HELPER FUNCTIONS ==========
 
@@ -2806,3 +2951,445 @@ def products_list(request):
         'total_count': 0,
     }
     return render(request, 'custom_admin/products/list.html', context)
+# Agregar estas vistas en apps/custom_admin/views.py
+
+# ========== BILLING ==========
+
+@login_required
+@staff_required
+def billing_plans_list(request):
+    """Lista de planes de facturación"""
+    from apps.billing.models import Plan
+    
+    plans = Plan.objects.all().order_by('sort_order', 'price')
+    
+    # Filtros
+    is_active = request.GET.get('is_active')
+    if is_active:
+        plans = plans.filter(is_active=is_active == 'true')
+    
+    context = {
+        'page_title': 'Planes de Facturación',
+        'plans': plans,
+    }
+    return render(request, 'custom_admin/billing/plans_list.html', context)
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def billing_plan_create(request):
+    """Crear nuevo plan"""
+    from apps.billing.models import Plan
+    
+    try:
+        data = json.loads(request.body)
+        
+        plan = Plan.objects.create(
+            name=data['name'],
+            description=data.get('description', ''),
+            invoice_limit=data['invoice_limit'],
+            price=data['price'],
+            is_active=data.get('is_active', True),
+            is_featured=data.get('is_featured', False),
+            sort_order=data.get('sort_order', 0)
+        )
+        
+        # Log action
+        AuditLog.objects.create(
+            user=request.user,
+            action='CREATE',
+            model_name='Plan',
+            object_id=str(plan.id),
+            object_representation=plan.name,
+            changes=f'Plan creado: {plan.invoice_limit} facturas por ${plan.price}',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Plan creado exitosamente',
+            'plan': {
+                'id': plan.id,
+                'name': plan.name,
+                'invoice_limit': plan.invoice_limit,
+                'price': str(plan.price),
+            }
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+@staff_required
+@require_http_methods(["PUT"])
+def billing_plan_update(request, plan_id):
+    """Actualizar plan"""
+    from apps.billing.models import Plan
+    
+    try:
+        plan = Plan.objects.get(id=plan_id)
+        data = json.loads(request.body)
+        
+        # Guardar valores anteriores para el log
+        old_values = {
+            'name': plan.name,
+            'invoice_limit': plan.invoice_limit,
+            'price': str(plan.price),
+        }
+        
+        # Actualizar
+        plan.name = data.get('name', plan.name)
+        plan.description = data.get('description', plan.description)
+        plan.invoice_limit = data.get('invoice_limit', plan.invoice_limit)
+        plan.price = data.get('price', plan.price)
+        plan.is_active = data.get('is_active', plan.is_active)
+        plan.is_featured = data.get('is_featured', plan.is_featured)
+        plan.sort_order = data.get('sort_order', plan.sort_order)
+        plan.save()
+        
+        # Log changes
+        AuditLog.objects.create(
+            user=request.user,
+            action='UPDATE',
+            model_name='Plan',
+            object_id=str(plan.id),
+            object_representation=plan.name,
+            changes=f'Actualizado de {old_values} a {{"name": "{plan.name}", "invoice_limit": {plan.invoice_limit}, "price": "{plan.price}"}}',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Plan actualizado exitosamente'
+        })
+        
+    except Plan.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Plan no encontrado'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+@staff_required
+@require_http_methods(["DELETE"])
+def billing_plan_delete(request, plan_id):
+    """Eliminar plan"""
+    from apps.billing.models import Plan
+    
+    try:
+        plan = Plan.objects.get(id=plan_id)
+        plan_name = plan.name
+        
+        # Verificar si tiene compras asociadas
+        if plan.purchases.exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'No se puede eliminar un plan con compras asociadas'
+            }, status=400)
+        
+        plan.delete()
+        
+        # Log action
+        AuditLog.objects.create(
+            user=request.user,
+            action='DELETE',
+            model_name='Plan',
+            object_id=str(plan_id),
+            object_representation=plan_name,
+            changes='Plan eliminado',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Plan eliminado exitosamente'
+        })
+        
+    except Plan.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Plan no encontrado'
+        }, status=404)
+
+
+@login_required
+@staff_required
+def billing_purchases_list(request):
+    """Lista de compras de planes"""
+    from apps.billing.models import PlanPurchase
+    
+    purchases = PlanPurchase.objects.all().select_related(
+        'company', 'plan', 'processed_by'
+    ).order_by('-created_at')
+    
+    # Filtros
+    status = request.GET.get('status')
+    if status:
+        purchases = purchases.filter(payment_status=status)
+    
+    company_id = request.GET.get('company')
+    if company_id:
+        purchases = purchases.filter(company_id=company_id)
+    
+    date_from = request.GET.get('date_from')
+    if date_from:
+        purchases = purchases.filter(created_at__date__gte=date_from)
+    
+    date_to = request.GET.get('date_to')
+    if date_to:
+        purchases = purchases.filter(created_at__date__lte=date_to)
+    
+    # Paginación
+    paginator = Paginator(purchases, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Estadísticas
+    from django.db.models import Sum, Count
+    stats = purchases.aggregate(
+        total_pending=Count('id', filter=Q(payment_status='pending')),
+        total_approved=Count('id', filter=Q(payment_status='approved')),
+        total_amount=Sum('payment_amount', filter=Q(payment_status='approved'))
+    )
+    
+    context = {
+        'page_title': 'Compras de Planes',
+        'page_obj': page_obj,
+        'stats': stats,
+        'status_filter': status,
+        'company_filter': company_id,
+        'date_from': date_from,
+        'date_to': date_to,
+    }
+    return render(request, 'custom_admin/billing/purchases_list.html', context)
+
+
+@login_required
+@staff_required
+def billing_purchase_detail(request, purchase_id):
+    """Ver detalle de una compra"""
+    from apps.billing.models import PlanPurchase
+    
+    purchase = get_object_or_404(
+        PlanPurchase.objects.select_related('company', 'plan', 'processed_by'),
+        purchase_id=purchase_id
+    )
+    
+    context = {
+        'purchase': purchase,
+    }
+    return render(request, 'custom_admin/billing/purchase_detail_modal.html', context)
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def billing_purchase_approve(request, purchase_id):
+    """Aprobar una compra"""
+    from apps.billing.models import PlanPurchase
+    
+    try:
+        purchase = PlanPurchase.objects.get(purchase_id=purchase_id)
+        
+        if purchase.payment_status != 'pending':
+            return JsonResponse({
+                'success': False,
+                'error': 'Solo se pueden aprobar compras pendientes'
+            }, status=400)
+        
+        # Aprobar la compra (esto asigna las facturas automáticamente)
+        success = purchase.approve_purchase(request.user)
+        
+        if success:
+            # Log action
+            AuditLog.objects.create(
+                user=request.user,
+                action='APPROVE',
+                model_name='PlanPurchase',
+                object_id=str(purchase.id),
+                object_representation=f'{purchase.company.business_name} - {purchase.plan_name}',
+                changes=f'Compra aprobada: {purchase.plan_invoice_limit} facturas asignadas',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': f'Compra aprobada. Se asignaron {purchase.plan_invoice_limit} facturas a {purchase.company.business_name}'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'No se pudo aprobar la compra'
+            }, status=400)
+            
+    except PlanPurchase.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Compra no encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def billing_purchase_reject(request, purchase_id):
+    """Rechazar una compra"""
+    from apps.billing.models import PlanPurchase
+    
+    try:
+        purchase = PlanPurchase.objects.get(purchase_id=purchase_id)
+        data = json.loads(request.body)
+        reason = data.get('reason', '')
+        
+        if purchase.payment_status != 'pending':
+            return JsonResponse({
+                'success': False,
+                'error': 'Solo se pueden rechazar compras pendientes'
+            }, status=400)
+        
+        # Rechazar la compra
+        success = purchase.reject_purchase(request.user, reason)
+        
+        if success:
+            # Log action
+            AuditLog.objects.create(
+                user=request.user,
+                action='REJECT',
+                model_name='PlanPurchase',
+                object_id=str(purchase.id),
+                object_representation=f'{purchase.company.business_name} - {purchase.plan_name}',
+                changes=f'Compra rechazada. Razón: {reason}',
+                ip_address=request.META.get('REMOTE_ADDR')
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Compra rechazada exitosamente'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'No se pudo rechazar la compra'
+            }, status=400)
+            
+    except PlanPurchase.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Compra no encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)
+
+
+@login_required
+@staff_required
+def billing_company_profiles(request):
+    """Lista de perfiles de facturación por empresa"""
+    from apps.billing.models import CompanyBillingProfile
+    from apps.companies.models import Company
+    
+    profiles = CompanyBillingProfile.objects.all().select_related('company').order_by('company__business_name')
+    
+    # Filtros
+    search = request.GET.get('search')
+    if search:
+        profiles = profiles.filter(
+            Q(company__business_name__icontains=search) |
+            Q(company__trade_name__icontains=search) |
+            Q(company__ruc__icontains=search)
+        )
+    
+    low_balance = request.GET.get('low_balance')
+    if low_balance == 'true':
+        profiles = profiles.filter(available_invoices__lte=F('low_balance_threshold'))
+    
+    # Paginación
+    paginator = Paginator(profiles, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'page_title': 'Perfiles de Facturación',
+        'page_obj': page_obj,
+        'search': search,
+        'low_balance_filter': low_balance,
+    }
+    return render(request, 'custom_admin/billing/company_profiles.html', context)
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def billing_add_invoices(request, company_id):
+    """Agregar facturas manualmente a una empresa"""
+    from apps.billing.models import CompanyBillingProfile
+    from apps.companies.models import Company
+    
+    try:
+        company = Company.objects.get(id=company_id)
+        data = json.loads(request.body)
+        
+        invoice_count = int(data.get('invoice_count', 0))
+        reason = data.get('reason', '')
+        
+        if invoice_count <= 0:
+            return JsonResponse({
+                'success': False,
+                'error': 'La cantidad debe ser mayor a 0'
+            }, status=400)
+        
+        # Obtener o crear perfil
+        profile, created = CompanyBillingProfile.objects.get_or_create(
+            company=company,
+            defaults={'available_invoices': 0}
+        )
+        
+        # Agregar facturas
+        profile.add_invoices(invoice_count)
+        
+        # Log action
+        AuditLog.objects.create(
+            user=request.user,
+            action='CREATE',
+            model_name='CompanyBillingProfile',
+            object_id=str(profile.id),
+            object_representation=company.business_name,
+            changes=f'Se agregaron {invoice_count} facturas manualmente. Razón: {reason}',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Se agregaron {invoice_count} facturas a {company.business_name}',
+            'new_balance': profile.available_invoices
+        })
+        
+    except Company.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Empresa no encontrada'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)

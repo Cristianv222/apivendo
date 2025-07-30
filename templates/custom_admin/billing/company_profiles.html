@@ -1,0 +1,366 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+
+{% block header_title %}Perfiles de Facturación{% endblock %}
+
+{% block extra_css %}
+<style>
+    .profile-card {
+        background: white;
+        border-radius: 8px;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        border: 1px solid #e9ecef;
+        transition: all 0.2s ease;
+    }
+    
+    .profile-card:hover {
+        border-color: #dee2e6;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .company-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+    
+    .company-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .company-avatar {
+        width: 50px;
+        height: 50px;
+        background: #e9ecef;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        color: #495057;
+        font-size: 1.25rem;
+    }
+    
+    .invoice-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .stat-box {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 6px;
+        text-align: center;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #2c3e50;
+        margin-bottom: 0.25rem;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .low-balance {
+        background: #fff3cd;
+        border-color: #ffeaa7;
+    }
+    
+    .low-balance .stat-value {
+        color: #f39c12;
+    }
+    
+    .usage-bar {
+        width: 100%;
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+    
+    .usage-progress {
+        height: 100%;
+        background: #28a745;
+        transition: width 0.3s ease;
+    }
+    
+    .usage-progress.high {
+        background: #ffc107;
+    }
+    
+    .usage-progress.critical {
+        background: #dc3545;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-0">Perfiles de Facturación</h2>
+        <p class="text-muted mb-0">Gestión de facturas disponibles por empresa</p>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="admin-card mb-4">
+    <div class="card-body">
+        <form method="get" class="row align-items-end">
+            <div class="col-md-4">
+                <label class="form-label">Buscar empresa</label>
+                <input type="text" name="search" class="form-control" 
+                       placeholder="Nombre, RUC..." value="{{ search }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select name="low_balance" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="true" {% if low_balance_filter == 'true' %}selected{% endif %}>
+                        Saldo bajo
+                    </option>
+                </select>
+            </div>
+            <div class="col-md-5 text-end">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-filter me-1"></i>Filtrar
+                </button>
+                <a href="{% url 'custom_admin:billing_profiles' %}" class="btn btn-light">
+                    <i class="fas fa-redo me-1"></i>Limpiar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Lista de Perfiles -->
+<div class="profiles-list">
+    {% for profile in page_obj %}
+    <div class="profile-card {% if profile.is_low_balance %}low-balance{% endif %}">
+        <div class="company-header">
+            <div class="company-info">
+                <div class="company-avatar">
+                    {{ profile.company.business_name|slice:":1"|upper }}
+                </div>
+                <div>
+                    <h5 class="mb-0">{{ profile.company.business_name|default:profile.company.trade_name }}</h5>
+                    <small class="text-muted">RUC: {{ profile.company.ruc }}</small>
+                </div>
+            </div>
+            
+            <div>
+                <button class="btn btn-sm btn-outline-primary" 
+                        onclick="showAddInvoicesModal({{ profile.company.id }}, '{{ profile.company.business_name|default:profile.company.trade_name }}')">
+                    <i class="fas fa-plus me-1"></i>Agregar Facturas
+                </button>
+            </div>
+        </div>
+        
+        <div class="invoice-stats">
+            <div class="stat-box">
+                <div class="stat-value text-primary">{{ profile.available_invoices }}</div>
+                <div class="stat-label">Disponibles</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value text-success">{{ profile.total_invoices_purchased }}</div>
+                <div class="stat-label">Compradas</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value text-warning">{{ profile.total_invoices_consumed }}</div>
+                <div class="stat-label">Consumidas</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value text-info">${{ profile.total_spent|floatformat:2 }}</div>
+                <div class="stat-label">Total Gastado</div>
+            </div>
+        </div>
+        
+        <div class="mt-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-muted">Uso: {{ profile.usage_percentage|floatformat:1 }}%</small>
+                {% if profile.last_purchase_date %}
+                <small class="text-muted">Última compra: {{ profile.last_purchase_date|date:"d/m/Y" }}</small>
+                {% endif %}
+            </div>
+            <div class="usage-bar">
+                <div class="usage-progress {% if profile.usage_percentage > 80 %}critical{% elif profile.usage_percentage > 60 %}high{% endif %}" 
+                     style="width: {{ profile.usage_percentage }}%"></div>
+            </div>
+        </div>
+        
+        {% if profile.is_low_balance %}
+        <div class="alert alert-warning mt-3 mb-0">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Saldo bajo: quedan {{ profile.available_invoices }} facturas disponibles
+        </div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="text-center py-5">
+        <i class="fas fa-building fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">No se encontraron perfiles de facturación</h5>
+        <p class="text-muted">Los perfiles se crean automáticamente cuando las empresas compran planes</p>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Paginación -->
+{% if page_obj.has_other_pages %}
+<nav aria-label="Paginación" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if search %}&search={{ search }}{% endif %}{% if low_balance_filter %}&low_balance={{ low_balance_filter }}{% endif %}">
+                    <i class="fas fa-chevron-left"></i>
+                </a>
+            </li>
+        {% endif %}
+        
+        <li class="page-item active">
+            <span class="page-link">
+                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
+            </span>
+        </li>
+        
+        {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if search %}&search={{ search }}{% endif %}{% if low_balance_filter %}&low_balance={{ low_balance_filter }}{% endif %}">
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+<!-- Modal Agregar Facturas -->
+<div class="modal fade" id="addInvoicesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Agregar Facturas Manualmente</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addInvoicesForm">
+                    <input type="hidden" id="companyId">
+                    
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Agregando facturas a: <strong id="companyName"></strong>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Cantidad de Facturas <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="invoiceCount" min="1" required>
+                        <small class="form-text text-muted">
+                            Número de facturas a agregar al saldo de la empresa
+                        </small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Razón/Motivo <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="reason" rows="3" required
+                                  placeholder="Ej: Cortesía, ajuste manual, compensación..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Importante:</strong> Esta acción quedará registrada en el sistema de auditoría.
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="addInvoices()">
+                    <i class="fas fa-plus me-1"></i>Agregar Facturas
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Mostrar modal de agregar facturas
+function showAddInvoicesModal(companyId, companyName) {
+    document.getElementById('companyId').value = companyId;
+    document.getElementById('companyName').textContent = companyName;
+    document.getElementById('addInvoicesForm').reset();
+    new bootstrap.Modal(document.getElementById('addInvoicesModal')).show();
+}
+
+// Agregar facturas
+async function addInvoices() {
+    const form = document.getElementById('addInvoicesForm');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const companyId = document.getElementById('companyId').value;
+    const invoiceCount = document.getElementById('invoiceCount').value;
+    const reason = document.getElementById('reason').value;
+    
+    if (!confirm(`¿Estás seguro de agregar ${invoiceCount} facturas a esta empresa?`)) {
+        return;
+    }
+    
+    try {
+        // Usar la URL directamente
+        const response = await fetch(`/admin-panel/billing/profiles/${companyId}/add-invoices/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({
+                invoice_count: parseInt(invoiceCount),
+                reason: reason
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(result.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('addInvoicesModal')).hide();
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            showNotification(result.error || 'Error al agregar facturas', 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Error al procesar la solicitud', 'error');
+    }
+}
+
+// Notificaciones
+function showNotification(message, type) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
+    
+    const alert = document.createElement('div');
+    alert.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
+    alert.style.zIndex = '9999';
+    alert.innerHTML = `
+        <i class="fas fa-${icon} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(alert);
+    setTimeout(() => alert.remove(), 5000);
+}
+</script>
+{% endblock %}

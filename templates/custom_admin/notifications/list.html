@@ -6,205 +6,120 @@
 {% block extra_css %}
 <style>
     .notification-item {
-        padding: 1.25rem;
-        background: #fff;
-        border: 1px solid #dee2e6;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
+        padding: 20px;
+        border-bottom: 1px solid #e9ecef;
         transition: all 0.3s ease;
         cursor: pointer;
+        position: relative;
     }
     
     .notification-item:hover {
-        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-        transform: translateY(-1px);
+        background: #f8f9fa;
     }
     
     .notification-item.unread {
-        background: #f8f9fa;
-        border-left: 4px solid #007bff;
+        background-color: #f0f8ff;
+        border-left: 4px solid #0d6efd;
     }
     
-    .notification-item.read {
-        opacity: 0.8;
-    }
-    
-    .notification-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: start;
-        margin-bottom: 0.5rem;
-    }
-    
-    .notification-title {
-        font-weight: 600;
-        color: #212529;
-        margin-bottom: 0.25rem;
-        font-size: 1rem;
-    }
-    
-    .notification-meta {
-        display: flex;
-        align-items: center;
-        gap: 1rem;
-        font-size: 0.875rem;
-        color: #6c757d;
-    }
-    
-    .notification-time {
-        display: flex;
-        align-items: center;
-        gap: 0.25rem;
-    }
-    
-    .notification-type {
-        display: inline-block;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.25rem;
-        font-size: 0.75rem;
-        font-weight: 500;
-    }
-    
-    .notification-type.info {
-        background-color: #cfe2ff;
-        color: #004085;
-    }
-    
-    .notification-type.success {
-        background-color: #d1e7dd;
-        color: #0f5132;
-    }
-    
-    .notification-type.warning {
-        background-color: #fff3cd;
-        color: #856404;
-    }
-    
-    .notification-type.error {
-        background-color: #f8d7da;
-        color: #842029;
-    }
-    
-    .notification-body {
-        color: #495057;
-        font-size: 0.9375rem;
-        line-height: 1.5;
-    }
-    
-    .notification-actions {
-        margin-top: 1rem;
-        display: flex;
-        gap: 0.5rem;
+    .notification-item:last-child {
+        border-bottom: none;
     }
     
     .notification-icon {
-        width: 40px;
-        height: 40px;
+        width: 45px;
+        height: 45px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
+        font-size: 1.3rem;
+        margin-right: 15px;
         flex-shrink: 0;
-        margin-right: 1rem;
     }
     
-    .notification-icon.info {
-        background-color: #e3f2fd;
-        color: #1976d2;
-    }
-    
-    .notification-icon.success {
-        background-color: #e8f5e9;
-        color: #388e3c;
-    }
-    
-    .notification-icon.warning {
-        background-color: #fff3e0;
-        color: #f57c00;
-    }
-    
-    .notification-icon.error {
-        background-color: #ffebee;
-        color: #d32f2f;
-    }
+    /* Priority-based colors */
+    .notification-icon.low { background: #d1ecf1; color: #0c5460; }
+    .notification-icon.normal { background: #cce5ff; color: #004085; }
+    .notification-icon.high { background: #fff3cd; color: #856404; }
+    .notification-icon.urgent { background: #f8d7da; color: #721c24; }
     
     .notification-content {
         flex: 1;
+        min-width: 0;
+    }
+    
+    .notification-title {
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #212529;
+    }
+    
+    .notification-message {
+        color: #6c757d;
+        margin-bottom: 5px;
+        line-height: 1.5;
+    }
+    
+    .notification-meta {
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+    
+    .notification-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+    
+    .filter-tabs {
+        border-bottom: 2px solid #dee2e6;
+        margin-bottom: 20px;
+    }
+    
+    .filter-tabs .nav-link {
+        color: #6c757d;
+        border: none;
+        border-bottom: 3px solid transparent;
+        padding: 10px 20px;
+        margin-bottom: -2px;
+        transition: all 0.3s ease;
+    }
+    
+    .filter-tabs .nav-link:hover {
+        color: #495057;
+        border-bottom-color: #dee2e6;
+    }
+    
+    .filter-tabs .nav-link.active {
+        color: #0d6efd;
+        border-bottom-color: #0d6efd;
+        background: none;
     }
     
     .empty-state {
         text-align: center;
-        padding: 4rem 2rem;
-        background: #f8f9fa;
-        border-radius: 0.5rem;
+        padding: 60px 20px;
     }
     
-    .empty-state i {
+    .empty-state-icon {
         font-size: 4rem;
         color: #dee2e6;
-        margin-bottom: 1rem;
+        margin-bottom: 20px;
     }
     
-    .empty-state h4 {
-        color: #6c757d;
-        margin-bottom: 0.5rem;
+    .notification-badge {
+        font-size: 0.75rem;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-weight: 500;
     }
     
-    .empty-state p {
-        color: #adb5bd;
-    }
-    
-    .filter-pills {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .filter-pill {
-        padding: 0.5rem 1rem;
-        border: 1px solid #dee2e6;
-        border-radius: 2rem;
-        background: #fff;
-        color: #495057;
-        text-decoration: none;
-        transition: all 0.3s;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .filter-pill:hover {
-        background: #f8f9fa;
-        color: #212529;
-    }
-    
-    .filter-pill.active {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-    }
-    
-    .filter-pill .badge {
-        background: rgba(0, 0, 0, 0.1);
-        color: inherit;
-    }
-    
-    .notification-wrapper {
-        display: flex;
-        align-items: start;
-    }
-    
-    .batch-actions {
-        background: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1rem;
-        display: none;
-    }
-    
-    .batch-actions.show {
-        display: block;
+    .notification-type-badge {
+        font-size: 0.7rem;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 10px;
     }
 </style>
 {% endblock %}
@@ -214,387 +129,280 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h2 class="mb-0">Notificaciones</h2>
-        <p class="text-muted mb-0">{{ unread_count }} sin leer de {{ total_count }} notificaciones</p>
+        <p class="text-muted mb-0">
+            {{ unread_count }} sin leer de {{ total_count }} total
+        </p>
     </div>
-    <div>
-        <button class="btn btn-admin btn-admin-secondary" onclick="markAllAsRead()">
-            <i class="fas fa-check-double"></i> Marcar todas como leídas
+    <div class="d-flex gap-2">
+        <button class="btn btn-light" onclick="markAllAsRead()">
+            <i class="fas fa-check-double me-1"></i>Marcar todas como leídas
         </button>
-        <button class="btn btn-admin btn-admin-light" onclick="showNotificationSettings()">
-            <i class="fas fa-cog"></i> Configuración
+        <button class="btn btn-admin btn-admin-primary" onclick="location.reload()">
+            <i class="fas fa-sync-alt"></i> Actualizar
         </button>
     </div>
 </div>
 
-<!-- Filter Pills -->
-<div class="filter-pills">
-    <a href="?filter=all" class="filter-pill {% if current_filter == 'all' or not current_filter %}active{% endif %}">
-        <i class="fas fa-inbox"></i>
-        Todas
-        <span class="badge">{{ total_count }}</span>
-    </a>
-    <a href="?filter=unread" class="filter-pill {% if current_filter == 'unread' %}active{% endif %}">
-        <i class="fas fa-envelope"></i>
-        Sin leer
-        <span class="badge">{{ unread_count }}</span>
-    </a>
-    <a href="?filter=info" class="filter-pill {% if current_filter == 'info' %}active{% endif %}">
-        <i class="fas fa-info-circle"></i>
-        Información
-    </a>
-    <a href="?filter=success" class="filter-pill {% if current_filter == 'success' %}active{% endif %}">
-        <i class="fas fa-check-circle"></i>
-        Éxito
-    </a>
-    <a href="?filter=warning" class="filter-pill {% if current_filter == 'warning' %}active{% endif %}">
-        <i class="fas fa-exclamation-triangle"></i>
-        Advertencias
-    </a>
-    <a href="?filter=error" class="filter-pill {% if current_filter == 'error' %}active{% endif %}">
-        <i class="fas fa-times-circle"></i>
-        Errores
-    </a>
-</div>
-
-<!-- Batch Actions -->
-<div class="batch-actions" id="batchActions">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <span id="selectedCount">0</span> notificaciones seleccionadas
-        </div>
-        <div>
-            <button class="btn btn-sm btn-primary" onclick="markSelectedAsRead()">
-                <i class="fas fa-check"></i> Marcar como leídas
-            </button>
-            <button class="btn btn-sm btn-danger" onclick="deleteSelected()">
-                <i class="fas fa-trash"></i> Eliminar
-            </button>
-            <button class="btn btn-sm btn-light" onclick="clearSelection()">
-                Cancelar
-            </button>
-        </div>
-    </div>
-</div>
+<!-- Filter Tabs -->
+<ul class="nav nav-tabs filter-tabs">
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'all' %}active{% endif %}" 
+           href="?filter=all">
+            <i class="fas fa-inbox me-1"></i>Todas
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'unread' %}active{% endif %}" 
+           href="?filter=unread">
+            <i class="fas fa-envelope me-1"></i>Sin leer
+            {% if unread_count > 0 %}
+                <span class="badge bg-danger ms-1">{{ unread_count }}</span>
+            {% endif %}
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'info' %}active{% endif %}" 
+           href="?filter=info">
+            <i class="fas fa-info-circle me-1"></i>Información
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'success' %}active{% endif %}" 
+           href="?filter=success">
+            <i class="fas fa-check-circle me-1"></i>Éxito
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'warning' %}active{% endif %}" 
+           href="?filter=warning">
+            <i class="fas fa-exclamation-triangle me-1"></i>Advertencias
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link {% if current_filter == 'error' %}active{% endif %}" 
+           href="?filter=error">
+            <i class="fas fa-times-circle me-1"></i>Errores
+        </a>
+    </li>
+</ul>
 
 <!-- Notifications List -->
-<div class="notifications-container">
-    {% if notifications %}
-        {% for notification in notifications %}
-        <div class="notification-item {% if not notification.is_read %}unread{% else %}read{% endif %}" 
-             data-notification-id="{{ notification.id }}"
-             onclick="viewNotification({{ notification.id }})">
-            <div class="notification-wrapper">
-                <!-- Icon -->
-                <div class="notification-icon {{ notification.template.notification_type|lower }}">
-                    {% if notification.template.notification_type == 'DOCUMENT_AUTHORIZED' %}
-                        <i class="fas fa-check-circle"></i>
-                    {% elif notification.template.notification_type == 'DOCUMENT_REJECTED' %}
-                        <i class="fas fa-times-circle"></i>
-                    {% elif notification.template.notification_type == 'CERTIFICATE_EXPIRING' %}
-                        <i class="fas fa-certificate"></i>
-                    {% elif notification.template.notification_type == 'SYSTEM_ERROR' %}
-                        <i class="fas fa-exclamation-triangle"></i>
-                    {% elif notification.template.notification_type == 'LOW_STOCK' %}
-                        <i class="fas fa-box"></i>
-                    {% elif notification.template.notification_type == 'PAYMENT_REMINDER' %}
-                        <i class="fas fa-dollar-sign"></i>
-                    {% else %}
-                        <i class="fas fa-bell"></i>
-                    {% endif %}
-                </div>
+<div class="admin-card">
+    <div class="card-body p-0">
+        {% if notifications %}
+            {% for notification in notifications %}
+            <div class="notification-item {% if not notification.is_read %}unread{% endif %}" 
+                 data-notification-id="{{ notification.id }}"
+                 onclick="viewNotification({{ notification.id }})">
                 
-                <!-- Content -->
-                <div class="notification-content">
-                    <div class="notification-header">
-                        <div>
-                            <h5 class="notification-title">{{ notification.title }}</h5>
-                            <div class="notification-meta">
-                                <span class="notification-type {{ notification.template.get_priority_display|lower }}">
-                                    {{ notification.template.get_notification_type_display }}
-                                </span>
-                                <span class="notification-time">
-                                    <i class="far fa-clock"></i>
+                <div class="d-flex align-items-start">
+                    <div class="notification-icon {{ notification.priority }}">
+                        <i class="fas fa-bell"></i>
+                    </div>
+                    
+                    <div class="notification-content">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="notification-title mb-1">
+                                    {{ notification.title }}
+                                    {% if not notification.is_read %}
+                                        <span class="badge bg-primary ms-2">Nueva</span>
+                                    {% endif %}
+                                    
+                                    <!-- Tipo de notificación -->
+                                    {% if notification.notification_type == 'user_registered' %}
+                                        <span class="notification-type-badge bg-info text-white">
+                                            <i class="fas fa-user-plus me-1"></i>Usuario
+                                        </span>
+                                    {% elif notification.notification_type == 'user_approved' %}
+                                        <span class="notification-type-badge bg-success text-white">
+                                            <i class="fas fa-user-check me-1"></i>Aprobación
+                                        </span>
+                                    {% endif %}
+                                </h6>
+                                <p class="notification-message">
+                                    {{ notification.message|truncatewords:30 }}
+                                </p>
+                                <div class="notification-meta">
+                                    <i class="far fa-clock me-1"></i>
                                     {{ notification.created_at|timesince }} atrás
-                                </span>
-                                {% if notification.company %}
-                                <span>
-                                    <i class="far fa-building"></i>
-                                    {{ notification.company.business_name }}
-                                </span>
+                                    
+                                    {% if notification.related_user %}
+                                        <span class="mx-2">•</span>
+                                        <i class="fas fa-user me-1"></i>
+                                        {{ notification.related_user.email }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="notification-actions">
+                                {% if notification.action_url %}
+                                    <a href="{{ notification.action_url }}" 
+                                       class="btn btn-sm btn-outline-primary"
+                                       onclick="event.stopPropagation()">
+                                        <i class="fas fa-arrow-right"></i>
+                                    </a>
                                 {% endif %}
                             </div>
                         </div>
-                        <div>
-                            <input type="checkbox" class="form-check-input notification-select" 
-                                   value="{{ notification.id }}" onclick="event.stopPropagation()">
-                        </div>
                     </div>
-                    
-                    <div class="notification-body">
-                        {{ notification.message|truncatewords:30 }}
-                    </div>
-                    
-                    {% if notification.action_url %}
-                    <div class="notification-actions">
-                        <a href="{{ notification.action_url }}" class="btn btn-sm btn-primary" 
-                           onclick="event.stopPropagation()">
-                            {{ notification.action_text|default:"Ver más" }}
-                        </a>
-                    </div>
-                    {% endif %}
                 </div>
             </div>
-        </div>
-        {% endfor %}
-        
-        <!-- Pagination -->
-        {% if notifications.has_other_pages %}
-        <nav aria-label="Paginación" class="mt-4">
-            <ul class="pagination justify-content-center">
-                {% if notifications.has_previous %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ notifications.previous_page_number }}{% if current_filter %}&filter={{ current_filter }}{% endif %}">
-                            <i class="fas fa-chevron-left"></i>
-                        </a>
-                    </li>
-                {% endif %}
-                
-                {% for num in notifications.paginator.page_range %}
-                    {% if notifications.number == num %}
-                        <li class="page-item active">
-                            <span class="page-link">{{ num }}</span>
-                        </li>
-                    {% elif num > notifications.number|add:'-3' and num < notifications.number|add:'3' %}
-                        <li class="page-item">
-                            <a class="page-link" href="?page={{ num }}{% if current_filter %}&filter={{ current_filter }}{% endif %}">{{ num }}</a>
-                        </li>
+            {% endfor %}
+            
+            <!-- Pagination -->
+            {% if notifications.has_other_pages %}
+            <div class="p-3">
+                <nav aria-label="Notifications pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if notifications.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ notifications.previous_page_number }}&filter={{ current_filter }}">
+                                    <i class="fas fa-chevron-left"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% for num in notifications.paginator.page_range %}
+                            {% if notifications.number == num %}
+                                <li class="page-item active">
+                                    <span class="page-link">{{ num }}</span>
+                                </li>
+                            {% elif num > notifications.number|add:'-3' and num < notifications.number|add:'3' %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ num }}&filter={{ current_filter }}">{{ num }}</a>
+                                </li>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        {% if notifications.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ notifications.next_page_number }}&filter={{ current_filter }}">
+                                    <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+        {% else %}
+            <!-- Empty State -->
+            <div class="empty-state">
+                <div class="empty-state-icon">
+                    <i class="fas fa-bell-slash"></i>
+                </div>
+                <h5 class="text-muted">No hay notificaciones</h5>
+                <p class="text-muted">
+                    {% if current_filter == 'unread' %}
+                        No tienes notificaciones sin leer
+                    {% elif current_filter == 'error' %}
+                        No hay notificaciones de error
+                    {% elif current_filter == 'warning' %}
+                        No hay advertencias
+                    {% elif current_filter == 'success' %}
+                        No hay notificaciones de éxito
+                    {% else %}
+                        No hay notificaciones para mostrar
                     {% endif %}
-                {% endfor %}
-                
-                {% if notifications.has_next %}
-                    <li class="page-item">
-                        <a class="page-link" href="?page={{ notifications.next_page_number }}{% if current_filter %}&filter={{ current_filter }}{% endif %}">
-                            <i class="fas fa-chevron-right"></i>
-                        </a>
-                    </li>
-                {% endif %}
-            </ul>
-        </nav>
+                </p>
+            </div>
         {% endif %}
-    {% else %}
-        <!-- Empty State -->
-        <div class="empty-state">
-            <i class="far fa-bell-slash"></i>
-            <h4>No hay notificaciones</h4>
-            <p>
-                {% if current_filter and current_filter != 'all' %}
-                    No hay notificaciones con el filtro seleccionado
-                {% else %}
-                    Cuando recibas notificaciones aparecerán aquí
-                {% endif %}
-            </p>
+    </div>
+</div>
+
+<!-- Notification Detail Modal -->
+<div class="modal fade" id="notificationModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="notificationModalTitle">Detalle de Notificación</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="notificationModalBody">
+                <!-- Content loaded via AJAX -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <a href="#" id="notificationActionBtn" class="btn btn-primary" style="display: none;">
+                    <i class="fas fa-arrow-right me-1"></i>Ir a
+                </a>
+            </div>
         </div>
-    {% endif %}
+    </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-$(document).ready(function() {
-    // Manejo de selección
-    $('.notification-select').on('change', function() {
-        updateBatchActions();
-    });
-});
-
-function updateBatchActions() {
-    const selectedCount = $('.notification-select:checked').length;
-    const batchActions = $('#batchActions');
-    const selectedCountElement = $('#selectedCount');
-    
-    if (selectedCount > 0) {
-        batchActions.addClass('show');
-        selectedCountElement.text(selectedCount);
-    } else {
-        batchActions.removeClass('show');
-    }
-}
-
-function clearSelection() {
-    $('.notification-select').prop('checked', false);
-    updateBatchActions();
-}
-
+// Función para ver notificación
 function viewNotification(notificationId) {
     // Marcar como leída
-    $.ajax({
-        url: "{% url 'custom_admin:notification_mark_read' 0 %}".replace('0', notificationId),
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        success: function(response) {
-            // Actualizar UI
-            const notificationItem = $(`.notification-item[data-notification-id="${notificationId}"]`);
-            notificationItem.removeClass('unread').addClass('read');
+    $.post(`/admin-panel/notifications/${notificationId}/mark-read/`, {
+        csrfmiddlewaretoken: '{{ csrf_token }}'
+    }, function(response) {
+        if (response.success) {
+            // Remover clase unread
+            $(`.notification-item[data-notification-id="${notificationId}"]`).removeClass('unread');
             
-            // Si hay action_url, redirigir
+            // Si hay URL de acción, redirigir
             if (response.action_url) {
                 window.location.href = response.action_url;
             } else {
-                // Mostrar detalle en modal
+                // Mostrar modal con detalles
                 showNotificationDetail(notificationId);
             }
         }
     });
 }
 
+// Mostrar detalle de notificación
 function showNotificationDetail(notificationId) {
-    $.ajax({
-        url: "{% url 'custom_admin:notification_detail' 0 %}".replace('0', notificationId),
-        method: 'GET',
-        success: function(response) {
-            Swal.fire({
-                title: response.title,
-                html: `
-                    <div class="text-left">
-                        <p class="mb-3">${response.message}</p>
-                        <small class="text-muted">
-                            <i class="far fa-clock"></i> ${response.created_at}
-                        </small>
-                    </div>
-                `,
-                showCloseButton: true,
-                confirmButtonText: response.action_text || 'Cerrar',
-                customClass: {
-                    popup: 'notification-detail-modal'
-                }
-            }).then((result) => {
-                if (result.isConfirmed && response.action_url) {
-                    window.location.href = response.action_url;
-                }
-            });
+    $.get(`/admin-panel/notifications/${notificationId}/detail/`, function(data) {
+        $('#notificationModalTitle').text(data.title);
+        
+        let content = `
+            <p><strong>Mensaje:</strong></p>
+            <p>${data.message}</p>
+            <hr>
+            <p class="text-muted mb-0">
+                <i class="far fa-clock me-1"></i>Recibida: ${data.created_at}
+            </p>
+        `;
+        
+        $('#notificationModalBody').html(content);
+        
+        if (data.action_url) {
+            $('#notificationActionBtn').attr('href', data.action_url).show();
+            $('#notificationActionBtn').html(`<i class="fas fa-arrow-right me-1"></i>${data.action_text || 'Ver más'}`);
+        } else {
+            $('#notificationActionBtn').hide();
         }
+        
+        $('#notificationModal').modal('show');
     });
 }
 
+// Marcar todas como leídas
 function markAllAsRead() {
-    Swal.fire({
-        title: '¿Marcar todas como leídas?',
-        text: 'Se marcarán todas las notificaciones como leídas',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonText: 'Sí, marcar todas',
-        cancelButtonText: 'Cancelar'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            $.ajax({
-                url: "{% url 'custom_admin:notifications_mark_all_read' %}",
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Listo',
-                            text: response.message,
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            location.reload();
-                        });
-                    }
-                }
-            });
-        }
-    });
-}
-
-function markSelectedAsRead() {
-    const selectedIds = $('.notification-select:checked').map(function() {
-        return $(this).val();
-    }).get();
-    
-    if (selectedIds.length === 0) return;
-    
-    $.ajax({
-        url: "{% url 'custom_admin:notifications_batch_mark_read' %}",
-        method: 'POST',
-        data: JSON.stringify({ notification_ids: selectedIds }),
-        contentType: 'application/json',
-        headers: {
-            'X-CSRFToken': getCookie('csrftoken')
-        },
-        success: function(response) {
+    if (confirm('¿Marcar todas las notificaciones como leídas?')) {
+        $.post('/admin-panel/notifications/mark-all-read/', {
+            csrfmiddlewaretoken: '{{ csrf_token }}'
+        }, function(response) {
             if (response.success) {
-                location.reload();
+                $('.notification-item').removeClass('unread');
+                location.reload(); // Recargar para actualizar contadores
             }
-        }
-    });
-}
-
-function deleteSelected() {
-    const selectedIds = $('.notification-select:checked').map(function() {
-        return $(this).val();
-    }).get();
-    
-    if (selectedIds.length === 0) return;
-    
-    Swal.fire({
-        title: '¿Eliminar notificaciones?',
-        text: `Se eliminarán ${selectedIds.length} notificaciones seleccionadas`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc3545',
-        confirmButtonText: 'Sí, eliminar',
-        cancelButtonText: 'Cancelar'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            $.ajax({
-                url: "{% url 'custom_admin:notifications_batch_delete' %}",
-                method: 'POST',
-                data: JSON.stringify({ notification_ids: selectedIds }),
-                contentType: 'application/json',
-                headers: {
-                    'X-CSRFToken': getCookie('csrftoken')
-                },
-                success: function(response) {
-                    if (response.success) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: 'Eliminadas',
-                            text: response.message,
-                            timer: 2000,
-                            showConfirmButton: false
-                        }).then(() => {
-                            location.reload();
-                        });
-                    }
-                }
-            });
-        }
-    });
-}
-
-function showNotificationSettings() {
-    window.location.href = "{% url 'custom_admin:notification_settings' %}";
-}
-
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
+        });
     }
-    return cookieValue;
 }
+
+// Auto-actualización cada 60 segundos
+setInterval(function() {
+    // Solo actualizar si no hay modal abierto
+    if (!$('#notificationModal').hasClass('show')) {
+        location.reload();
+    }
+}, 60000);
 </script>
 {% endblock %}
