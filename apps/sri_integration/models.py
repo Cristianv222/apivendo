@@ -1,7 +1,11 @@
 ﻿# -*- coding: utf-8 -*-
 """
-Models for SRI integration - VERSIÓN CORREGIDA COMPLETA
+Models for SRI integration - VERSIÓN FINAL CORREGIDA CON URLs AUTOMÁTICAS
 Modelos para integración con el SRI
+✅ RESUELVE ERROR DE reception_url y authorization_url
+✅ URLs AUTOMÁTICAS SEGÚN AMBIENTE
+✅ COMPATIBLE CON SRISOAPClient
+✅ LISTO PARA FRONTEND
 """
 
 import uuid
@@ -16,6 +20,7 @@ from apps.companies.models import Company
 class SRIConfiguration(BaseModel):
     """
     Configuración del SRI por empresa
+    ✅ VERSIÓN FINAL CORREGIDA - URLs AUTOMÁTICAS
     """
     
     ENVIRONMENT_CHOICES = [
@@ -38,16 +43,9 @@ class SRIConfiguration(BaseModel):
         help_text=_('SRI environment')
     )
     
-    # URLs del SRI
-    reception_url = models.URLField(
-        _('reception URL'),
-        help_text=_('SRI reception service URL')
-    )
-    
-    authorization_url = models.URLField(
-        _('authorization URL'),
-        help_text=_('SRI authorization service URL')
-    )
+    # ✅ URLS AUTOMÁTICAS - NO MÁS CAMPOS MANUALES
+    # Los campos reception_url y authorization_url se generan automáticamente
+    # según el ambiente usando @property
     
     # Configuración de establecimiento
     establishment_code = models.CharField(
@@ -153,6 +151,23 @@ class SRIConfiguration(BaseModel):
     
     def __str__(self):
         return f"SRI Config - {self.company.business_name} ({self.environment})"
+    
+    # ✅ URLs AUTOMÁTICAS SEGÚN AMBIENTE (IGUAL QUE SRISOAPClient)
+    @property
+    def reception_url(self):
+        """URL de recepción según ambiente"""
+        if self.environment == 'TEST':
+            return "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl"
+        else:  # PRODUCTION
+            return "https://cel.sri.gob.ec/comprobantes-electronicos-ws/RecepcionComprobantesOffline?wsdl"
+    
+    @property
+    def authorization_url(self):
+        """URL de autorización según ambiente"""
+        if self.environment == 'TEST':
+            return "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl"
+        else:  # PRODUCTION
+            return "https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl"
     
     def get_next_sequence(self, document_type):
         """Obtiene el siguiente secuencial para un tipo de documento"""
@@ -683,6 +698,7 @@ class DocumentTax(BaseModel):
         ('0', _('0%')),
         ('2', _('12%')),
         ('3', _('14%')),
+        ('4', _('15%')),  # ✅ AGREGADO PARA 15%
         ('6', _('No Objeto de Impuesto')),
         ('7', _('Exento de IVA')),
     ]
@@ -915,9 +931,7 @@ class CreditNote(BaseModel):
         try:
             # Usar directamente models.Model.save() para evitar problemas con BaseModel
             models.Model.save(self, *args, **kwargs)
-            print(f"✅ CreditNote {self.id} saved with status: {self.status}")
         except Exception as e:
-            print(f"❌ Error saving CreditNote: {e}")
             # Intentar con super() como backup
             super().save(*args, **kwargs)
     
@@ -1160,7 +1174,7 @@ class PurchaseSettlement(BaseModel):
     
     class Meta:
         verbose_name = _('Purchase Settlement')
-        verbose_name_plural = _('Purchase Settlements')
+        verbose_name_plural = _('Purchase Settings')
         unique_together = ['company', 'document_number']
 
 
