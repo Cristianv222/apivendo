@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Views completas para SRI integration - VERSIÓN FINAL CON ENDPOINTS DE PROCESO COMPLETO
-apps/api/views/sri_views.py - CON ENDPOINTS SEPARADOS PARA CADA TIPO DE DOCUMENTO
+Views completas para SRI integration - VERSIÓN FINAL CON RESPUESTAS SIMPLIFICADAS
+apps/api/views/sri_views.py - RESPUESTAS LIMPIAS PARA PRODUCCIÓN
 ✅ RESUELVE ERROR 35
 ✅ COMPATIBLE CON TOKEN VSR
-✅ ENDPOINTS DE PROCESO COMPLETO PARA CADA TIPO
+✅ RESPUESTAS SIMPLIFICADAS
 """
 
 from rest_framework import viewsets, filters, status, permissions
@@ -14,6 +14,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+from django.conf import settings
 import logging
 import os
 from functools import wraps
@@ -243,16 +244,6 @@ def audit_api_action(action_type=None, include_response_data=False):
                 
                 logger.info(f"✅ [{action}] User {getattr(request.user, 'username', 'Unknown')} - SUCCESS - {execution_time:.2f}s")
                 
-                # Agregar información de auditoría a la respuesta
-                if hasattr(response, 'data') and isinstance(response.data, dict):
-                    response.data['audit_info'] = {
-                        'processed_by': getattr(request.user, 'username', 'Unknown'),
-                        'processing_time_ms': round(execution_time * 1000, 2),
-                        'action_type': action,
-                        'timestamp': timezone.now().isoformat(),
-                        'security_method': 'token_validation_with_decorators'
-                    }
-                
                 return response
                 
             except Exception as e:
@@ -445,7 +436,7 @@ def sri_document_endpoint(
     return decorator
 
 
-# ========== FUNCIONES AUXILIARES MEJORADAS ==========
+# ========== FUNCIONES AUXILIARES ==========
 
 def sync_document_to_electronic_document(document, document_type):
     """
@@ -618,12 +609,12 @@ def get_user_company_by_id(company_id, user):
     return get_user_company_by_id_or_token(company_id, user)
 
 
-# ========== CLASE PRINCIPAL CON ENDPOINTS DE PROCESO COMPLETO ==========
+# ========== CLASE PRINCIPAL CON RESPUESTAS SIMPLIFICADAS ==========
 
 class SRIDocumentViewSet(viewsets.ModelViewSet):
     """
     ViewSet principal para todos los documentos SRI 
-    ✅ CON ENDPOINTS DE PROCESO COMPLETO PARA CADA TIPO
+    ✅ CON RESPUESTAS SIMPLIFICADAS PARA PRODUCCIÓN
     ✅ RESUELVE ERROR 35
     ✅ COMPATIBLE CON TOKEN VSR
     """
@@ -690,7 +681,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             )
         return super().handle_exception(exc)
     
-    # ========== ENDPOINTS DE PROCESO COMPLETO PARA CADA TIPO ==========
+    # ========== ENDPOINTS CON RESPUESTAS SIMPLIFICADAS ==========
     
     @action(detail=False, methods=['post'])
     @sri_secure_endpoint(
@@ -704,9 +695,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     def create_and_process_invoice_complete(self, request):
         """
         🚀 ENDPOINT COMPLETO PARA FACTURAS: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
-        ✅ TODO EL PROCESO EN UNA SOLA LLAMADA
+        ✅ RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -794,67 +783,23 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
-                logger.info(f"✅ [INVOICE_COMPLETE] Step 2: Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
+                logger.info(f"✅ [INVOICE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Invoice created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'INVOICE',
-                        'method': 'create_and_process_invoice_complete',
-                        'processing_details': {
-                            'step_1_create': 'COMPLETED',
-                            'step_2_xml_generation': 'COMPLETED_WITH_CORRECTED_XMLGenerator',
-                            'step_3_signing': 'COMPLETED_WITH_GlobalCertificateManager',
-                            'step_4_sri_submission': 'COMPLETED_NO_ERROR_35',
-                            'step_5_authorization': 'COMPLETED_IF_AVAILABLE'
-                        },
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Factura creada y enviada al SRI exitosamente',
+                        'invoice': {
                             'id': electronic_doc.id,
-                            'company': electronic_doc.company.id,
-                            'company_name': electronic_doc.company.business_name,
-                            'document_type': electronic_doc.document_type,
-                            'document_number': electronic_doc.document_number,
-                            'access_key': electronic_doc.access_key,
-                            'issue_date': electronic_doc.issue_date,
-                            'customer_name': electronic_doc.customer_name,
-                            'customer_identification': electronic_doc.customer_identification,
-                            'subtotal_without_tax': str(electronic_doc.subtotal_without_tax),
-                            'total_tax': str(electronic_doc.total_tax),
-                            'total_amount': str(electronic_doc.total_amount),
-                            'status': electronic_doc.status,
-                            'status_display': electronic_doc.get_status_display(),
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': electronic_doc.created_at,
-                            'updated_at': electronic_doc.updated_at
-                        },
-                        'files': {
-                            'has_xml': bool(electronic_doc.xml_file),
-                            'has_signed_xml': bool(electronic_doc.signed_xml_file),
-                            'has_pdf': bool(electronic_doc.pdf_file),
-                            'xml_path': str(electronic_doc.xml_file) if electronic_doc.xml_file else None,
-                            'signed_xml_path': str(electronic_doc.signed_xml_file) if electronic_doc.signed_xml_file else None
-                        },
-                        'processing_info': {
-                            'password_required': False,
-                            'automatic_processing': True,
-                            'certificate_cached': True,
-                            'error_35_resolved': True,
-                            'xmlgenerator_corrected': True,
-                            'vsr_token_compatible': True,
-                            'decorators_enhanced': True
-                        },
-                        'status_details': status_info
+                            'number': electronic_doc.document_number,
+                            'customer': electronic_doc.customer_name,
+                            'total': float(electronic_doc.total_amount),
+                            'status': electronic_doc.get_status_display(),
+                            'date': electronic_doc.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -863,12 +808,10 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': False,
-                        'message': f'Invoice created but processing failed: {message}',
-                        'data': {
+                        'message': f'Factura creada pero el procesamiento falló: {message}',
+                        'invoice': {
                             'id': electronic_doc.id,
-                            'document_number': electronic_doc.document_number,
-                            'access_key': electronic_doc.access_key,
-                            'status': electronic_doc.status,
+                            'number': electronic_doc.document_number,
                             'error_details': message
                         }
                     },
@@ -880,7 +823,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'error': 'INVOICE_COMPLETE_ERROR',
-                    'message': f'Error in complete invoice process: {str(e)}'
+                    'message': f'Error en el proceso completo de factura: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -897,8 +840,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     def create_and_process_credit_note_complete(self, request):
         """
         🚀 ENDPOINT COMPLETO PARA NOTAS DE CRÉDITO: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+        ✅ RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -950,7 +892,6 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
@@ -958,37 +899,20 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 credit_note.save()
                 
                 logger.info(f"✅ [CREDIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Credit Note created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'CREDIT_NOTE',
-                        'method': 'create_and_process_credit_note_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Nota de crédito creada y enviada al SRI exitosamente',
+                        'credit_note': {
                             'id': credit_note.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': credit_note.company.id,
-                            'company_name': credit_note.company.business_name,
-                            'document_type': 'CREDIT_NOTE',
-                            'document_number': credit_note.document_number,
-                            'access_key': credit_note.access_key,
-                            'issue_date': credit_note.issue_date,
-                            'customer_name': credit_note.customer_name,
-                            'reason_description': credit_note.reason_description,
-                            'total_amount': str(credit_note.total_amount),
-                            'status': credit_note.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': credit_note.created_at
-                        },
-                        'status_details': status_info
+                            'number': credit_note.document_number,
+                            'customer': credit_note.customer_name,
+                            'total': float(credit_note.total_amount),
+                            'status': credit_note.get_status_display(),
+                            'date': credit_note.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -997,10 +921,10 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': False,
-                        'message': f'Credit Note created but processing failed: {message}',
-                        'data': {
+                        'message': f'Nota de crédito creada pero el procesamiento falló: {message}',
+                        'credit_note': {
                             'id': credit_note.id,
-                            'document_number': credit_note.document_number,
+                            'number': credit_note.document_number,
                             'error_details': message
                         }
                     },
@@ -1012,7 +936,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'error': 'CREDIT_NOTE_COMPLETE_ERROR',
-                    'message': f'Error in complete credit note process: {str(e)}'
+                    'message': f'Error en el proceso completo de nota de crédito: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1029,8 +953,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     def create_and_process_debit_note_complete(self, request):
         """
         🚀 ENDPOINT COMPLETO PARA NOTAS DE DÉBITO: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+        ✅ RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -1082,7 +1005,6 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
@@ -1090,37 +1012,20 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 debit_note.save()
                 
                 logger.info(f"✅ [DEBIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Debit Note created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'DEBIT_NOTE',
-                        'method': 'create_and_process_debit_note_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Nota de débito creada y enviada al SRI exitosamente',
+                        'debit_note': {
                             'id': debit_note.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': debit_note.company.id,
-                            'company_name': debit_note.company.business_name,
-                            'document_type': 'DEBIT_NOTE',
-                            'document_number': debit_note.document_number,
-                            'access_key': debit_note.access_key,
-                            'issue_date': debit_note.issue_date,
-                            'customer_name': debit_note.customer_name,
-                            'reason_description': debit_note.reason_description,
-                            'total_amount': str(debit_note.total_amount),
-                            'status': debit_note.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': debit_note.created_at
-                        },
-                        'status_details': status_info
+                            'number': debit_note.document_number,
+                            'customer': debit_note.customer_name,
+                            'total': float(debit_note.total_amount),
+                            'status': debit_note.get_status_display(),
+                            'date': debit_note.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -1129,10 +1034,10 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': False,
-                        'message': f'Debit Note created but processing failed: {message}',
-                        'data': {
+                        'message': f'Nota de débito creada pero el procesamiento falló: {message}',
+                        'debit_note': {
                             'id': debit_note.id,
-                            'document_number': debit_note.document_number,
+                            'number': debit_note.document_number,
                             'error_details': message
                         }
                     },
@@ -1144,7 +1049,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'error': 'DEBIT_NOTE_COMPLETE_ERROR',
-                    'message': f'Error in complete debit note process: {str(e)}'
+                    'message': f'Error en el proceso completo de nota de débito: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1161,8 +1066,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     def create_and_process_retention_complete(self, request):
         """
         🚀 ENDPOINT COMPLETO PARA RETENCIONES: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+        ✅ RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -1225,7 +1129,6 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
@@ -1233,37 +1136,20 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 retention.save()
                 
                 logger.info(f"✅ [RETENTION_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Retention created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'RETENTION',
-                        'method': 'create_and_process_retention_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Retención creada y enviada al SRI exitosamente',
+                        'retention': {
                             'id': retention.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': retention.company.id,
-                            'company_name': retention.company.business_name,
-                            'document_type': 'RETENTION',
-                            'document_number': retention.document_number,
-                            'access_key': retention.access_key,
-                            'issue_date': retention.issue_date,
-                            'supplier_name': retention.supplier_name,
-                            'fiscal_period': retention.fiscal_period,
-                            'total_retained': str(retention.total_retained),
-                            'status': retention.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': retention.created_at
-                        },
-                        'status_details': status_info
+                            'number': retention.document_number,
+                            'supplier': retention.supplier_name,
+                            'total': float(retention.total_retained),
+                            'status': retention.get_status_display(),
+                            'date': retention.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -1272,10 +1158,10 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': False,
-                        'message': f'Retention created but processing failed: {message}',
-                        'data': {
+                        'message': f'Retención creada pero el procesamiento falló: {message}',
+                        'retention': {
                             'id': retention.id,
-                            'document_number': retention.document_number,
+                            'number': retention.document_number,
                             'error_details': message
                         }
                     },
@@ -1287,7 +1173,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'error': 'RETENTION_COMPLETE_ERROR',
-                    'message': f'Error in complete retention process: {str(e)}'
+                    'message': f'Error en el proceso completo de retención: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1304,8 +1190,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     def create_and_process_purchase_settlement_complete(self, request):
         """
         🚀 ENDPOINT COMPLETO PARA LIQUIDACIONES DE COMPRA: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+        ✅ RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -1390,11 +1275,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             
             # Procesar completamente
             send_email = data.get('send_email', True)
+            
             processor = DocumentProcessor(company)
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
@@ -1402,38 +1287,20 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 purchase_settlement.save()
                 
                 logger.info(f"✅ [PURCHASE_SETTLEMENT_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Purchase Settlement created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'PURCHASE_SETTLEMENT',
-                        'method': 'create_and_process_purchase_settlement_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Liquidación de compra creada y enviada al SRI exitosamente',
+                        'purchase_settlement': {
                             'id': purchase_settlement.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': purchase_settlement.company.id,
-                            'company_name': purchase_settlement.company.business_name,
-                            'document_type': 'PURCHASE_SETTLEMENT',
-                            'document_number': purchase_settlement.document_number,
-                            'access_key': purchase_settlement.access_key,
-                            'issue_date': purchase_settlement.issue_date,
-                            'supplier_name': purchase_settlement.supplier_name,
-                            'subtotal_without_tax': str(purchase_settlement.subtotal_without_tax),
-                            'total_tax': str(purchase_settlement.total_tax),
-                            'total_amount': str(purchase_settlement.total_amount),
-                            'status': purchase_settlement.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': purchase_settlement.created_at
-                        },
-                        'status_details': status_info
+                            'number': purchase_settlement.document_number,
+                            'supplier': purchase_settlement.supplier_name,
+                            'total': float(purchase_settlement.total_amount),
+                            'status': purchase_settlement.get_status_display(),
+                            'date': purchase_settlement.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
@@ -1442,10 +1309,10 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': False,
-                        'message': f'Purchase Settlement created but processing failed: {message}',
-                        'data': {
+                        'message': f'Liquidación de compra creada pero el procesamiento falló: {message}',
+                        'purchase_settlement': {
                             'id': purchase_settlement.id,
-                            'document_number': purchase_settlement.document_number,
+                            'number': purchase_settlement.document_number,
                             'error_details': message
                         }
                     },
@@ -1457,7 +1324,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             return Response(
                 {
                     'error': 'PURCHASE_SETTLEMENT_COMPLETE_ERROR',
-                    'message': f'Error in complete purchase settlement process: {str(e)}'
+                    'message': f'Error en el proceso completo de liquidación de compra: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1927,6 +1794,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 'decorator_validation': True,
                 'vsr_token_support': True,
                 'error_35_resolved': True,
+                'simplified_responses': True,
                 'available_endpoints': [
                     'create_and_process_invoice_complete',
                     'create_and_process_credit_note_complete',
@@ -2006,7 +1874,7 @@ class SRIResponseViewSet(viewsets.ReadOnlyModelViewSet):
 
 class DocumentationViewSet(viewsets.ViewSet):
     """
-    Documentación de la API FINAL con endpoints de proceso completo
+    Documentación de la API con respuestas simplificadas
     """
     permission_classes = [permissions.IsAuthenticated]
     
@@ -2014,22 +1882,35 @@ class DocumentationViewSet(viewsets.ViewSet):
     @audit_api_action(action_type='VIEW_API_DOCUMENTATION')
     def api_info(self, request):
         """
-        Información general de la API FINAL con endpoints de proceso completo
+        Información general de la API con respuestas simplificadas
         """
         return Response({
-            'api_name': 'SRI Integration API v2.2 FINAL - Complete Process Endpoints',
-            'description': 'API completa con endpoints de proceso completo para cada tipo de documento SRI',
-            'version': '2.2.0-FINAL-COMPLETE-PROCESS',
+            'api_name': 'SRI Integration API v2.4 FINAL - Simplified Responses',
+            'description': 'API completa con respuestas simplificadas para producción',
+            'version': '2.4.0-FINAL-SIMPLIFIED',
             'certificate_manager': 'GlobalCertificateManager',
             'error_35_status': 'RESOLVED',
             'password_required': False,
             'vsr_token_support': True,
             'user_token_support': True,
+            'simplified_responses': True,
             'complete_process_endpoints': {
                 'invoice': {
                     'endpoint': 'POST /api/sri/documents/create_and_process_invoice_complete/',
                     'description': 'Crear y procesar factura completamente en una sola llamada',
-                    'required_fields': ['customer_identification_type', 'customer_identification', 'customer_name', 'issue_date', 'items']
+                    'required_fields': ['customer_identification_type', 'customer_identification', 'customer_name', 'issue_date', 'items'],
+                    'response_example': {
+                        'success': True,
+                        'message': 'Factura creada y enviada al SRI exitosamente',
+                        'invoice': {
+                            'id': 175,
+                            'number': '001-001-000001102',
+                            'customer': 'VASQUEZ PINEDA CRISTIAN DAVID',
+                            'total': 115.0,
+                            'status': 'Enviada al SRI',
+                            'date': '2025-08-04 17:39'
+                        }
+                    }
                 },
                 'credit_note': {
                     'endpoint': 'POST /api/sri/documents/create_and_process_credit_note_complete/',
@@ -2052,21 +1933,6 @@ class DocumentationViewSet(viewsets.ViewSet):
                     'required_fields': ['supplier_identification_type', 'supplier_identification', 'supplier_name', 'items']
                 }
             },
-            'individual_endpoints': {
-                'creation_only': [
-                    'POST /api/sri/documents/create_invoice/',
-                    'POST /api/sri/documents/create_credit_note/',
-                    'POST /api/sri/documents/create_debit_note/',
-                    'POST /api/sri/documents/create_retention/',
-                    'POST /api/sri/documents/create_purchase_settlement/'
-                ],
-                'processing_only': [
-                    'POST /api/sri/documents/{id}/generate_xml/',
-                    'POST /api/sri/documents/{id}/sign_document/',
-                    'POST /api/sri/documents/{id}/send_to_sri/',
-                    'POST /api/sri/documents/{id}/process_complete/'
-                ]
-            },
             'token_usage': {
                 'vsr_token': {
                     'format': 'Token vsr_XXXXXXXXXXXXXXX',
@@ -2081,6 +1947,7 @@ class DocumentationViewSet(viewsets.ViewSet):
             },
             'features': [
                 'Complete process endpoints for all document types',
+                'Simplified responses for production',
                 'Error 35 resolution built-in',
                 'Automatic certificate management',
                 'VSR token compatibility',
