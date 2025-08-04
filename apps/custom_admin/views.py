@@ -842,14 +842,16 @@ def certificates_list(request):
     }
     
     return render(request, 'custom_admin/certificates/list.html', context)
+
 @login_required
 @staff_required
 def certificate_upload(request):
-    """Upload new certificate - Modal form"""
+    """Upload new certificate - Modal form - CORREGIDO"""
     if request.method == 'POST':
         company_id = request.POST.get('company_id')
         certificate_file = request.FILES.get('certificate_file')
         password = request.POST.get('password')
+        description = request.POST.get('description', '')
         
         if not certificate_file:
             companies = Company.objects.filter(is_active=True)
@@ -858,19 +860,35 @@ def certificate_upload(request):
                 'error': 'Debe seleccionar un archivo de certificado'
             })
         
+        if not password:
+            companies = Company.objects.filter(is_active=True)
+            return render(request, 'custom_admin/certificates/upload_modal.html', {
+                'companies': companies,
+                'error': 'La contraseña del certificado es requerida'
+            })
+        
         try:
             company = Company.objects.get(id=company_id)
             
-            # Create certificate
-            certificate = DigitalCertificate.objects.create(
+            # Verificar si ya existe un certificado activo para esta empresa
+            existing_cert = DigitalCertificate.objects.filter(
+                company=company,
+                status='ACTIVE'
+            ).first()
+            
+            if existing_cert:
+                # Desactivar certificado anterior
+                existing_cert.status = 'INACTIVE'
+                existing_cert.save()
+            
+            # USAR EL MÉTODO FACTORY SEGURO
+            certificate = DigitalCertificate.create_with_password(
                 company=company,
                 certificate_file=certificate_file,
                 password=password,
-                status='PENDING'
+                environment='TEST',  # Default
+                status='ACTIVE'
             )
-            
-            # Process certificate (this would typically extract cert info)
-            # certificate.process_certificate()
             
             # Log action
             AuditLog.objects.create(
@@ -879,21 +897,40 @@ def certificate_upload(request):
                 model_name='DigitalCertificate',
                 object_id=str(certificate.id),
                 object_representation=f'Certificate for {company}',
+                changes=f'Certificado subido para {company.business_name}. Descripción: {description}',
                 ip_address=request.META.get('REMOTE_ADDR')
             )
             
-            messages.success(request, 'Certificado cargado exitosamente')
+            # Determinar el mensaje según si se extrajo información real
+            real_info_extracted = 'CN=' in certificate.subject_name and not certificate.subject_name.startswith('Procesando')
+            
+            if real_info_extracted:
+                success_msg = f'Certificado cargado exitosamente. Información extraída: {certificate.subject_name[:50]}...'
+            else:
+                success_msg = 'Certificado cargado. Nota: Información no extraída automáticamente, verifica la contraseña.'
+            
+            messages.success(request, success_msg)
             return HttpResponse('<script>window.parent.location.reload();</script>')
             
+        except Company.DoesNotExist:
+            companies = Company.objects.filter(is_active=True)
+            return render(request, 'custom_admin/certificates/upload_modal.html', {
+                'companies': companies,
+                'error': 'Empresa no encontrada'
+            })
         except Exception as e:
-            messages.error(request, f'Error al cargar certificado: {str(e)}')
+            companies = Company.objects.filter(is_active=True)
+            return render(request, 'custom_admin/certificates/upload_modal.html', {
+                'companies': companies,
+                'error': f'Error al cargar certificado: {str(e)}'
+            })
     
+    # GET request
     companies = Company.objects.filter(is_active=True)
     context = {
         'companies': companies
     }
     return render(request, 'custom_admin/certificates/upload_modal.html', context)
-
 
 @login_required
 @staff_required
@@ -1693,7 +1730,7 @@ def sri_document_view(request, document_id):
 def sri_document_authorize(request, document_id):
     """Authorize SRI document"""
     from apps.sri_integration.models import ElectronicDocument
-    from apps.sri_integration.services import SRIProcessor
+    from apps.sri_integration.services.document_processor import DocumentProcessor
     
     try:
         document = get_object_or_404(ElectronicDocument, id=document_id)

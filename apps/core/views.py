@@ -434,18 +434,26 @@ def user_dashboard(request):
         except Exception as e:
             logger.error(f"Error loading billing data: {e}")
             BILLING_AVAILABLE = False
-    # En la sección de ESTADÍSTICAS, reemplaza desde la línea que dice "# ==================== ESTADÍSTICAS ====================" hasta "except Exception as e:"
+# -*- coding: utf-8 -*-
+"""
+CORRECCIÓN PARA LA FUNCIÓN user_dashboard EN apps/core/views.py
+REEMPLAZAR LA SECCIÓN DE ESTADÍSTICAS (líneas ~290-360 aprox)
+"""
+
+# ==================== ESTADÍSTICAS CORREGIDAS ====================
+# Reemplazar desde "# ==================== ESTADÍSTICAS ====================" hasta la línea que dice "except Exception as e:"
 
     # ==================== ESTADÍSTICAS ====================
-    stats = {
+stats = {
         'total_invoices': 0,
         'authorized_invoices': 0,
         'pending_invoices': 0,
+        'rejected_invoices': 0,
         'total_amount': 0
     }
     
-    recent_invoices = []
-    document_stats = {
+recent_invoices = []
+document_stats = {
         'facturas': 0,
         'retenciones': 0,
         'liquidaciones': 0,
@@ -453,127 +461,237 @@ def user_dashboard(request):
         'notas_debito': 0,
     }
     
-    try:
-        from apps.sri_integration.models import ElectronicDocument
-        
-        if selected_company:
-            # Obtener TODOS los tipos de documentos, no solo facturas
-            all_documents = ElectronicDocument.objects.filter(
-                company=selected_company
-            )
+if selected_company:
+        try:
+            # Intentar obtener SRIConfiguration de la empresa
+            sri_config = None
+            try:
+                from apps.sri_integration.models import SRIConfiguration
+                sri_config = SRIConfiguration.objects.filter(company=selected_company).first()
+            except ImportError:
+                logger.warning("SRIConfiguration model not available")
             
-            # Estadísticas generales (manteniendo compatibilidad)
-            stats = {
-                'total_invoices': all_documents.count(),  # Total de TODOS los documentos
-                'authorized_invoices': all_documents.filter(
-                    status='AUTHORIZED'
-                ).count(),
-                'pending_invoices': all_documents.filter(
-                    status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']
-                ).count(),
-                'total_amount': all_documents.filter(
-                    status='AUTHORIZED'
-                ).aggregate(
-                    total=Sum('total_amount')
-                )['total'] or 0
-            }
-            
-            # Estadísticas por tipo de documento
-            document_stats = {
-                'facturas': all_documents.filter(document_type='INVOICE').count(),
-                'retenciones': all_documents.filter(document_type='RETENTION').count(),
-                'liquidaciones': all_documents.filter(document_type='PURCHASE_SETTLEMENT').count(),
-                'notas_credito': all_documents.filter(document_type='CREDIT_NOTE').count(),
-                'notas_debito': all_documents.filter(document_type='DEBIT_NOTE').count(),
-            }
-            
-            # Documentos recientes - TODOS los tipos
-            recent_invoices = all_documents.order_by('-created_at')[:50]
-            
-            # Agregar campo mapped_type para el filtro del template
-            for doc in recent_invoices:
-                # Mapear los tipos de documento del modelo a los valores del filtro
-                type_mapping = {
-                    'INVOICE': 'factura',
-                    'RETENTION': 'retencion',
-                    'PURCHASE_SETTLEMENT': 'liquidacion',
-                    'CREDIT_NOTE': 'nota_credito',
-                    'DEBIT_NOTE': 'nota_debito',
-                    'REMISSION_GUIDE': 'guia_remision',
-                }
-                doc.mapped_type = type_mapping.get(doc.document_type, 'factura')
+            # Intentar usar el modelo ElectronicDocument si existe
+            try:
+                from apps.sri_integration.models import ElectronicDocument
                 
-                # También agregar el nombre del cliente/proveedor según el tipo
-                if doc.document_type in ['RETENTION', 'PURCHASE_SETTLEMENT']:
-                    # Para retenciones y liquidaciones, buscar el campo supplier
-                    doc.client_name = getattr(doc, 'supplier_name', doc.customer_name)
-                else:
-                    doc.client_name = doc.customer_name
-            
-    except Exception as e:
-        logger.error(f"Error obteniendo estadísticas: {e}")
-    
-    # Estados disponibles para el filtro
-    INVOICE_STATUS_CHOICES = [
-        ('pending', 'Pendiente'),
-        ('authorized', 'Autorizada'),
-        ('rejected', 'Rechazada'),
-        ('cancelled', 'Cancelada'),
-        ('sent', 'Enviada'),
-    ]
-    
-    # 🔑 Obtener el token actual de la URL
-    current_token = request.GET.get('token')
-    
-    context = {
-        'user_companies': user_companies,
-        'selected_company': selected_company,
-        'selected_token': selected_token,
-        'available_companies_with_tokens': available_companies_with_tokens,
-        'has_certificate': has_certificate,
-        'certificate_info': certificate_info,
-        'certificate_expired': certificate_info.get('expired', False),
-        'certificate_expiry': certificate_info.get('expiry'),
-        'certificate_days_left': certificate_info.get('days_left', 0),
-        'certificate_issuer': certificate_info.get('issuer'),
-        'stats': stats,
-        'recent_invoices': recent_invoices,
-        'document_stats': document_stats,
-        'status_choices': INVOICE_STATUS_CHOICES,
-        'is_admin': False,
-        'current_filters': {
-            'token': current_token,
-            'status': request.GET.get('status'),
-            'date_from': request.GET.get('date_from'),
-            'date_to': request.GET.get('date_to'),
-        },
-        'token_mode': True,
-        'smart_mode': True,
-        'security_validation': {
-            'validated_by_decorator': True,
-            'user_access_confirmed': True,
-            'companies_filtered_by_user': True,
-            'token_based_access': True,
-            'smart_redirect_enabled': True,
-            'current_token': current_token[:20] + '...' if current_token else None,
-        },
-        # Variables de billing
-        'billing_available': BILLING_AVAILABLE,
-        'billing_profile': billing_profile,
-        'current_plan': current_plan,
-        'all_plans': all_plans,
-        'recent_purchases': recent_purchases,
-    }
-    
-    return render(request, 'dashboard/user_dashboard.html', context)
-
+                all_documents = ElectronicDocument.objects.filter(
+                    company=selected_company
+                )
+                
+                # Estadísticas generales
+                stats = {
+                    'total_invoices': all_documents.count(),
+                    'authorized_invoices': all_documents.filter(status='AUTHORIZED').count(),
+                    'pending_invoices': all_documents.filter(
+                        status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']
+                    ).count(),
+                    'rejected_invoices': all_documents.filter(
+                        status__in=['REJECTED', 'ERROR']
+                    ).count(),
+                    'total_amount': all_documents.filter(
+                        status='AUTHORIZED'
+                    ).aggregate(total=Sum('total_amount'))['total'] or 0
+                }
+                
+                # Estadísticas por tipo
+                document_stats = {
+                    'facturas': all_documents.filter(document_type='INVOICE').count(),
+                    'retenciones': all_documents.filter(document_type='RETENTION').count(),
+                    'liquidaciones': all_documents.filter(document_type='PURCHASE_SETTLEMENT').count(),
+                    'notas_credito': all_documents.filter(document_type='CREDIT_NOTE').count(),
+                    'notas_debito': all_documents.filter(document_type='DEBIT_NOTE').count(),
+                }
+                
+                # Documentos recientes
+                recent_docs = all_documents.order_by('-created_at')[:50]
+                
+                for doc in recent_docs:
+                    # Mapear tipos para el template
+                    type_mapping = {
+                        'INVOICE': 'factura',
+                        'RETENTION': 'retencion', 
+                        'PURCHASE_SETTLEMENT': 'liquidacion',
+                        'CREDIT_NOTE': 'nota_credito',
+                        'DEBIT_NOTE': 'nota_debito',
+                    }
+                    
+                    # Crear objeto compatible con el template
+                    doc_data = {
+                        'id': doc.id,
+                        'document_type': doc.document_type,
+                        'mapped_type': type_mapping.get(doc.document_type, 'factura'),
+                        'document_number': getattr(doc, 'document_number', None) or getattr(doc, 'sequence_number', str(doc.id)),
+                        'client_name': getattr(doc, 'customer_name', None) or getattr(doc, 'supplier_name', 'Cliente'),
+                        'total_amount': float(getattr(doc, 'total_amount', 0) or 0),
+                        'status': doc.status,
+                        'created_at': doc.created_at,
+                    }
+                    recent_invoices.append(type('Document', (), doc_data)())
+                
+            except ImportError:
+                logger.info("ElectronicDocument model not available, trying individual models...")
+                
+                # Fallback: usar modelos individuales si ElectronicDocument no existe
+                all_documents = []
+                
+                try:
+                    from apps.sri_integration.models import Invoice
+                    if sri_config:
+                        facturas = Invoice.objects.filter(sri_config=sri_config)
+                    else:
+                        facturas = Invoice.objects.filter(company=selected_company)
+                    
+                    document_stats['facturas'] = facturas.count()
+                    
+                    for factura in facturas.order_by('-created_at')[:20]:
+                        doc_data = {
+                            'id': factura.id,
+                            'document_type': 'INVOICE',
+                            'mapped_type': 'factura',
+                            'document_number': getattr(factura, 'sequence_number', str(factura.id)),
+                            'client_name': getattr(factura, 'customer_name', 'Cliente'),
+                            'total_amount': float(getattr(factura, 'total_amount', 0) or 0),
+                            'status': factura.status,
+                            'created_at': factura.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("Invoice model not available")
+                
+                try:
+                    from apps.sri_integration.models import Retention
+                    if sri_config:
+                        retenciones = Retention.objects.filter(sri_config=sri_config)
+                    else:
+                        retenciones = Retention.objects.filter(company=selected_company)
+                    
+                    document_stats['retenciones'] = retenciones.count()
+                    
+                    for retencion in retenciones.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': retencion.id,
+                            'document_type': 'RETENTION',
+                            'mapped_type': 'retencion',
+                            'document_number': getattr(retencion, 'sequence_number', str(retencion.id)),
+                            'client_name': getattr(retencion, 'supplier_name', 'Proveedor'),
+                            'total_amount': float(getattr(retencion, 'total_amount', 0) or 0),
+                            'status': retencion.status,
+                            'created_at': retencion.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("Retention model not available")
+                
+                try:
+                    from apps.sri_integration.models import PurchaseSettlement
+                    if sri_config:
+                        liquidaciones = PurchaseSettlement.objects.filter(sri_config=sri_config)
+                    else:
+                        liquidaciones = PurchaseSettlement.objects.filter(company=selected_company)
+                    
+                    document_stats['liquidaciones'] = liquidaciones.count()
+                    
+                    for liquidacion in liquidaciones.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': liquidacion.id,
+                            'document_type': 'PURCHASE_SETTLEMENT',
+                            'mapped_type': 'liquidacion',
+                            'document_number': getattr(liquidacion, 'sequence_number', str(liquidacion.id)),
+                            'client_name': getattr(liquidacion, 'supplier_name', 'Proveedor'),
+                            'total_amount': float(getattr(liquidacion, 'total_amount', 0) or 0),
+                            'status': liquidacion.status,
+                            'created_at': liquidacion.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("PurchaseSettlement model not available")
+                
+                try:
+                    from apps.sri_integration.models import CreditNote
+                    if sri_config:
+                        notas_credito = CreditNote.objects.filter(sri_config=sri_config)
+                    else:
+                        notas_credito = CreditNote.objects.filter(company=selected_company)
+                    
+                    document_stats['notas_credito'] = notas_credito.count()
+                    
+                    for nota in notas_credito.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': nota.id,
+                            'document_type': 'CREDIT_NOTE',
+                            'mapped_type': 'nota_credito',
+                            'document_number': getattr(nota, 'sequence_number', str(nota.id)),
+                            'client_name': getattr(nota, 'customer_name', 'Cliente'),
+                            'total_amount': float(getattr(nota, 'total_amount', 0) or 0),
+                            'status': nota.status,
+                            'created_at': nota.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("CreditNote model not available")
+                
+                try:
+                    from apps.sri_integration.models import DebitNote
+                    if sri_config:
+                        notas_debito = DebitNote.objects.filter(sri_config=sri_config)
+                    else:
+                        notas_debito = DebitNote.objects.filter(company=selected_company)
+                    
+                    document_stats['notas_debito'] = notas_debito.count()
+                    
+                    for nota in notas_debito.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': nota.id,
+                            'document_type': 'DEBIT_NOTE',
+                            'mapped_type': 'nota_debito',
+                            'document_number': getattr(nota, 'sequence_number', str(nota.id)),
+                            'client_name': getattr(nota, 'customer_name', 'Cliente'),
+                            'total_amount': float(getattr(nota, 'total_amount', 0) or 0),
+                            'status': nota.status,
+                            'created_at': nota.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("DebitNote model not available")
+                
+                # Ordenar todos los documentos por fecha
+                all_documents.sort(key=lambda x: x['created_at'], reverse=True)
+                
+                # Convertir a objetos para compatibilidad con template
+                for doc_data in all_documents[:50]:
+                    recent_invoices.append(type('Document', (), doc_data)())
+                
+                # Calcular estadísticas generales
+                total_docs = len(all_documents)
+                authorized_docs = len([d for d in all_documents if d['status'] == 'AUTHORIZED'])
+                pending_docs = len([d for d in all_documents if d['status'] in ['DRAFT', 'GENERATED', 'SIGNED', 'SENT']])
+                rejected_docs = len([d for d in all_documents if d['status'] in ['REJECTED', 'ERROR']])
+                total_amount = sum(d['total_amount'] for d in all_documents if d['status'] == 'AUTHORIZED')
+                
+                stats = {
+                    'total_invoices': total_docs,
+                    'authorized_invoices': authorized_docs,
+                    'pending_invoices': pending_docs,
+                    'rejected_invoices': rejected_docs,
+                    'total_amount': total_amount
+                }
+                
+        except Exception as e:
+            logger.error(f"Error obteniendo estadísticas para empresa {selected_company.business_name}: {e}")
+            # Mantener valores por defecto en caso de error
+# -*- coding: utf-8 -*-
+"""
+FUNCIÓN company_update CORREGIDA
+REEMPLAZAR LA FUNCIÓN company_update EXISTENTE EN apps/core/views.py
+"""
 
 @login_required
 @audit_html_action('UPDATE_COMPANY')
 @require_POST
 def company_update(request, company_id):
     """
-    Vista AJAX para actualizar información de la empresa
+    Vista AJAX para actualizar información de la empresa - VERSIÓN CORREGIDA
     """
     company = get_object_or_404(Company, id=company_id)
     
@@ -587,61 +705,161 @@ def company_update(request, company_id):
     
     try:
         with transaction.atomic():
-            # Actualizar campos básicos
-            company.business_name = request.POST.get('business_name', company.business_name)
-            company.trade_name = request.POST.get('trade_name', '')
-            company.email = request.POST.get('email', company.email)
-            company.phone = request.POST.get('phone', '')
-            company.address = request.POST.get('address', company.address)
-            company.ciudad = request.POST.get('ciudad', '')
-            company.provincia = request.POST.get('provincia', '')
-            company.codigo_postal = request.POST.get('codigo_postal', '')
-            company.website = request.POST.get('website', '')
+            # Validar datos obligatorios
+            required_fields = {
+                'business_name': 'La razón social es obligatoria',
+                'email': 'El email es obligatorio',
+                'address': 'La dirección es obligatoria',
+                'codigo_establecimiento': 'El código de establecimiento es obligatorio',
+                'codigo_punto_emision': 'El código de punto emisión es obligatorio',
+            }
             
-            # Actualizar campos SRI
+            errors = {}
+            for field, error_msg in required_fields.items():
+                value = request.POST.get(field, '').strip()
+                if not value:
+                    errors[field] = [error_msg]
+            
+            if errors:
+                return JsonResponse({
+                    'success': False,
+                    'errors': errors
+                }, status=400)
+            
+            # Actualizar campos básicos con validación
+            business_name = request.POST.get('business_name', '').strip()
+            if len(business_name) < 3:
+                errors['business_name'] = ['La razón social debe tener al menos 3 caracteres']
+            
+            email = request.POST.get('email', '').strip().lower()
+            if not email or '@' not in email:
+                errors['email'] = ['Ingrese un email válido']
+            
+            address = request.POST.get('address', '').strip()
+            if len(address) < 10:
+                errors['address'] = ['La dirección debe tener al menos 10 caracteres']
+            
+            # Validar códigos SRI
+            codigo_establecimiento = request.POST.get('codigo_establecimiento', '').strip()
+            if not codigo_establecimiento.isdigit() or len(codigo_establecimiento) != 3:
+                errors['codigo_establecimiento'] = ['Debe ser exactamente 3 dígitos']
+            
+            codigo_punto_emision = request.POST.get('codigo_punto_emision', '').strip()
+            if not codigo_punto_emision.isdigit() or len(codigo_punto_emision) != 3:
+                errors['codigo_punto_emision'] = ['Debe ser exactamente 3 dígitos']
+            
+            if errors:
+                return JsonResponse({
+                    'success': False,
+                    'errors': errors
+                }, status=400)
+            
+            # Actualizar campos validados
+            company.business_name = business_name
+            company.trade_name = request.POST.get('trade_name', '').strip()
+            company.email = email
+            company.phone = request.POST.get('phone', '').strip()
+            company.address = address
+            
+            # Campos geográficos - IMPORTANTE: estos estaban fallando
+            company.ciudad = request.POST.get('ciudad', '').strip().title()
+            company.provincia = request.POST.get('provincia', '').strip().title()
+            company.codigo_postal = request.POST.get('codigo_postal', '').strip()
+            company.website = request.POST.get('website', '').strip()
+            
+            # Campos SRI
             company.tipo_contribuyente = request.POST.get('tipo_contribuyente', company.tipo_contribuyente)
             company.obligado_contabilidad = request.POST.get('obligado_contabilidad', company.obligado_contabilidad)
-            company.contribuyente_especial = request.POST.get('contribuyente_especial', '') or None
-            company.codigo_establecimiento = request.POST.get('codigo_establecimiento', company.codigo_establecimiento)
-            company.codigo_punto_emision = request.POST.get('codigo_punto_emision', company.codigo_punto_emision)
+            
+            # Contribuyente especial - puede estar vacío
+            contribuyente_especial = request.POST.get('contribuyente_especial', '').strip()
+            company.contribuyente_especial = contribuyente_especial if contribuyente_especial else None
+            
+            company.codigo_establecimiento = codigo_establecimiento
+            company.codigo_punto_emision = codigo_punto_emision
             company.ambiente_sri = request.POST.get('ambiente_sri', company.ambiente_sri)
             company.tipo_emision = request.POST.get('tipo_emision', company.tipo_emision)
             
             # Manejar logo si se subió
             if 'logo' in request.FILES:
-                company.logo = request.FILES['logo']
+                logo_file = request.FILES['logo']
+                
+                # Validar tipo de archivo
+                valid_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+                file_extension = logo_file.name.lower()[logo_file.name.rfind('.'):]
+                
+                if file_extension not in valid_extensions:
+                    return JsonResponse({
+                        'success': False,
+                        'errors': {'logo': ['Solo se permiten archivos de imagen (JPG, PNG, GIF, BMP, WebP)']}
+                    }, status=400)
+                
+                # Validar tamaño (máximo 5MB)
+                if logo_file.size > 5 * 1024 * 1024:
+                    return JsonResponse({
+                        'success': False,
+                        'errors': {'logo': ['El archivo no puede superar los 5MB']}
+                    }, status=400)
+                
+                company.logo = logo_file
             
             # Validar y guardar
             company.full_clean()
             company.save()
             
-            # Manejar certificado si se subió
-            if 'certificate_file' in request.FILES:
-                handle_certificate_upload(
-                    company=company,
-                    file=request.FILES['certificate_file'],
-                    password=request.POST.get('certificate_password', ''),
-                    alias=request.POST.get('certificate_alias', ''),
-                    user=request.user
-                )
-            
+            # Log de éxito
             logger.info(f"✅ Company {company.business_name} updated by {request.user.username}")
+            logger.info(f"✅ Campos actualizados: ciudad={company.ciudad}, provincia={company.provincia}")
+            
+            # Manejar certificado si se subió
+            certificate_message = ""
+            if 'certificate_file' in request.FILES and request.POST.get('certificate_password'):
+                try:
+                    certificate = handle_certificate_upload(
+                        company=company,
+                        file=request.FILES['certificate_file'],
+                        password=request.POST.get('certificate_password', ''),
+                        alias=request.POST.get('certificate_alias', 'Certificado Principal'),
+                        user=request.user
+                    )
+                    certificate_message = " y certificado actualizado"
+                except Exception as cert_error:
+                    logger.error(f"Error actualizando certificado: {cert_error}")
+                    # No fallar toda la operación por el certificado
+                    certificate_message = " (error al actualizar certificado)"
             
             return JsonResponse({
                 'success': True,
-                'message': 'Información actualizada correctamente'
+                'message': f'Información actualizada correctamente{certificate_message}',
+                'data': {
+                    'business_name': company.business_name,
+                    'trade_name': company.trade_name,
+                    'ciudad': company.ciudad,
+                    'provincia': company.provincia,
+                    'email': company.email,
+                    'phone': company.phone,
+                    'address': company.address,
+                }
             })
             
     except ValidationError as e:
+        logger.error(f"Validation error: {e}")
+        error_dict = {}
+        if hasattr(e, 'message_dict'):
+            error_dict = e.message_dict
+        else:
+            error_dict = {'general': str(e)}
+        
         return JsonResponse({
             'success': False,
-            'errors': e.message_dict if hasattr(e, 'message_dict') else {'general': str(e)}
+            'errors': error_dict
         }, status=400)
+        
     except Exception as e:
-        logger.error(f"Error updating company: {str(e)}")
+        logger.error(f"Error updating company {company_id}: {str(e)}")
         return JsonResponse({
             'success': False,
-            'errors': {'general': f'Error al actualizar: {str(e)}'}
+            'errors': {'general': f'Error interno: {str(e)}'}
         }, status=500)
 
 

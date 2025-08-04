@@ -142,17 +142,6 @@
                 <i class="fas fa-info-circle"></i> Los nuevos usuarios entran automáticamente a la <strong>Sala de Espera</strong> hasta ser aprobados.
             </div>
             {% endif %}
-            
-            <div class="mb-3">
-                <div class="form-check form-switch">
-                    <input class="form-check-input" type="checkbox" id="is_staff" name="is_staff"
-                           {% if user and user.is_staff %}checked{% endif %}>
-                    <label class="form-check-label" for="is_staff">
-                        Es Staff
-                    </label>
-                </div>
-                <div class="form-text">Los usuarios staff pueden acceder al panel de administración</div>
-            </div>
         </div>
     </div>
     

@@ -395,37 +395,91 @@
                 </div>
 
                 <!-- Alertas de Billing -->
-                <div id="alertContainer">
-                    {% if billing_available and billing_profile %}
-                        {% if billing_profile.available_invoices == 0 %}
-                        <div class="alert alert-danger alert-custom mb-4">
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-exclamation-circle fa-2x me-3"></i>
-                                <div class="flex-grow-1">
-                                    <strong>¡Sin documentos disponibles!</strong>
-                                    <p class="mb-0">Necesitas comprar un plan para poder emitir documentos electrónicos.</p>
-                                </div>
-                                <a href="{% url 'billing:plans_list' %}?company={{ selected_company.id }}" class="btn btn-danger btn-sm">
-                                    Comprar Plan
-                                </a>
-                            </div>
-                        </div>
-                        {% elif billing_profile.available_invoices <= 5 %}
-                        <div class="alert alert-warning alert-custom mb-4">
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
-                                <div class="flex-grow-1">
-                                    <strong>Saldo bajo de documentos</strong>
-                                    <p class="mb-0">Te quedan solo {{ billing_profile.available_invoices }} documentos disponibles.</p>
-                                </div>
-                                <a href="{% url 'billing:plans_list' %}?company={{ selected_company.id }}" class="btn btn-warning btn-sm">
-                                    Recargar
-                                </a>
-                            </div>
-                        </div>
-                        {% endif %}
-                    {% endif %}
+<div id="alertContainer">
+    {% if billing_available and billing_profile %}
+        {% if billing_profile.available_invoices == 0 %}
+        <div class="alert alert-danger alert-custom mb-4">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-exclamation-circle fa-2x me-3"></i>
+                <div class="flex-grow-1">
+                    <strong>¡Sin documentos disponibles!</strong>
+                    <p class="mb-0">Necesitas comprar un plan para poder emitir documentos electrónicos.</p>
                 </div>
+                <a href="#" class="btn btn-danger btn-sm" onclick="activarTabPlanes(); return false;">
+                    <i class="fas fa-shopping-cart me-1"></i>
+                    Comprar Plan
+                </a>
+            </div>
+        </div>
+        {% elif billing_profile.available_invoices <= 5 %}
+        <div class="alert alert-warning alert-custom mb-4">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                <div class="flex-grow-1">
+                    <strong>Saldo bajo de documentos</strong>
+                    <p class="mb-0">Te quedan solo {{ billing_profile.available_invoices }} documentos disponibles.</p>
+                </div>
+                <a href="{% url 'billing:plans_list' %}?company={{ selected_company.id }}" class="btn btn-warning btn-sm">
+                    <i class="fas fa-plus-circle me-1"></i>
+                    Recargar
+                </a>
+            </div>
+        </div>
+        {% elif billing_profile.available_invoices <= 20 %}
+        <div class="alert alert-info alert-custom mb-4">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-info-circle fa-2x me-3"></i>
+                <div class="flex-grow-1">
+                    <strong>Considera recargar pronto</strong>
+                    <p class="mb-0">Te quedan {{ billing_profile.available_invoices }} documentos disponibles.</p>
+                </div>
+                <a href="{% url 'billing:plans_list' %}?company={{ selected_company.id }}" class="btn btn-info btn-sm">
+                    <i class="fas fa-eye me-1"></i>
+                    Ver Planes
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        
+        <!-- Información adicional del plan actual -->
+        {% if billing_profile.current_plan %}
+        <div class="alert alert-success alert-custom mb-4">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-check-circle fa-2x me-3"></i>
+                <div class="flex-grow-1">
+                    <strong>Plan Activo: {{ billing_profile.current_plan.name }}</strong>
+                    <p class="mb-0">Documentos disponibles: {{ billing_profile.available_invoices }}</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <a href="{% url 'billing:purchase_history' %}?company={{ selected_company.id }}" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-history me-1"></i>
+                        Historial
+                    </a>
+                    <a href="{% url 'billing:plans_list' %}?company={{ selected_company.id }}" class="btn btn-success btn-sm">
+                        <i class="fas fa-upgrade me-1"></i>
+                        Upgrader
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    {% else %}
+        <!-- Alerta cuando billing no está disponible -->
+        <div class="alert alert-warning alert-custom mb-4">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-exclamation-triangle fa-2x me-3"></i>
+                <div class="flex-grow-1">
+                    <strong>Sistema de facturación no disponible</strong>
+                    <p class="mb-0">Contacta al administrador para configurar el sistema de billing.</p>
+                </div>
+                <a href="{% url 'core:contact_support' %}" class="btn btn-warning btn-sm">
+                    <i class="fas fa-headset me-1"></i>
+                    Contactar Soporte
+                </a>
+            </div>
+        </div>
+    {% endif %}
+</div>
 
                 <!-- Token de la Empresa -->
                 {% if selected_company.api_token %}
@@ -1432,6 +1486,21 @@ function filterDocuments() {
                 }
             }, 60000);
         })();
+function activarTabPlanes() {
+    // Buscar el botón del tab de planes
+    const planesTabButton = document.querySelector('[data-bs-target="#planesTab"]');
+    if (planesTabButton) {
+        // Activar el tab de planes
+        const tab = new bootstrap.Tab(planesTabButton);
+        tab.show();
+        
+        // Hacer scroll suave hacia los tabs
+        planesTabButton.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+    }
+}
         </script>
     </body>
     </html>

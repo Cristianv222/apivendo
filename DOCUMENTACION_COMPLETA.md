@@ -1,15 +1,15 @@
 ================================================================================
-                    DOCUMENTACIÓN COMPLETA - PROYECTO APP
+                    DOCUMENTACIÓN COMPLETA - PROYECTO APIVENDO
 ================================================================================
 
 INFORMACIÓN GENERAL
 -------------------
-Fecha de generación: 2025-07-24 20:08:00
-Ubicación: /app
-Python Version: Python 3.11.13
-Pip Version: pip 24.0 from /usr/local/lib/python3.11/site-packages/pip (python 3.11)
-Entorno Virtual: ❌ NO ACTIVO
-Sistema Operativo: Linux
+Fecha de generación: 2025-08-01 14:54:56
+Ubicación: C:\Users\godoy\Desktop\apivendo
+Python Version: Python 3.13.2
+Pip Version: pip 24.3.1 from C:\Users\godoy\Desktop\apivendo\venv\Lib\site-packages\pip (python 3.13)
+Entorno Virtual: ✅ ACTIVO
+Sistema Operativo: Windows
 Usuario: Desconocido
 
 ================================================================================
@@ -90,7 +90,7 @@ Usuario: Desconocido
 │   │   ├── services/ (3 elementos)
 │   │   │   ├── __pycache__/ (excluido)
 │   │   │   ├── __init__.py (20.0B)
-│   │   │   └── certificate_reader.py (1.3KB)
+│   │   │   └── certificate_reader.py (6.9KB)
 │   │   ├── tests/ (1 elementos)
 │   │   │   └── __init__.py (0B)
 │   │   ├── __init__.py (0B)
@@ -102,7 +102,7 @@ Usuario: Desconocido
 │   │   ├── signals.py (10.7KB)
 │   │   ├── urls.py (503.0B)
 │   │   └── views.py (10.7KB)
-│   ├── companies/ (11 elementos)
+│   ├── companies/ (12 elementos)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── management/ (3 elementos)
 │   │   │   ├── __pycache__/ (excluido)
@@ -122,6 +122,7 @@ Usuario: Desconocido
 │   │   ├── __init__.py (0B)
 │   │   ├── admin.py (3.7KB)
 │   │   ├── apps.py (0B)
+│   │   ├── forms.py (5.6KB)
 │   │   ├── models.py (20.9KB)
 │   │   ├── serializers.py (684.0B)
 │   │   ├── urls.py (395.0B)
@@ -148,15 +149,15 @@ Usuario: Desconocido
 │   │   ├── middleware.py (1.9KB)
 │   │   ├── models.py (11.1KB)
 │   │   ├── session_views.py (5.6KB)
-│   │   ├── urls.py (5.7KB)
-│   │   └── views.py (35.7KB)
+│   │   ├── urls.py (8.3KB)
+│   │   └── views.py (52.9KB)
 │   ├── custom_admin/ (6 elementos)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── __init__.py (63.0B)
 │   │   ├── apps.py (234.0B)
 │   │   ├── models.py (89.0B)
-│   │   ├── urls.py (4.0KB)
-│   │   └── views.py (70.9KB)
+│   │   ├── urls.py (6.7KB)
+│   │   └── views.py (121.3KB)
 │   ├── invoicing/ (11 elementos)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── management/ (3 elementos)
@@ -217,34 +218,37 @@ Usuario: Desconocido
 │   │   ├── serializers.py (340.0B)
 │   │   ├── urls.py (393.0B)
 │   │   └── views.py (1.1KB)
-│   ├── sri_integration/ (12 elementos)
+│   ├── sri_integration/ (13 elementos)
 │   │   ├── __pycache__/ (excluido)
 │   │   ├── management/ (3 elementos)
 │   │   │   ├── __pycache__/ (excluido)
-│   │   │   ├── commands/ (4 elementos)
+│   │   │   ├── commands/ (5 elementos)
 │   │   │   │   ├── __pycache__/ (excluido)
 │   │   │   │   ├── __init__.py (0B)
+│   │   │   │   ├── check_sri_documents.py (4.6KB)
 │   │   │   │   ├── preload_certificates.py (13.3KB)
 │   │   │   │   └── process_invoices.py (11.6KB)
 │   │   │   └── __init__.py (0B)
-│   │   ├── migrations/ (6 elementos)
+│   │   ├── migrations/ (7 elementos)
 │   │   │   ├── __pycache__/ (excluido)
 │   │   │   ├── 0001_initial.py (17.2KB)
 │   │   │   ├── 0002_sriconfiguration_purchase_settlement_sequence_and_more.py (21.3KB)
 │   │   │   ├── 0003_alter_sriconfiguration_is_active.py (526.0B)
 │   │   │   ├── 0004_alter_documentitem_discount_and_more.py (2.8KB)
+│   │   │   ├── 0005_alter_purchasesettlement_options_and_more.py (1.0KB)
 │   │   │   └── __init__.py (0B)
-│   │   ├── services/ (12 elementos)
+│   │   ├── services/ (13 elementos)
 │   │   │   ├── __pycache__/ (excluido)
 │   │   │   ├── __init__.py (705.0B)
+│   │   │   ├── auto_authorization.py (18.7KB)
 │   │   │   ├── certificate_manager.py (16.1KB)
 │   │   │   ├── digital_signer.py (9.0KB)
-│   │   │   ├── document_processor.py (36.7KB)
+│   │   │   ├── document_processor.py (56.7KB)
 │   │   │   ├── email_service.py (10.2KB)
 │   │   │   ├── global_certificate_manager.py (17.1KB)
 │   │   │   ├── pdf_generator.py (17.2KB)
 │   │   │   ├── simple_xml_signer.py (2.8KB)
-│   │   │   ├── soap_client.py (46.8KB)
+│   │   │   ├── soap_client.py (71.4KB)
 │   │   │   ├── sri_processor.py (20.0KB)
 │   │   │   └── xml_generator.py (49.4KB)
 │   │   ├── tests/ (1 elementos)
@@ -252,8 +256,9 @@ Usuario: Desconocido
 │   │   ├── __init__.py (0B)
 │   │   ├── admin.py (10.4KB)
 │   │   ├── apps.py (0B)
-│   │   ├── models.py (48.9KB)
+│   │   ├── models.py (49.8KB)
 │   │   ├── serializers.py (4.0KB)
+│   │   ├── tasks.py (18.7KB)
 │   │   ├── urls.py (659.0B)
 │   │   └── views.py (30.7KB)
 │   ├── users/ (13 elementos)
@@ -277,7 +282,7 @@ Usuario: Desconocido
 │   │   ├── admin.py (17.6KB)
 │   │   ├── apps.py (550.0B)
 │   │   ├── models.py (12.0KB)
-│   │   ├── signals.py (4.1KB)
+│   │   ├── signals.py (9.1KB)
 │   │   ├── urls.py (453.0B)
 │   │   ├── views.py (8.3KB)
 │   │   └── views.py.backup (8.4KB)
@@ -295,9 +300,9 @@ Usuario: Desconocido
 │   └── es/ (1 elementos)
 │       └── LC_MESSAGES/ (0 elementos)
 ├── logs/ (3 elementos)
-│   ├── certificates.log (154.3KB)
-│   ├── sri_integration.log (0B)
-│   └── vendo_sri.log (1.3MB)
+│   ├── certificates.log (224.6KB)
+│   ├── sri_integration.log (2.0KB)
+│   └── vendo_sri.log (1.5MB)
 ├── scripts/ (0 elementos)
 ├── services/ (1 elementos)
 │   └── __init__.py (0B)
@@ -310,11 +315,11 @@ Usuario: Desconocido
 │   └── js/ (2 elementos)
 │       ├── auto-logout.js (5.0KB)
 │       └── session-manager.js (14.8KB)
-├── storage/ (8 elementos)
+├── storage/ (9 elementos)
 │   ├── billing/ (1 elementos)
 │   │   └── receipts/ (1 elementos)
 │   │       └── 2025/ (1 elementos)
-│   │           └── 07/ (16 elementos)
+│   │           └── 07/ (17 elementos)
 │   │               ├── Captura_de_pantalla_2025-02-26_091205.png (309.4KB)
 │   │               ├── Captura_de_pantalla_2025-02-26_091205_GS582rL.png (309.4KB)
 │   │               ├── Captura_de_pantalla_2025-02-26_091205_gw2VukM.png (309.4KB)
@@ -324,6 +329,7 @@ Usuario: Desconocido
 │   │               ├── Captura_de_pantalla_2025-02-26_091205_wuBAP9o.png (309.4KB)
 │   │               ├── Captura_de_pantalla_2025-02-26_091359.png (86.4KB)
 │   │               ├── Captura_de_pantalla_2025-03-05_072046.png (39.4KB)
+│   │               ├── Captura_de_pantalla_2025-05-06_174657.png (457.5KB)
 │   │               ├── Captura_de_pantalla_2025-07-23_112448.png (237.6KB)
 │   │               ├── motul.png (3.7KB)
 │   │               ├── motul_K7KpZoP.png (3.7KB)
@@ -334,6 +340,9 @@ Usuario: Desconocido
 │   ├── certificates/ (1 elementos)
 │   │   └── 1234567890001/ (1 elementos)
 │   │       └── 14929055_1003269840.p12 (3.9KB)
+│   ├── companies/ (1 elementos)
+│   │   └── logos/ (1 elementos)
+│   │       └── WhatsApp_Image_2025-07-13_at_19.11.07.jpeg (41.7KB)
 │   ├── invoices/ (1 elementos)
 │   │   └── xml/ (8 elementos)
 │   │       ├── 1607202504100326984000110010010000000021234567818.xml (2.3KB)
@@ -377,58 +386,72 @@ Usuario: Desconocido
 │   ├── billing/ (2 elementos)
 │   │   ├── plan_purchase.html (18.9KB)
 │   │   └── purchase_success.html (17.8KB)
-│   ├── custom_admin/ (7 elementos)
+│   ├── custom_admin/ (11 elementos)
+│   │   ├── audit_logs/ (1 elementos)
+│   │   │   └── list.html (11.4KB)
+│   │   ├── billing/ (4 elementos)
+│   │   │   ├── company_profiles.html (13.1KB)
+│   │   │   ├── plans_list.html (15.5KB)
+│   │   │   ├── purchase_detail_modal.html (10.4KB)
+│   │   │   └── purchases_list.html (16.4KB)
 │   │   ├── certificates/ (4 elementos)
 │   │   │   ├── edit_modal.html (6.1KB)
 │   │   │   ├── list.html (24.5KB)
 │   │   │   ├── upload_modal.html (5.9KB)
 │   │   │   └── view_modal.html (9.1KB)
 │   │   ├── companies/ (3 elementos)
-│   │   │   ├── form_modal.html (8.8KB)
+│   │   │   ├── form_modal.html (16.8KB)
 │   │   │   ├── list.html (20.2KB)
 │   │   │   └── view_modal.html (8.4KB)
-│   │   ├── invoices/ (3 elementos)
-│   │   │   ├── form_modal.html (7.9KB)
-│   │   │   ├── list.html (24.6KB)
-│   │   │   └── view_modal.html (9.3KB)
+│   │   ├── notifications/ (2 elementos)
+│   │   │   ├── list.html (14.9KB)
+│   │   │   └── settings.html (23.6KB)
+│   │   ├── profile/ (4 elementos)
+│   │   │   ├── change_password.html (13.6KB)
+│   │   │   ├── edit.html (3.1KB)
+│   │   │   ├── manage_sessions.html (12.4KB)
+│   │   │   └── profile.html (14.7KB)
+│   │   ├── settings/ (1 elementos)
+│   │   │   └── list.html (23.8KB)
 │   │   ├── sri_documents/ (1 elementos)
-│   │   │   └── list.html (31.5KB)
+│   │   │   └── list.html (29.6KB)
 │   │   ├── users/ (3 elementos)
-│   │   │   ├── form_modal.html (10.2KB)
+│   │   │   ├── form_modal.html (9.7KB)
 │   │   │   ├── list.html (21.6KB)
 │   │   │   └── view_modal.html (6.8KB)
-│   │   ├── base.html (33.8KB)
-│   │   └── dashboard.html (12.9KB)
+│   │   ├── base.html (34.2KB)
+│   │   └── dashboard.html (12.8KB)
 │   ├── dashboard/ (3 elementos)
 │   │   ├── admin_dashboard.html (22.4KB)
 │   │   ├── no_companies.html (7.5KB)
-│   │   └── user_dashboard.html (38.6KB)
+│   │   └── user_dashboard.html (78.0KB)
 │   ├── email_templates/ (0 elementos)
 │   ├── socialaccount/ (1 elementos)
 │   │   └── authentication_error.html (13.3KB)
 │   └── users/ (3 elementos)
 │       ├── account_rejected.html (10.7KB)
-│       ├── login.html (43.3KB)
+│       ├── login.html (49.8KB)
 │       └── waiting_room.html (12.0KB)
 ├── tests/ (2 elementos)
 │   ├── fixtures/ (0 elementos)
 │   └── __init__.py (0B)
 ├── utils/ (1 elementos)
 │   └── __init__.py (0B)
-├── vendo_sri/ (6 elementos)
+├── vendo_sri/ (7 elementos)
 │   ├── __pycache__/ (excluido)
-│   ├── __init__.py (0B)
+│   ├── __init__.py (378.0B)
 │   ├── asgi.py (425.0B)
-│   ├── settings.py (26.4KB)
+│   ├── celery.py (8.8KB)
+│   ├── settings.py (32.3KB)
 │   ├── urls.py (15.1KB)
 │   └── wsgi.py (425.0B)
 ├── .env (760.0B)
 ├── .gitignore (4.0KB)
-├── docker-compose.yml (1.1KB)
-├── dockerfile (605.0B)
+├── docker-compose.yml (1.4KB)
+├── dockerfile (1.7KB)
 ├── documenter.py (36.0KB)
 ├── manage.py (687.0B)
-├── requirements.txt (1.1KB)
+├── requirements.txt (1003.0B)
 └── startup_certificates.sh (7.6KB)
 
 ================================================================================
@@ -438,33 +461,33 @@ Usuario: Desconocido
 ARCHIVOS IMPORTANTES
 --------------------
 manage.py                 ✅ Existe (687.0B)
-requirements.txt          ✅ Existe (1.1KB)
+requirements.txt          ✅ Existe (1003.0B)
 .env                      ✅ Existe (760.0B)
 .env.example              ❌ Faltante
 .gitignore                ✅ Existe (4.0KB)
 README.md                 ❌ Faltante
-docker-compose.yml        ✅ Existe (1.1KB)
-Dockerfile                ✅ Existe (605.0B)
+docker-compose.yml        ✅ Existe (1.4KB)
+Dockerfile                ✅ Existe (1.7KB)
 pytest.ini                ❌ Faltante
 setup.cfg                 ❌ Faltante
 
 ESTADÍSTICAS POR EXTENSIÓN
 --------------------------
-.py                   181 archivos ( 71.3%)
-.html                  25 archivos (  9.8%)
-.xml                   14 archivos (  5.5%)
-.png                   13 archivos (  5.1%)
-.log                    4 archivos (  1.6%)
-.jpg                    4 archivos (  1.6%)
-.pdf                    3 archivos (  1.2%)
-(sin extensión)         3 archivos (  1.2%)
-.js                     2 archivos (  0.8%)
+.py                   187 archivos ( 69.0%)
+.html                  34 archivos ( 12.5%)
+.png                   14 archivos (  5.2%)
+.xml                   14 archivos (  5.2%)
+.log                    4 archivos (  1.5%)
+.jpg                    4 archivos (  1.5%)
+.pdf                    3 archivos (  1.1%)
+(sin extensión)         3 archivos (  1.1%)
+.js                     2 archivos (  0.7%)
 .backup                 1 archivos (  0.4%)
 
 TOTALES
 -------
-Total de archivos: 254
-Total de directorios: 120
+Total de archivos: 271
+Total de directorios: 126
 
 ================================================================================
                            APLICACIONES DJANGO
@@ -477,90 +500,90 @@ App                  Estado     Básicos    Total      Archivos Existentes
 api                  Parcial    2/5      16         models.py, urls.py       
 billing              Completa   5/5      12         models.py, views.py, urls.py...
 certificates         Completa   5/5      10         models.py, views.py, urls.py...
-companies            Parcial    4/5      10         models.py, views.py, urls.py...
+companies            Parcial    4/5      11         models.py, views.py, urls.py...
 core                 Parcial    4/5      10         models.py, views.py, urls.py...
 custom_admin         Parcial    4/5      4          models.py, views.py, urls.py...
 invoicing            Parcial    4/5      7          models.py, views.py, urls.py...
 notifications        Parcial    3/5      7          models.py, views.py, urls.py...
 settings             Parcial    4/5      7          models.py, views.py, urls.py...
-sri_integration      Parcial    4/5      22         models.py, views.py, urls.py...
+sri_integration      Parcial    4/5      26         models.py, views.py, urls.py...
 users                Completa   5/5      11         models.py, views.py, urls.py...
 
 DETALLE POR APP
 ==================================================
 
 📦 App: api
-   Ubicación: apps/api/
+   Ubicación: apps\api/
    Estado: Parcial
    Archivos básicos: 2/5
    Archivos encontrados: models.py, urls.py
    ❌ Archivos faltantes: views.py, admin.py, apps.py
 
 📦 App: billing
-   Ubicación: apps/billing/
+   Ubicación: apps\billing/
    Estado: Completa
    Archivos básicos: 5/5
    Archivos encontrados: models.py, views.py, urls.py, admin.py, apps.py, forms.py, tests.py, signals.py
    ✅ Todos los archivos básicos presentes
 
 📦 App: certificates
-   Ubicación: apps/certificates/
+   Ubicación: apps\certificates/
    Estado: Completa
    Archivos básicos: 5/5
    Archivos encontrados: models.py, views.py, urls.py, admin.py, apps.py, forms.py, serializers.py, signals.py
    ✅ Todos los archivos básicos presentes
 
 📦 App: companies
-   Ubicación: apps/companies/
+   Ubicación: apps\companies/
    Estado: Parcial
    Archivos básicos: 4/5
-   Archivos encontrados: models.py, views.py, urls.py, admin.py, serializers.py
+   Archivos encontrados: models.py, views.py, urls.py, admin.py, forms.py, serializers.py
    ❌ Archivos faltantes: apps.py
 
 📦 App: core
-   Ubicación: apps/core/
+   Ubicación: apps\core/
    Estado: Parcial
    Archivos básicos: 4/5
    Archivos encontrados: models.py, views.py, urls.py, admin.py
    ❌ Archivos faltantes: apps.py
 
 📦 App: custom_admin
-   Ubicación: apps/custom_admin/
+   Ubicación: apps\custom_admin/
    Estado: Parcial
    Archivos básicos: 4/5
    Archivos encontrados: models.py, views.py, urls.py, apps.py
    ❌ Archivos faltantes: admin.py
 
 📦 App: invoicing
-   Ubicación: apps/invoicing/
+   Ubicación: apps\invoicing/
    Estado: Parcial
    Archivos básicos: 4/5
    Archivos encontrados: models.py, views.py, urls.py, admin.py, serializers.py
    ❌ Archivos faltantes: apps.py
 
 📦 App: notifications
-   Ubicación: apps/notifications/
+   Ubicación: apps\notifications/
    Estado: Parcial
    Archivos básicos: 3/5
    Archivos encontrados: models.py, views.py, urls.py, serializers.py
    ❌ Archivos faltantes: admin.py, apps.py
 
 📦 App: settings
-   Ubicación: apps/settings/
+   Ubicación: apps\settings/
    Estado: Parcial
    Archivos básicos: 4/5
    Archivos encontrados: models.py, views.py, urls.py, admin.py, serializers.py
    ❌ Archivos faltantes: apps.py
 
 📦 App: sri_integration
-   Ubicación: apps/sri_integration/
+   Ubicación: apps\sri_integration/
    Estado: Parcial
    Archivos básicos: 4/5
    Archivos encontrados: models.py, views.py, urls.py, admin.py, serializers.py
    ❌ Archivos faltantes: apps.py
 
 📦 App: users
-   Ubicación: apps/users/
+   Ubicación: apps\users/
    Estado: Completa
    Archivos básicos: 5/5
    Archivos encontrados: models.py, views.py, urls.py, admin.py, apps.py, signals.py
@@ -682,13 +705,13 @@ Documentación:           ⚠️  Iniciada (20%)
 
 ESTADÍSTICAS GENERALES
 ---------------------
-Total directorios:       120
-Total archivos:          254
+Total directorios:       126
+Total archivos:          271
 Apps Django:             11
-Archivos Python:         181
+Archivos Python:         187
 Paquetes instalados:     0
 
 ================================================================================
-Reporte generado automáticamente el 2025-07-24 20:08:00
+Reporte generado automáticamente el 2025-08-01 14:54:56
 Para actualizar, ejecuta: python documenter.py
 ================================================================================

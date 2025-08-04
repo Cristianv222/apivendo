@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Views for digital certificates API
+Views for digital certificates API - CORREGIDAS
 """
 
 import logging
@@ -11,7 +11,6 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser
 from django_filters.rest_framework import DjangoFilterBackend
 from apps.certificates.models import DigitalCertificate, CertificateUsageLog
-from apps.sri_integration.services.certificate_manager import CertificateManager
 from apps.api.serializers.certificate_serializers import (
     DigitalCertificateSerializer,
     CertificateUploadSerializer,
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class DigitalCertificateViewSet(viewsets.ModelViewSet):
     """
-    ViewSet para certificados digitales
+    ViewSet para certificados digitales - CORREGIDO
     """
     serializer_class = DigitalCertificateSerializer
     permission_classes = [IsAuthenticated, IsCompanyOwnerOrAdmin]
@@ -48,7 +47,7 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['post'])
     def upload(self, request):
         """
-        Sube un nuevo certificado P12
+        Sube un nuevo certificado P12 - CORREGIDO
         """
         serializer = CertificateUploadSerializer(data=request.data)
         if not serializer.is_valid():
@@ -88,14 +87,15 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
                 existing_cert.status = 'INACTIVE'
                 existing_cert.save()
             
-            # Crear gestor de certificados
-            cert_manager = CertificateManager(company)
+            # CREAR CERTIFICADO USANDO EL SERIALIZER CORREGIDO
+            certificate = serializer.save()
             
-            # Crear registro de certificado
-            certificate = cert_manager.create_certificate_record(
-                serializer.validated_data['certificate_file'],
-                serializer.validated_data['password'],
-                serializer.validated_data['environment']
+            # Log de carga exitosa
+            CertificateUsageLog.objects.create(
+                certificate=certificate,
+                operation='UPLOAD',
+                success=True,
+                ip_address=self._get_client_ip(request)
             )
             
             # Serializar respuesta
@@ -104,7 +104,9 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
             return Response({
                 'success': True,
                 'message': 'Certificate uploaded successfully',
-                'certificate': response_serializer.data
+                'certificate': response_serializer.data,
+                'real_info_extracted': 'CN=' in certificate.subject_name,
+                'days_until_expiration': certificate.days_until_expiration
             }, status=status.HTTP_201_CREATED)
             
         except Exception as e:
@@ -115,9 +117,9 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'])
-    def validate(self, request, pk=None):
+    def validate_password(self, request, pk=None):
         """
-        Valida un certificado con su contraseña
+        Valida un certificado con su contraseña - CORREGIDO
         """
         certificate = self.get_object()
         
@@ -128,32 +130,132 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Cargar certificado
-            cert_manager = CertificateManager(certificate.company)
-            cert_manager.load_certificate(password)
+            # Verificar contraseña
+            if not certificate.verify_password(password):
+                # Log de validación fallida
+                CertificateUsageLog.objects.create(
+                    certificate=certificate,
+                    operation='VALIDATE_FAILED',
+                    success=False,
+                    error_message='Invalid password',
+                    ip_address=self._get_client_ip(request)
+                )
+                
+                return Response({
+                    'valid': False,
+                    'message': 'Invalid password'
+                }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Validar
-            valid, message = cert_manager.validate_certificate()
+            # Intentar extraer información real si aún no se ha hecho
+            if certificate.subject_name.startswith('Procesando') or certificate.subject_name.startswith('Certificado'):
+                try:
+                    extraction_success = certificate.extract_real_certificate_info(password)
+                    if extraction_success:
+                        certificate.refresh_from_db()  # Recargar datos actualizados
+                except Exception as e:
+                    logger.warning(f"Could not extract real info during validation: {e}")
+            
+            # Log de validación exitosa
+            CertificateUsageLog.objects.create(
+                certificate=certificate,
+                operation='VALIDATE_SUCCESS',
+                success=True,
+                ip_address=self._get_client_ip(request)
+            )
             
             return Response({
-                'valid': valid,
-                'message': message,
+                'valid': True,
+                'message': 'Password is correct',
                 'certificate_info': {
                     'subject_name': certificate.subject_name,
                     'issuer_name': certificate.issuer_name,
                     'valid_from': certificate.valid_from,
                     'valid_to': certificate.valid_to,
                     'is_expired': certificate.is_expired,
-                    'days_until_expiration': certificate.days_until_expiration
+                    'days_until_expiration': certificate.days_until_expiration,
+                    'real_info_extracted': 'CN=' in certificate.subject_name
                 }
             })
             
         except Exception as e:
+            # Log de error en validación
+            CertificateUsageLog.objects.create(
+                certificate=certificate,
+                operation='VALIDATE_ERROR',
+                success=False,
+                error_message=str(e),
+                ip_address=self._get_client_ip(request)
+            )
+            
             logger.error(f"Error validating certificate {pk}: {str(e)}")
             return Response({
                 'valid': False,
                 'message': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def extract_real_info(self, request, pk=None):
+        """
+        NUEVO ENDPOINT: Extrae información real del certificado P12
+        """
+        certificate = self.get_object()
+        
+        password = request.data.get('password')
+        if not password:
+            return Response({
+                'error': 'Password is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Verificar contraseña primero
+            if not certificate.verify_password(password):
+                return Response({
+                    'error': 'Invalid password'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Extraer información real
+            success = certificate.extract_real_certificate_info(password)
+            
+            if success:
+                certificate.refresh_from_db()  # Recargar datos
+                
+                # Log de extracción exitosa
+                CertificateUsageLog.objects.create(
+                    certificate=certificate,
+                    operation='EXTRACT_INFO',
+                    success=True,
+                    ip_address=self._get_client_ip(request)
+                )
+                
+                # Serializar respuesta actualizada
+                serializer = DigitalCertificateSerializer(certificate)
+                
+                return Response({
+                    'success': True,
+                    'message': 'Real certificate information extracted successfully',
+                    'certificate': serializer.data
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'message': 'Could not extract real certificate information'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            # Log de error
+            CertificateUsageLog.objects.create(
+                certificate=certificate,
+                operation='EXTRACT_INFO_ERROR',
+                success=False,
+                error_message=str(e),
+                ip_address=self._get_client_ip(request)
+            )
+            
+            logger.error(f"Error extracting info from certificate {pk}: {str(e)}")
+            return Response({
+                'success': False,
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
     def activate(self, request, pk=None):
@@ -172,6 +274,14 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
             # Activar este certificado
             certificate.status = 'ACTIVE'
             certificate.save()
+            
+            # Log de activación
+            CertificateUsageLog.objects.create(
+                certificate=certificate,
+                operation='ACTIVATE',
+                success=True,
+                ip_address=self._get_client_ip(request)
+            )
             
             return Response({
                 'success': True,
@@ -195,6 +305,14 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
         try:
             certificate.status = 'INACTIVE'
             certificate.save()
+            
+            # Log de desactivación
+            CertificateUsageLog.objects.create(
+                certificate=certificate,
+                operation='DEACTIVATE',
+                success=True,
+                ip_address=self._get_client_ip(request)
+            )
             
             return Response({
                 'success': True,
@@ -247,6 +365,15 @@ class DigitalCertificateViewSet(viewsets.ModelViewSet):
             'count': expiring_certificates.count(),
             'certificates': serializer.data
         })
+    
+    def _get_client_ip(self, request):
+        """Obtener IP del cliente"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR')
+        return ip
 
 
 class CertificateUsageLogViewSet(viewsets.ReadOnlyModelViewSet):

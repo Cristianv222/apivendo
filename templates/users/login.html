@@ -944,9 +944,12 @@
                            class="form-control-custom" 
                            id="id_username" 
                            name="username" 
-                           placeholder="usuario1@gmail.com"
-                           autocomplete="email"
-                           value="usuario1@gmail.com"
+                           placeholder="tu@email.com"
+                           autocomplete="new-password"
+                           autocorrect="off"
+                           autocapitalize="none"
+                           spellcheck="false"
+                           data-form-type="other"
                            required>
                 </div>
                 
@@ -957,8 +960,11 @@
                            id="id_password" 
                            name="password"
                            placeholder="••••••••"
-                           autocomplete="current-password"
-                           value="password123"
+                           autocomplete="new-password"
+                           autocorrect="off"
+                           autocapitalize="none"
+                           spellcheck="false"
+                           data-form-type="other"
                            required>
                 </div>
                 
@@ -1015,6 +1021,9 @@
         let selectedToken = null;
 
         document.addEventListener('DOMContentLoaded', function() {
+            // Limpiar campos al cargar la página
+            clearFormFields();
+            
             // Mode toggle handlers
             document.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
@@ -1023,7 +1032,7 @@
                 });
             });
 
-            // Auto-focus en el primer input
+            // Auto-focus en el primer input (solo en desktop)
             const firstInput = document.querySelector('input[type="email"]');
             if (firstInput && !('ontouchstart' in window)) {
                 setTimeout(() => {
@@ -1044,33 +1053,34 @@
                 });
             }
             
-            // Form submission
+            // Form submission - CÓDIGO CORREGIDO
             const loginForm = document.getElementById('loginForm');
             const submitBtn = document.getElementById('loginSubmitBtn');
             
             if (loginForm && submitBtn) {
                 loginForm.addEventListener('submit', function(e) {
-                    const email = this.querySelector('input[type="email"]').value;
+                    e.preventDefault(); // Siempre prevenir envío por defecto
+                    
+                    const email = this.querySelector('input[type="email"]').value.trim();
                     const password = this.querySelector('input[type="password"]').value;
                     
+                    // Validación de campos vacíos
                     if (!email || !password) {
-                        e.preventDefault();
+                        showAlert('Por favor completa todos los campos', 'error');
+                        return;
+                    }
+
+                    // Validación básica de email
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(email)) {
+                        showAlert('Por favor ingresa un email válido', 'error');
                         return;
                     }
 
                     if (currentMode === 'token') {
-                        e.preventDefault();
                         handleTokenLogin(email, password);
                     } else {
-                        // Loading state para modo sesión
-                        const btnText = submitBtn.querySelector('.btn-text');
-                        const btnSpinner = submitBtn.querySelector('.btn-spinner');
-                        
-                        btnText.classList.add('d-none');
-                        btnSpinner.classList.remove('d-none');
-                        submitBtn.disabled = true;
-                        
-                        document.body.classList.add('loading');
+                        handleSessionLogin(email, password);
                     }
                 });
             }
@@ -1084,7 +1094,64 @@
                     setTimeout(() => alert.remove(), 500);
                 });
             }, 4000);
+
+            // Prevenir autocompletado
+            preventAutocomplete();
         });
+
+        function clearFormFields() {
+            const emailInput = document.getElementById('id_username');
+            const passwordInput = document.getElementById('id_password');
+            
+            if (emailInput) emailInput.value = '';
+            if (passwordInput) passwordInput.value = '';
+
+            // Múltiples intentos de limpieza
+            setTimeout(() => {
+                if (emailInput) emailInput.value = '';
+                if (passwordInput) passwordInput.value = '';
+            }, 100);
+
+            setTimeout(() => {
+                if (emailInput) emailInput.value = '';
+                if (passwordInput) passwordInput.value = '';
+            }, 500);
+        }
+
+        function preventAutocomplete() {
+            const inputs = document.querySelectorAll('#loginForm input');
+            
+            inputs.forEach(input => {
+                input.addEventListener('focus', function() {
+                    if (this.value && !this.dataset.userTyped) {
+                        this.value = '';
+                    }
+                });
+
+                input.addEventListener('keydown', function() {
+                    this.dataset.userTyped = 'true';
+                });
+            });
+
+            // Limpieza periódica solo los primeros 3 segundos
+            const clearInterval = setInterval(() => {
+                const emailInput = document.getElementById('id_username');
+                const passwordInput = document.getElementById('id_password');
+                
+                if (document.activeElement !== emailInput && document.activeElement !== passwordInput) {
+                    if (emailInput && emailInput.value && !emailInput.dataset.userTyped) {
+                        emailInput.value = '';
+                    }
+                    if (passwordInput && passwordInput.value && !passwordInput.dataset.userTyped) {
+                        passwordInput.value = '';
+                    }
+                }
+            }, 200);
+
+            setTimeout(() => {
+                clearInterval(clearInterval);
+            }, 3000);
+        }
 
         function switchMode(mode) {
             currentMode = mode;
@@ -1096,7 +1163,6 @@
             const mainContainer = document.getElementById('mainContainer');
             const tokensSection = document.getElementById('tokensSection');
 
-            // Reset button states
             sessionBtn.classList.remove('active');
             tokenBtn.classList.remove('active');
 
@@ -1113,6 +1179,55 @@
                 loginBtnText.textContent = 'Obtener tokens';
                 loginSpinnerText.textContent = 'Obteniendo tokens...';
                 mainContainer.classList.add('tokens-mode');
+            }
+        }
+
+        async function handleSessionLogin(email, password) {
+            const submitBtn = document.getElementById('loginSubmitBtn');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const btnSpinner = submitBtn.querySelector('.btn-spinner');
+            const loginForm = document.getElementById('loginForm');
+            
+            // Loading state
+            btnText.classList.add('d-none');
+            btnSpinner.classList.remove('d-none');
+            submitBtn.disabled = true;
+            document.body.classList.add('loading');
+
+            try {
+                const formData = new FormData(loginForm);
+                
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: formData
+                });
+
+                if (response.ok) {
+                    // Si la respuesta es exitosa, redirigir
+                    window.location.href = response.url || '/dashboard/';
+                } else {
+                    // Error de credenciales
+                    showAlert('❌ Email o contraseña incorrectos. Verifica tus credenciales e intenta nuevamente.', 'error');
+                    
+                    // Limpiar contraseña
+                    const passwordInput = document.getElementById('id_password');
+                    if (passwordInput) {
+                        passwordInput.value = '';
+                        passwordInput.dataset.userTyped = '';
+                    }
+                }
+
+            } catch (error) {
+                showAlert('❌ Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+            } finally {
+                // Reset loading state
+                btnText.classList.remove('d-none');
+                btnSpinner.classList.add('d-none');
+                submitBtn.disabled = false;
+                document.body.classList.remove('loading');
             }
         }
 
@@ -1134,7 +1249,7 @@
                         'Content-Type': 'application/json',
                         'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                     },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ email: email, password: password })
                 });
 
                 const data = await response.json();
@@ -1143,10 +1258,37 @@
                     availableTokens = data;
                     showTokens(data);
                 } else {
-                    showAlert(data.message || 'Error de autenticación', 'error');
+                    let errorMessage = 'Error de autenticación';
+                    
+                    if (response.status === 401 || response.status === 400) {
+                        errorMessage = '❌ Email o contraseña incorrectos. Verifica tus credenciales e intenta nuevamente.';
+                    } else if (response.status === 403) {
+                        errorMessage = '❌ Acceso denegado. Tu cuenta puede estar desactivada.';
+                    } else if (response.status >= 500) {
+                        errorMessage = '❌ Error del servidor. Intenta nuevamente en unos momentos.';
+                    } else if (data.message) {
+                        errorMessage = '❌ ' + data.message;
+                    }
+                    
+                    showAlert(errorMessage, 'error');
+                    
+                    // Limpiar contraseña
+                    const passwordInput = document.getElementById('id_password');
+                    if (passwordInput) {
+                        passwordInput.value = '';
+                        passwordInput.dataset.userTyped = '';
+                    }
                 }
+
             } catch (error) {
-                showAlert('Error de conexión: ' + error.message, 'error');
+                showAlert('❌ Error de conexión: ' + error.message, 'error');
+                
+                // Limpiar contraseña
+                const passwordInput = document.getElementById('id_password');
+                if (passwordInput) {
+                    passwordInput.value = '';
+                    passwordInput.dataset.userTyped = '';
+                }
             } finally {
                 // Reset loading state
                 btnText.classList.remove('d-none');
@@ -1165,11 +1307,11 @@
             // User token card
             const userTokenCard = createTokenCard({
                 type: 'user',
-                name: `Token de Usuario - ${tokenData.user.full_name}`,
+                name: 'Token de Usuario - ' + tokenData.user.full_name,
                 description: 'Acceso a múltiples empresas - Requiere especificar company_id en requests',
                 token: tokenData.user_token,
                 recommended: false,
-                info: `${tokenData.company_tokens.length} empresas disponibles`
+                info: tokenData.company_tokens.length + ' empresas disponibles'
             });
             tokensContainer.appendChild(userTokenCard);
 
@@ -1177,11 +1319,11 @@
             tokenData.company_tokens.forEach(companyToken => {
                 const companyTokenCard = createTokenCard({
                     type: 'company',
-                    name: `${companyToken.company_name}`,
+                    name: companyToken.company_name,
                     description: 'Acceso directo a esta empresa - No requiere company_id',
                     token: companyToken.token,
                     recommended: companyToken.recommended,
-                    info: `RUC: ${companyToken.company_ruc} | ID: ${companyToken.company_id}`
+                    info: 'RUC: ' + companyToken.company_ruc + ' | ID: ' + companyToken.company_id
                 });
                 tokensContainer.appendChild(companyTokenCard);
             });
@@ -1191,7 +1333,7 @@
 
         function createTokenCard(tokenInfo) {
             const card = document.createElement('div');
-            card.className = `token-card ${tokenInfo.recommended ? 'recommended' : ''}`;
+            card.className = 'token-card' + (tokenInfo.recommended ? ' recommended' : '');
             
             card.innerHTML = `
                 <div class="token-card-header">
@@ -1216,19 +1358,17 @@
         }
 
         function selectToken(token, type, name) {
-            selectedToken = { token, type, name };
+            selectedToken = { token: token, type: type, name: name };
             
-            // Update token info display
             const tokenInfoDisplay = document.getElementById('tokenInfoDisplay');
             const currentTokenDisplay = document.getElementById('currentTokenDisplay');
             const tokenUsageInfo = document.getElementById('tokenUsageInfo');
             
             currentTokenDisplay.textContent = token;
-            tokenUsageInfo.textContent = `Tipo: ${type} | ${name}`;
+            tokenUsageInfo.textContent = 'Tipo: ' + type + ' | ' + name;
             tokenInfoDisplay.classList.add('show');
 
-            // Show success message
-            showAlert(`Token ${type} seleccionado correctamente`, 'success');
+            showAlert('Token ' + type + ' seleccionado correctamente', 'success');
         }
 
         async function copyToken(token) {
@@ -1249,7 +1389,7 @@
             try {
                 const response = await fetch('/api/companies/', {
                     headers: {
-                        'Authorization': `Token ${selectedToken.token}`
+                        'Authorization': 'Token ' + selectedToken.token
                     }
                 });
 
@@ -1257,9 +1397,9 @@
 
                 if (response.ok) {
                     const empresas = data.results ? data.results.length : (Array.isArray(data) ? data.length : 0);
-                    showAlert(`✅ Token funcionando - ${empresas} empresa(s) accesible(s)`, 'success');
+                    showAlert('✅ Token funcionando - ' + empresas + ' empresa(s) accesible(s)', 'success');
                 } else {
-                    showAlert(`❌ Error con token: ${data.error || 'Error desconocido'}`, 'error');
+                    showAlert('❌ Error con token: ' + (data.error || 'Error desconocido'), 'error');
                 }
             } catch (error) {
                 showAlert('Error al probar token: ' + error.message, 'error');
@@ -1267,11 +1407,11 @@
         }
 
         function showAlert(message, type) {
-            // Remove existing alerts
+            // Remover alertas existentes
             document.querySelectorAll('.alert-custom').forEach(alert => alert.remove());
 
             const alert = document.createElement('div');
-            alert.className = `alert-custom ${type === 'success' ? 'alert-success-custom' : ''}`;
+            alert.className = 'alert-custom' + (type === 'success' ? ' alert-success-custom' : '');
             alert.innerHTML = `
                 <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
                 ${message}
@@ -1281,12 +1421,22 @@
             const loginHeader = loginSection.querySelector('.login-header');
             loginHeader.insertAdjacentElement('afterend', alert);
 
-            // Auto-hide after 4 seconds
+            // Auto-hide: 6 segundos para errores, 4 para éxito
+            const hideTimeout = type === 'error' ? 6000 : 4000;
             setTimeout(() => {
-                alert.style.transition = 'opacity 0.5s';
-                alert.style.opacity = '0';
-                setTimeout(() => alert.remove(), 500);
-            }, 4000);
+                if (alert.parentNode) {
+                    alert.style.transition = 'opacity 0.5s';
+                    alert.style.opacity = '0';
+                    setTimeout(() => {
+                        if (alert.parentNode) alert.remove();
+                    }, 500);
+                }
+            }, hideTimeout);
+
+            // Scroll suave hacia la alerta
+            setTimeout(() => {
+                alert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
         }
     </script>
 </body>
