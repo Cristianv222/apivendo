@@ -20,7 +20,20 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from apps.companies.models import Company, CompanyAPIToken
-from apps.certificates.models import DigitalCertificate
+
+# Importar DigitalCertificate de forma segura
+try:
+    from apps.certificates.models import DigitalCertificate
+except ImportError:
+    try:
+        from apps.core.models import DigitalCertificate
+    except ImportError:
+        # Si no existe el modelo, crear una clase dummy
+        class DigitalCertificate:
+            objects = None
+            
+            class DoesNotExist:
+                pass
 
 # Importar User del sistema de autenticación de Django
 from django.contrib.auth import get_user_model
@@ -362,7 +375,7 @@ def user_dashboard(request):
     has_certificate = False
     certificate_info = {}
     
-    if selected_company:
+    if selected_company and hasattr(DigitalCertificate, 'objects') and DigitalCertificate.objects is not None:
         try:
             certificate = DigitalCertificate.objects.filter(
                 company=selected_company,
@@ -375,12 +388,14 @@ def user_dashboard(request):
                     'issuer': certificate.issuer_name,
                     'subject': certificate.subject_name,
                     'expiry': certificate.valid_to,
-                    'days_left': certificate.days_until_expiration,
-                    'expired': certificate.is_expired,
+                    'days_left': getattr(certificate, 'days_until_expiration', 0),
+                    'expired': getattr(certificate, 'is_expired', False),
                     'serial': certificate.serial_number
                 }
         except Exception as e:
             logger.error(f"Error obteniendo certificado: {e}")
+    elif selected_company:
+        logger.warning("DigitalCertificate model not available - certificate info disabled")
     
     # ==================== BILLING ====================
     current_plan = None
@@ -434,17 +449,9 @@ def user_dashboard(request):
         except Exception as e:
             logger.error(f"Error loading billing data: {e}")
             BILLING_AVAILABLE = False
-# -*- coding: utf-8 -*-
-"""
-CORRECCIÓN PARA LA FUNCIÓN user_dashboard EN apps/core/views.py
-REEMPLAZAR LA SECCIÓN DE ESTADÍSTICAS (líneas ~290-360 aprox)
-"""
 
-# ==================== ESTADÍSTICAS CORREGIDAS ====================
-# Reemplazar desde "# ==================== ESTADÍSTICAS ====================" hasta la línea que dice "except Exception as e:"
-
-    # ==================== ESTADÍSTICAS ====================
-stats = {
+    # ==================== ESTADÍSTICAS CORREGIDAS ====================
+    stats = {
         'total_invoices': 0,
         'authorized_invoices': 0,
         'pending_invoices': 0,
@@ -452,8 +459,8 @@ stats = {
         'total_amount': 0
     }
     
-recent_invoices = []
-document_stats = {
+    recent_invoices = []
+    document_stats = {
         'facturas': 0,
         'retenciones': 0,
         'liquidaciones': 0,
@@ -461,7 +468,7 @@ document_stats = {
         'notas_debito': 0,
     }
     
-if selected_company:
+    if selected_company:
         try:
             # Intentar obtener SRIConfiguration de la empresa
             sri_config = None
@@ -680,11 +687,33 @@ if selected_company:
         except Exception as e:
             logger.error(f"Error obteniendo estadísticas para empresa {selected_company.business_name}: {e}")
             # Mantener valores por defecto en caso de error
-# -*- coding: utf-8 -*-
-"""
-FUNCIÓN company_update CORREGIDA
-REEMPLAZAR LA FUNCIÓN company_update EXISTENTE EN apps/core/views.py
-"""
+
+    # ==================== PREPARAR CONTEXTO FINAL ====================
+    context = {
+        'user': user,
+        'selected_company': selected_company,
+        'selected_token': selected_token,
+        'available_companies_with_tokens': available_companies_with_tokens,
+        'has_certificate': has_certificate,
+        'certificate_info': certificate_info,
+        'stats': stats,
+        'document_stats': document_stats,
+        'recent_invoices': recent_invoices,
+        'current_plan': current_plan,
+        'all_plans': all_plans,
+        'recent_purchases': recent_purchases,
+        'billing_profile': billing_profile,
+        'billing_available': BILLING_AVAILABLE,
+        'page_title': 'Dashboard Principal',
+        'security_validation': {
+            'token_system_enabled': True,
+            'user_access_confirmed': True,
+            'company_validated': selected_company is not None,
+        }
+    }
+    
+    return render(request, 'dashboard/user_dashboard.html', context)
+
 
 @login_required
 @audit_html_action('UPDATE_COMPANY')
@@ -930,6 +959,10 @@ def handle_certificate_upload(company, file, password, alias, user):
     """
     Maneja la carga y procesamiento del certificado digital
     """
+    # Verificar si el modelo DigitalCertificate está disponible
+    if not hasattr(DigitalCertificate, 'objects') or DigitalCertificate.objects is None:
+        raise ValueError("El sistema de certificados no está disponible. Contacte al administrador.")
+    
     from cryptography.hazmat.primitives.serialization import pkcs12
     from cryptography import x509
     from cryptography.hazmat.backends import default_backend
@@ -979,11 +1012,15 @@ def handle_certificate_upload(company, file, password, alias, user):
             valid_to=certificate.not_valid_after,
             status='ACTIVE',
             created_by=user,
-            environment='TEST' if company.ambiente_sri == '1' else 'PRODUCTION'
         )
         
-        # Establecer contraseña hasheada
-        new_cert.set_password(password)
+        # Solo agregar environment si el campo existe
+        if hasattr(new_cert, 'environment'):
+            new_cert.environment = 'TEST' if company.ambiente_sri == '1' else 'PRODUCTION'
+        
+        # Establecer contraseña hasheada si el método existe
+        if hasattr(new_cert, 'set_password'):
+            new_cert.set_password(password)
         
         # Guardar archivo
         file.seek(0)  # Volver al inicio del archivo
@@ -1015,18 +1052,28 @@ def company_info_modal(request, company_id):
     
     # Obtener información del certificado si existe
     certificate_info = None
-    try:
-        certificate = company.digital_certificate
-        if certificate:
-            certificate_info = {
-                'has_certificate': True,
-                'issuer': certificate.issuer_name,
-                'valid_until': certificate.valid_to.strftime('%d/%m/%Y'),
-                'days_left': certificate.days_until_expiration,
-                'is_expired': certificate.is_expired,
-                'is_active': certificate.status == 'ACTIVE'
-            }
-    except:
+    if hasattr(DigitalCertificate, 'objects') and DigitalCertificate.objects is not None:
+        try:
+            certificate = DigitalCertificate.objects.filter(
+                company=company,
+                status='ACTIVE'
+            ).first()
+            
+            if certificate:
+                certificate_info = {
+                    'has_certificate': True,
+                    'issuer': certificate.issuer_name,
+                    'valid_until': certificate.valid_to.strftime('%d/%m/%Y'),
+                    'days_left': getattr(certificate, 'days_until_expiration', 0),
+                    'is_expired': getattr(certificate, 'is_expired', False),
+                    'is_active': certificate.status == 'ACTIVE'
+                }
+            else:
+                certificate_info = {'has_certificate': False}
+        except Exception as e:
+            logger.error(f"Error getting certificate info: {e}")
+            certificate_info = {'has_certificate': False}
+    else:
         certificate_info = {'has_certificate': False}
     
     # Preparar datos para el formulario
@@ -1572,3 +1619,273 @@ def company_tokens_view(request):
     }
     
     return render(request, 'dashboard/company_tokens.html', context)
+
+
+@login_required  
+@audit_html_action('CREATE_COMPANY_TOKEN')
+@require_POST
+def create_company_token(request, company_id):
+    """
+    🔑 API para crear nuevo token para una empresa
+    
+    POST /dashboard/companies/{company_id}/tokens/create/
+    """
+    company = get_object_or_404(Company, id=company_id)
+    
+    # Verificar permisos
+    user_companies = get_user_companies_secure(request.user)
+    if not user_companies.filter(id=company.id).exists() and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': 'No tienes permisos para crear tokens de esta empresa'
+        }, status=403)
+    
+    try:
+        # Obtener nombre del token del request
+        token_name = request.POST.get('name', f'Token para {company.business_name}')
+        
+        # Crear nuevo token
+        new_token = CompanyAPIToken.objects.create(
+            company=company,
+            name=token_name,
+            is_active=True
+        )
+        
+        logger.info(f"✅ New token created for company {company.business_name} by {request.user.username}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': True,
+                'message': 'Token creado exitosamente',
+                'token': {
+                    'id': new_token.id,
+                    'key': new_token.key,
+                    'name': new_token.name,
+                    'created_at': new_token.created_at.strftime('%d/%m/%Y %H:%M'),
+                    'is_active': new_token.is_active,
+                    'dashboard_url': f"/dashboard/?token={new_token.key}",
+                    'token_display': new_token.key[:20] + '...'
+                }
+            })
+        
+        messages.success(request, f'Token creado exitosamente para {company.business_name}')
+        return redirect('core:dashboard')
+        
+    except Exception as e:
+        logger.error(f"Error creating token for company {company_id}: {str(e)}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': False,
+                'error': f'Error al crear token: {str(e)}'
+            }, status=500)
+        
+        messages.error(request, f'Error al crear token: {str(e)}')
+        return redirect('core:dashboard')
+
+
+@login_required
+@audit_html_action('DEACTIVATE_COMPANY_TOKEN')
+@require_POST
+def deactivate_company_token(request, token_id):
+    """
+    🔑 API para desactivar un token específico
+    
+    POST /dashboard/tokens/{token_id}/deactivate/
+    """
+    token = get_object_or_404(CompanyAPIToken, id=token_id)
+    
+    # Verificar permisos
+    user_companies = get_user_companies_secure(request.user)
+    if not user_companies.filter(id=token.company.id).exists() and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': 'No tienes permisos para gestionar tokens de esta empresa'
+        }, status=403)
+    
+    try:
+        # Verificar que no sea el único token activo
+        active_tokens = CompanyAPIToken.objects.filter(
+            company=token.company,
+            is_active=True
+        ).count()
+        
+        if active_tokens == 1:
+            return JsonResponse({
+                'success': False,
+                'error': 'No puedes desactivar el único token activo. Crea otro token primero.'
+            }, status=400)
+        
+        # Desactivar token
+        token.is_active = False
+        token.save()
+        
+        logger.info(f"✅ Token {token.key[:20]}... deactivated by {request.user.username}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': True,
+                'message': 'Token desactivado exitosamente'
+            })
+        
+        messages.success(request, 'Token desactivado exitosamente')
+        return redirect('core:dashboard')
+        
+    except Exception as e:
+        logger.error(f"Error deactivating token {token_id}: {str(e)}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': False,
+                'error': f'Error al desactivar token: {str(e)}'
+            }, status=500)
+        
+        messages.error(request, f'Error al desactivar token: {str(e)}')
+        return redirect('core:dashboard')
+
+
+# ========== VISTAS DE UTILIDAD ==========
+
+@login_required
+def test_api_connection(request):
+    """
+    🔧 Vista de prueba para validar conexión API con tokens
+    """
+    user_companies = get_user_companies_secure(request.user)
+    
+    test_results = []
+    
+    for company in user_companies:
+        try:
+            # Obtener token de la empresa
+            company_token = CompanyAPIToken.objects.filter(
+                company=company,
+                is_active=True
+            ).first()
+            
+            if company_token:
+                test_result = {
+                    'company_name': company.business_name,
+                    'company_id': company.id,
+                    'token_available': True,
+                    'token_display': company_token.key[:20] + '...',
+                    'api_url': f"/api/companies/?token={company_token.key}",
+                    'dashboard_url': f"/dashboard/?token={company_token.key}",
+                    'status': 'OK'
+                }
+            else:
+                test_result = {
+                    'company_name': company.business_name,
+                    'company_id': company.id,
+                    'token_available': False,
+                    'token_display': 'N/A',
+                    'api_url': 'N/A',
+                    'dashboard_url': 'N/A',
+                    'status': 'ERROR: No token available'
+                }
+            
+            test_results.append(test_result)
+            
+        except Exception as e:
+            test_results.append({
+                'company_name': company.business_name,
+                'company_id': company.id,
+                'token_available': False,
+                'token_display': 'ERROR',
+                'api_url': 'N/A',
+                'dashboard_url': 'N/A',
+                'status': f'ERROR: {str(e)}'
+            })
+    
+    context = {
+        'test_results': test_results,
+        'user': request.user,
+        'total_companies': user_companies.count(),
+        'page_title': 'Test de Conexión API'
+    }
+    
+    return render(request, 'dashboard/api_test.html', context)
+
+
+@login_required
+def health_check(request):
+    """
+    🏥 Health check para verificar el estado del sistema
+    """
+    try:
+        # Verificar conexión a base de datos
+        db_status = "OK"
+        try:
+            User.objects.count()
+        except Exception as e:
+            db_status = f"ERROR: {str(e)}"
+        
+        # Verificar modelos principales
+        models_status = {}
+        try:
+            models_status['companies'] = Company.objects.count()
+            models_status['tokens'] = CompanyAPIToken.objects.count()
+            models_status['certificates'] = DigitalCertificate.objects.count()
+        except Exception as e:
+            models_status['error'] = str(e)
+        
+        # Verificar funciones críticas
+        functions_status = {}
+        try:
+            test_companies = get_user_companies_secure(request.user)
+            functions_status['get_user_companies'] = f"OK - {test_companies.count()} companies"
+        except Exception as e:
+            functions_status['get_user_companies'] = f"ERROR: {str(e)}"
+        
+        health_data = {
+            'status': 'OK' if db_status == 'OK' else 'ERROR',
+            'timestamp': timezone.now().isoformat(),
+            'user': request.user.username,
+            'database': db_status,
+            'models': models_status,
+            'functions': functions_status,
+            'version': '2.0.0-tokens'
+        }
+        
+        return JsonResponse(health_data)
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'ERROR',
+            'timestamp': timezone.now().isoformat(),
+            'error': str(e)
+        }, status=500)
+
+
+# ========== MANEJADORES DE ERRORES ==========
+
+def handler404(request, exception):
+    """
+    Manejador personalizado para errores 404
+    """
+    logger.warning(f"404 Error: {request.path} requested by {getattr(request.user, 'username', 'anonymous')}")
+    
+    context = {
+        'error_code': '404',
+        'error_message': 'Página no encontrada',
+        'error_description': 'La página que buscas no existe o ha sido movida',
+        'user': request.user if request.user.is_authenticated else None,
+    }
+    
+    return render(request, 'errors/404.html', context, status=404)
+
+
+def handler500(request):
+    """
+    Manejador personalizado para errores 500
+    """
+    logger.error(f"500 Error: {request.path} requested by {getattr(request.user, 'username', 'anonymous')}")
+    
+    context = {
+        'error_code': '500',
+        'error_message': 'Error interno del servidor',
+        'error_description': 'Ha ocurrido un error interno. El equipo técnico ha sido notificado.',
+        'user': request.user if request.user.is_authenticated else None,
+    }
+    
+    return render(request, 'errors/500.html', context, status=500)
