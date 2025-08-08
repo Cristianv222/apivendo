@@ -1071,9 +1071,9 @@
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
                                             <label for="contribuyente_especial" class="form-label">Número Contribuyente Especial</label>
-                                            <input type="text" class="form-control" id="contribuyente_especial" name="contribuyente_especial" 
-                                                value="{{ selected_company.contribuyente_especial }}" maxlength="5"
-                                                placeholder="Dejar vacío si no aplica">
+<input type="text" class="form-control" id="contribuyente_especial" name="contribuyente_especial" 
+    value="{{ selected_company.contribuyente_especial|default_if_none:'' }}" maxlength="5"
+    placeholder="Dejar vacío si no aplica">
                                         </div>
                                         <div class="col-md-6 mb-3">
                                             <label for="ambiente_sri" class="form-label">Ambiente SRI <span class="text-danger">*</span></label>
