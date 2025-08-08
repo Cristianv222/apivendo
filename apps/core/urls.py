@@ -69,6 +69,7 @@ urlpatterns = [
     
     # Vista detallada de factura con validación
     path('invoice/<int:invoice_id>/', views.invoice_detail_view, name='invoice_detail'),
+    path('landing/', views.public_landing_view, name='public_landing'),
 ]
 
 # ==========================================

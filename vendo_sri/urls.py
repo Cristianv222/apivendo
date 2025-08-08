@@ -6,7 +6,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
-from django.shortcuts import redirect
+from django.shortcuts import render, redirect
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.views import LoginView
 from django.contrib.auth import logout
@@ -16,14 +16,17 @@ from django.views.generic import TemplateView
 # VISTAS PRINCIPALES
 # ==========================================
 
+# vendo_sri/urls.py (modificar la función home_redirect)
+
 def home_redirect(request):
     """Redirección inteligente desde la raíz"""
     if request.user.is_authenticated:
-        # Si es admin/staff, ir al panel personalizado
         if request.user.is_staff or request.user.is_superuser:
             return redirect('/admin-panel/')
         return redirect('core:dashboard')
-    return redirect('account_login')
+    
+    # Para usuarios NO autenticados, ir a landing pública
+    return redirect('core:public_landing')
 
 class CustomLoginView(LoginView):
     """Vista personalizada de login"""

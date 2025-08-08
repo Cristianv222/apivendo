@@ -1972,3 +1972,43 @@ def _get_client_name(doc):
             return value
     
     return 'Cliente'
+# Al final de apps/core/views.py agregar:
+
+def public_landing_view(request):
+    """
+    Vista PÚBLICA para la landing page - NO requiere autenticación
+    """
+    try:
+        from apps.billing.models import Plan
+        import json
+        
+        # Obtener planes activos (consulta pública)
+        all_plans = Plan.objects.filter(is_active=True).order_by('sort_order', 'price')
+        
+        # Serializar para JavaScript igual que el dashboard
+        plans_data = []
+        for plan in all_plans:
+            plans_data.append({
+                'id': plan.id,
+                'name': plan.name,
+                'description': plan.description or f'Plan {plan.name}',
+                'invoice_limit': plan.invoice_limit,
+                'price': float(plan.price),
+                'is_featured': plan.is_featured,
+            })
+        
+        context = {
+            'plans_data': json.dumps(plans_data),
+            'total_plans': len(plans_data),
+            'page_title': 'APIVENDO - Sistema de Facturación Electrónica SRI Ecuador',
+        }
+        
+    except Exception as e:
+        # Si hay error, mostrar página sin planes
+        context = {
+            'plans_data': json.dumps([]),
+            'total_plans': 0,
+            'page_title': 'APIVENDO - Sistema de Facturación Electrónica SRI Ecuador',
+        }
+    
+    return render(request, 'landing/index.html', context)
