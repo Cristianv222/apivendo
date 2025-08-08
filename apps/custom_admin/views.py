@@ -33,6 +33,7 @@ from decimal import Decimal
 from apps.sri_integration.models import ElectronicDocument
 from apps.companies.models import Company
 from apps.users.models import User, UserCompanyAssignment, AdminNotification
+from django.db.models import F
 
 def staff_required(view_func):
     """Decorator to require staff/admin access"""

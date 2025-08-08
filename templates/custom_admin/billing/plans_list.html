@@ -1,4 +1,3 @@
-@ -0,0 +1,455 @@
 {% extends "custom_admin/base.html" %}
 {% load static %}
 
@@ -107,6 +106,9 @@
 {% endblock %}
 
 {% block content %}
+<!-- CSRF Token para JavaScript -->
+<meta name="csrf-token" content="{{ csrf_token }}">
+
 <!-- Header con acciones -->
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
@@ -143,14 +145,14 @@
 <div class="row">
     {% for plan in plans %}
     <div class="col-md-6 col-lg-4">
-        <div class="plan-card {% if plan.is_featured %}featured{% endif %}">
+        <div class="plan-card {% if plan.is_featured %}featured{% endif %}" data-plan-id="{{ plan.id }}">
             {% if plan.is_featured %}
                 <span class="featured-badge">
                     <i class="fas fa-star me-1"></i>DESTACADO
                 </span>
             {% endif %}
             
-            <h4 class="mb-2">{{ plan.name }}</h4>
+            <h4 class="mb-2 plan-name">{{ plan.name }}</h4>
             {% if plan.description %}
                 <p class="text-muted small mb-3">{{ plan.description }}</p>
             {% endif %}
@@ -182,7 +184,7 @@
                 <button class="btn btn-sm btn-outline-primary" onclick="editPlan({{ plan.id }})">
                     <i class="fas fa-edit"></i> Editar
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deletePlan({{ plan.id }}, '{{ plan.name }}')">
+                <button class="btn btn-sm btn-outline-danger" onclick="deletePlan({{ plan.id }}, '{{ plan.name|escapejs }}')">
                     <i class="fas fa-trash"></i> Eliminar
                 </button>
             </div>
@@ -212,6 +214,7 @@
             </div>
             <div class="modal-body">
                 <form id="planForm">
+                    {% csrf_token %}
                     <input type="hidden" id="planId">
                     
                     <div class="mb-3">
@@ -277,8 +280,16 @@
 // Variables globales
 let editingPlanId = null;
 
+// Función para obtener CSRF token
+function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+           document.querySelector('meta[name=csrf-token]')?.content || 
+           '{{ csrf_token }}';
+}
+
 // Mostrar modal de crear plan
 function showCreatePlanModal() {
+    console.log('Abriendo modal crear plan...');
     editingPlanId = null;
     document.getElementById('planModalTitle').textContent = 'Crear Plan';
     document.getElementById('planForm').reset();
@@ -289,21 +300,42 @@ function showCreatePlanModal() {
 
 // Editar plan
 async function editPlan(planId) {
+    console.log('Editando plan:', planId);
     editingPlanId = planId;
     document.getElementById('planModalTitle').textContent = 'Editar Plan';
     
-    // Aquí deberías cargar los datos del plan via AJAX
-    // Por ahora usamos los datos del DOM
-    const planCard = document.querySelector([data-plan-id="${planId}"]);
+    // Buscar datos del plan en el DOM
+    const planCard = document.querySelector(`[data-plan-id="${planId}"]`);
     if (planCard) {
-        // Llenar el formulario con los datos actuales
+        // Extraer datos visibles
+        const planName = planCard.querySelector('.plan-name')?.textContent?.trim() || '';
+        const planPriceText = planCard.querySelector('.plan-price')?.textContent || '';
+        const planLimitText = planCard.querySelector('.invoice-count')?.textContent || '';
+        
+        // Parsear precio (remover $ y USD)
+        const priceMatch = planPriceText.match(/\$?([0-9.]+)/);
+        const price = priceMatch ? priceMatch[1] : '';
+        
+        // Parsear límite de facturas
+        const limitMatch = planLimitText.match(/(\d+)/);
+        const limit = limitMatch ? limitMatch[1] : '';
+        
+        // Llenar formulario
+        document.getElementById('planName').value = planName;
+        document.getElementById('planPrice').value = price;
+        document.getElementById('planInvoiceLimit').value = limit;
+        
+        // Calcular precio por factura
+        calculatePricePerInvoice();
     }
     
     new bootstrap.Modal(document.getElementById('planModal')).show();
 }
 
-// Guardar plan
+// Guardar plan - CORREGIDO
 async function savePlan() {
+    console.log('Guardando plan...');
+    
     const form = document.getElementById('planForm');
     if (!form.checkValidity()) {
         form.reportValidity();
@@ -320,23 +352,31 @@ async function savePlan() {
         sort_order: parseInt(document.getElementById('planSortOrder').value) || 0
     };
     
+    console.log('Datos a enviar:', data);
+    
     try {
+        // URLs CORREGIDAS - usar rutas fijas
         const url = editingPlanId 
-            ? {% url 'custom_admin:billing_plan_update' 0 %}.replace('0', editingPlanId)
-            : {% url 'custom_admin:billing_plan_create' %};
+            ? `/admin-panel/billing/plans/${editingPlanId}/update/`
+            : `/admin-panel/billing/plans/create/`;
             
         const method = editingPlanId ? 'PUT' : 'POST';
+        
+        console.log(`${method} ${url}`);
         
         const response = await fetch(url, {
             method: method,
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
+                'X-CSRFToken': getCsrfToken()
             },
             body: JSON.stringify(data)
         });
         
+        console.log('Response status:', response.status);
+        
         const result = await response.json();
+        console.log('Response data:', result);
         
         if (result.success) {
             showNotification(result.message, 'success');
@@ -346,18 +386,19 @@ async function savePlan() {
             showNotification(result.error || 'Error al guardar el plan', 'error');
         }
     } catch (error) {
+        console.error('Error:', error);
         showNotification('Error al procesar la solicitud', 'error');
     }
 }
 
-// Toggle estado del plan
+// Toggle estado del plan - CORREGIDO
 async function togglePlanStatus(planId, currentStatus) {
     try {
-        const response = await fetch({% url 'custom_admin:billing_plan_update' 0 %}.replace('0', planId), {
+        const response = await fetch(`/admin-panel/billing/plans/${planId}/update/`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
+                'X-CSRFToken': getCsrfToken()
             },
             body: JSON.stringify({
                 is_active: !currentStatus
@@ -376,17 +417,17 @@ async function togglePlanStatus(planId, currentStatus) {
     }
 }
 
-// Eliminar plan
+// Eliminar plan - CORREGIDO
 async function deletePlan(planId, planName) {
-    if (!confirm(¿Estás seguro de que deseas eliminar el plan "${planName}"?)) {
+    if (!confirm(`¿Estás seguro de que deseas eliminar el plan "${planName}"?`)) {
         return;
     }
     
     try {
-        const response = await fetch({% url 'custom_admin:billing_plan_delete' 0 %}.replace('0', planId), {
+        const response = await fetch(`/admin-panel/billing/plans/${planId}/delete/`, {
             method: 'DELETE',
             headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
+                'X-CSRFToken': getCsrfToken()
             }
         });
         
@@ -403,10 +444,7 @@ async function deletePlan(planId, planName) {
     }
 }
 
-// Calcular precio por factura
-document.getElementById('planInvoiceLimit').addEventListener('input', calculatePricePerInvoice);
-document.getElementById('planPrice').addEventListener('input', calculatePricePerInvoice);
-
+// Calcular precio por factura - CORREGIDO para que funcione al cargar
 function calculatePricePerInvoice() {
     const invoiceLimit = parseInt(document.getElementById('planInvoiceLimit').value) || 0;
     const price = parseFloat(document.getElementById('planPrice').value) || 0;
@@ -419,6 +457,24 @@ function calculatePricePerInvoice() {
         document.getElementById('pricePerInvoice').style.display = 'none';
     }
 }
+
+// Event listeners cuando el DOM esté listo - CORREGIDO
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM cargado');
+    
+    // Agregar event listeners para cálculo automático
+    const invoiceLimitInput = document.getElementById('planInvoiceLimit');
+    const priceInput = document.getElementById('planPrice');
+    
+    if (invoiceLimitInput) {
+        invoiceLimitInput.addEventListener('input', calculatePricePerInvoice);
+    }
+    if (priceInput) {
+        priceInput.addEventListener('input', calculatePricePerInvoice);
+    }
+    
+    console.log('Event listeners agregados');
+});
 
 // Aplicar filtros
 function applyFilters() {
@@ -441,7 +497,7 @@ function showNotification(message, type) {
     const icon = type === 'success' ? 'check-circle' : 'exclamation-circle';
     
     const alert = document.createElement('div');
-    alert.className = alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3;
+    alert.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
     alert.style.zIndex = '9999';
     alert.innerHTML = `
         <i class="fas fa-${icon} me-2"></i>
