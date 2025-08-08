@@ -1889,3 +1889,86 @@ def handler500(request):
     }
     
     return render(request, 'errors/500.html', context, status=500)
+def prepare_documents_for_template(all_documents):
+    """
+    Prepara los documentos para el template asegurando que tengan todos los campos necesarios
+    """
+    prepared_documents = []
+    
+    for doc in all_documents:
+        try:
+            # Determinar si es un objeto o diccionario
+            if hasattr(doc, '__dict__'):
+                # Es un objeto del modelo
+                doc_data = {
+                    'id': getattr(doc, 'id', 0),
+                    'document_type': getattr(doc, 'document_type', 'UNKNOWN'),
+                    'mapped_type': _get_mapped_type(getattr(doc, 'document_type', 'UNKNOWN')),
+                    'document_number': getattr(doc, 'document_number', str(getattr(doc, 'id', 'N/A'))),
+                    'client_name': _get_client_name(doc),
+                    'total_amount': float(getattr(doc, 'total_amount', 0) or 0),
+                    'status': getattr(doc, 'status', 'UNKNOWN'),
+                    'created_at': getattr(doc, 'created_at', None),
+                }
+            else:
+                # Es un diccionario
+                doc_data = {
+                    'id': doc.get('id', 0),
+                    'document_type': doc.get('document_type', 'UNKNOWN'),
+                    'mapped_type': _get_mapped_type(doc.get('document_type', 'UNKNOWN')),
+                    'document_number': doc.get('document_number', str(doc.get('id', 'N/A'))),
+                    'client_name': doc.get('client_name', 'Cliente'),
+                    'total_amount': float(doc.get('total_amount', 0) or 0),
+                    'status': doc.get('status', 'UNKNOWN'),
+                    'created_at': doc.get('created_at', None),
+                }
+            
+            # Crear objeto tipo documento para compatibilidad con template
+            document_obj = type('Document', (), doc_data)()
+            prepared_documents.append(document_obj)
+            
+        except Exception as e:
+            logger.error(f"Error preparando documento para template: {e}")
+            # Crear documento por defecto en caso de error
+            fallback_doc = type('Document', (), {
+                'id': getattr(doc, 'id', 0) if hasattr(doc, 'id') else doc.get('id', 0),
+                'document_type': 'UNKNOWN',
+                'mapped_type': 'unknown',
+                'document_number': 'ERROR',
+                'client_name': 'Error',
+                'total_amount': 0.0,
+                'status': 'ERROR',
+                'created_at': None,
+            })()
+            prepared_documents.append(fallback_doc)
+    
+    return prepared_documents
+
+
+def _get_mapped_type(document_type):
+    """Mapea el tipo de documento al formato esperado por el template"""
+    type_mapping = {
+        'INVOICE': 'factura',
+        'RETENTION': 'retencion', 
+        'PURCHASE_SETTLEMENT': 'liquidacion',
+        'CREDIT_NOTE': 'nota_credito',
+        'DEBIT_NOTE': 'nota_debito',
+        'REMISSION_GUIDE': 'guia_remision',
+    }
+    return type_mapping.get(document_type, 'documento')
+
+
+def _get_client_name(doc):
+    """Obtiene el nombre del cliente según el tipo de documento"""
+    # Lista de posibles campos de nombre de cliente
+    client_fields = [
+        'customer_name', 'client_name', 'supplier_name', 
+        'customer', 'client', 'supplier'
+    ]
+    
+    for field in client_fields:
+        value = getattr(doc, field, None)
+        if value:
+            return value
+    
+    return 'Cliente'

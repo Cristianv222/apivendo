@@ -15,7 +15,7 @@ from django.conf import settings
 import logging
 
 from .models import (
-    SRIConfiguration, ElectronicDocument, DocumentItem,
+    DebitNote, PurchaseSettlement, Retention, SRIConfiguration, ElectronicDocument, DocumentItem,
     DocumentTax, SRIResponse, CreditNote
 )
 from .serializers import (
@@ -699,3 +699,439 @@ class SRIResponseViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["created_at"]
     ordering = ["-created_at"]
     permission_classes = [permissions.AllowAny]  # Para pruebas
+
+# -*- coding: utf-8 -*-
+"""
+PASO 1: AGREGAR AL FINAL DE apps/sri_integration/views.py
+Sistema completo de descarga para TODOS los tipos de documentos SRI
+"""
+
+from django.http import HttpResponse, Http404, FileResponse, JsonResponse
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework import status
+import os
+import mimetypes
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Importar función de permisos del core
+try:
+    from apps.core.views import get_user_companies_secure
+except ImportError:
+    def get_user_companies_secure(user):
+        from apps.companies.models import Company
+        if user.is_staff or user.is_superuser:
+            return Company.objects.filter(is_active=True)
+        return Company.objects.filter(is_active=True)[:1]  # Fallback
+
+
+def get_document_by_id_and_type(document_id, user):
+    """
+    Obtiene un documento de cualquier tipo con validación de permisos
+    """
+    user_companies = get_user_companies_secure(user)
+    
+    # Intentar obtener de ElectronicDocument primero
+    try:
+        document = ElectronicDocument.objects.get(
+            id=document_id,
+            company__in=user_companies
+        )
+        return document, 'electronic_document'
+    except ElectronicDocument.DoesNotExist:
+        pass
+    
+    # Intentar obtener de modelos específicos
+    models_to_try = [
+        (CreditNote, 'credit_note'),
+        (DebitNote, 'debit_note'),
+        (Retention, 'retention'),
+        (PurchaseSettlement, 'purchase_settlement'),
+    ]
+    
+    for model_class, doc_type in models_to_try:
+        try:
+            document = model_class.objects.get(
+                id=document_id,
+                company__in=user_companies
+            )
+            return document, doc_type
+        except (model_class.DoesNotExist, NameError):
+            continue
+    
+    return None, None
+
+
+def get_document_files(document, doc_type):
+    """
+    Obtiene los archivos PDF y XML de un documento según su tipo
+    """
+    files = {
+        'pdf_file': None,
+        'xml_file': None,
+        'signed_xml_file': None,
+        'document_number': getattr(document, 'document_number', str(document.id)),
+        'status': getattr(document, 'status', 'UNKNOWN')
+    }
+    
+    # Mapeo de campos según el tipo de documento
+    if doc_type == 'electronic_document':
+        files.update({
+            'pdf_file': getattr(document, 'pdf_file', None),
+            'xml_file': getattr(document, 'xml_file', None),
+            'signed_xml_file': getattr(document, 'signed_xml_file', None),
+        })
+    else:
+        # Para modelos específicos (CreditNote, DebitNote, etc.)
+        files.update({
+            'pdf_file': getattr(document, 'pdf_file', None),
+            'xml_file': getattr(document, 'xml_file', None),
+            'signed_xml_file': getattr(document, 'signed_xml_file', None),
+        })
+    
+    return files
+
+
+@login_required
+@require_GET
+def download_document_pdf(request, document_id):
+    """
+    Descarga el PDF de cualquier tipo de documento autorizado
+    URL: /sri/documents/<id>/download/pdf/
+    """
+    try:
+        # Obtener documento de cualquier tipo
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            logger.warning(f"Usuario {request.user.username} sin permisos para documento {document_id}")
+            raise Http404("Documento no encontrado o sin permisos")
+        
+        # Obtener archivos del documento
+        files = get_document_files(document, doc_type)
+        
+        # Verificar que el documento esté autorizado
+        if files['status'] != 'AUTHORIZED':
+            return JsonResponse({
+                'error': 'DOCUMENT_NOT_AUTHORIZED',
+                'message': f'El documento debe estar autorizado para descargar el PDF. Estado actual: {files["status"]}'
+            }, status=400)
+        
+        # Verificar que existe el archivo PDF
+        if not files['pdf_file']:
+            return JsonResponse({
+                'error': 'PDF_NOT_FOUND',
+                'message': 'El archivo PDF no está disponible para este documento'
+            }, status=404)
+        
+        # Verificar que el archivo existe físicamente
+        try:
+            if not os.path.exists(files['pdf_file'].path):
+                logger.error(f"Archivo PDF no existe: {files['pdf_file'].path}")
+                return JsonResponse({
+                    'error': 'PDF_FILE_NOT_FOUND',
+                    'message': 'El archivo PDF no se encuentra en el servidor'
+                }, status=404)
+        except (AttributeError, ValueError):
+            return JsonResponse({
+                'error': 'PDF_PATH_ERROR',
+                'message': 'Error al acceder al archivo PDF'
+            }, status=500)
+        
+        # Generar nombre de archivo descargable según el tipo
+        doc_type_names = {
+            'electronic_document': 'documento',
+            'credit_note': 'nota_credito',
+            'debit_note': 'nota_debito',
+            'retention': 'retencion',
+            'purchase_settlement': 'liquidacion_compra'
+        }
+        
+        type_name = doc_type_names.get(doc_type, 'documento')
+        filename = f"{files['document_number']}_{type_name}_autorizado.pdf"
+        
+        # Servir archivo
+        response = FileResponse(
+            files['pdf_file'].open('rb'),
+            as_attachment=True,
+            filename=filename,
+            content_type='application/pdf'
+        )
+        
+        logger.info(f"Usuario {request.user.username} descargó PDF del {type_name} {document_id}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error descargando PDF del documento {document_id}: {str(e)}")
+        return JsonResponse({
+            'error': 'DOWNLOAD_ERROR',
+            'message': f'Error interno al descargar el archivo: {str(e)}'
+        }, status=500)
+
+
+@login_required
+@require_GET
+def download_document_xml(request, document_id):
+    """
+    Descarga el XML firmado de cualquier tipo de documento
+    URL: /sri/documents/<id>/download/xml/
+    """
+    try:
+        # Obtener documento de cualquier tipo
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            logger.warning(f"Usuario {request.user.username} sin permisos para documento {document_id}")
+            raise Http404("Documento no encontrado o sin permisos")
+        
+        # Obtener archivos del documento
+        files = get_document_files(document, doc_type)
+        
+        # Verificar que el documento esté firmado o autorizado
+        valid_statuses = ['SIGNED', 'SENT', 'AUTHORIZED']
+        if files['status'] not in valid_statuses:
+            return JsonResponse({
+                'error': 'DOCUMENT_NOT_SIGNED',
+                'message': f'El documento debe estar firmado para descargar el XML. Estado actual: {files["status"]}'
+            }, status=400)
+        
+        # Preferir XML firmado, luego XML original
+        xml_file = None
+        filename_prefix = ""
+        
+        if files['signed_xml_file']:
+            xml_file = files['signed_xml_file']
+            filename_prefix = "firmado"
+        elif files['xml_file']:
+            xml_file = files['xml_file']
+            filename_prefix = "original"
+        
+        if not xml_file:
+            return JsonResponse({
+                'error': 'XML_NOT_FOUND',
+                'message': 'El archivo XML no está disponible para este documento'
+            }, status=404)
+        
+        # Verificar que el archivo existe físicamente
+        try:
+            if not os.path.exists(xml_file.path):
+                logger.error(f"Archivo XML no existe: {xml_file.path}")
+                return JsonResponse({
+                    'error': 'XML_FILE_NOT_FOUND',
+                    'message': 'El archivo XML no se encuentra en el servidor'
+                }, status=404)
+        except (AttributeError, ValueError):
+            return JsonResponse({
+                'error': 'XML_PATH_ERROR',
+                'message': 'Error al acceder al archivo XML'
+            }, status=500)
+        
+        # Generar nombre de archivo descargable según el tipo
+        doc_type_names = {
+            'electronic_document': 'documento',
+            'credit_note': 'nota_credito',
+            'debit_note': 'nota_debito',
+            'retention': 'retencion',
+            'purchase_settlement': 'liquidacion_compra'
+        }
+        
+        type_name = doc_type_names.get(doc_type, 'documento')
+        filename = f"{files['document_number']}_{type_name}_{filename_prefix}.xml"
+        
+        # Servir archivo
+        response = FileResponse(
+            xml_file.open('rb'),
+            as_attachment=True,
+            filename=filename,
+            content_type='application/xml'
+        )
+        
+        logger.info(f"Usuario {request.user.username} descargó XML del {type_name} {document_id}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error descargando XML del documento {document_id}: {str(e)}")
+        return JsonResponse({
+            'error': 'DOWNLOAD_ERROR',
+            'message': f'Error interno al descargar el archivo: {str(e)}'
+        }, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def check_document_files(request, document_id):
+    """
+    Verifica qué archivos están disponibles para un documento
+    URL: /sri/documents/<id>/files/check/
+    """
+    try:
+        # Obtener documento de cualquier tipo
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            return Response({
+                'error': 'DOCUMENT_NOT_FOUND',
+                'message': 'Documento no encontrado o sin permisos'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Obtener archivos del documento
+        files = get_document_files(document, doc_type)
+        
+        # Verificar disponibilidad de archivos
+        file_status = {
+            'document_id': document_id,
+            'document_type': doc_type,
+            'document_number': files['document_number'],
+            'status': files['status'],
+            'files': {
+                'pdf': {
+                    'available': bool(files['pdf_file']),
+                    'exists': False,
+                    'size': 0,
+                    'downloadable': False
+                },
+                'xml': {
+                    'available': bool(files['xml_file'] or files['signed_xml_file']),
+                    'exists': False,
+                    'size': 0,
+                    'signed': bool(files['signed_xml_file']),
+                    'downloadable': False
+                }
+            }
+        }
+        
+        # Verificar PDF
+        if files['pdf_file']:
+            try:
+                if os.path.exists(files['pdf_file'].path):
+                    file_status['files']['pdf']['exists'] = True
+                    file_status['files']['pdf']['size'] = os.path.getsize(files['pdf_file'].path)
+                    file_status['files']['pdf']['downloadable'] = files['status'] == 'AUTHORIZED'
+            except (AttributeError, ValueError, OSError):
+                pass
+        
+        # Verificar XML
+        xml_to_check = files['signed_xml_file'] or files['xml_file']
+        if xml_to_check:
+            try:
+                if os.path.exists(xml_to_check.path):
+                    file_status['files']['xml']['exists'] = True
+                    file_status['files']['xml']['size'] = os.path.getsize(xml_to_check.path)
+                    file_status['files']['xml']['downloadable'] = files['status'] in ['SIGNED', 'SENT', 'AUTHORIZED']
+            except (AttributeError, ValueError, OSError):
+                pass
+        
+        return Response(file_status)
+        
+    except Exception as e:
+        logger.error(f"Error verificando archivos del documento {document_id}: {str(e)}")
+        return Response({
+            'error': 'CHECK_ERROR',
+            'message': f'Error interno al verificar archivos: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===== ENDPOINT PARA GENERAR ARCHIVOS FALTANTES =====
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_missing_files(request, document_id):
+    """
+    Genera archivos PDF o XML faltantes para un documento
+    URL: /sri/documents/<id>/files/generate/
+    """
+    try:
+        # Obtener documento de cualquier tipo
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            return Response({
+                'error': 'DOCUMENT_NOT_FOUND',
+                'message': 'Documento no encontrado o sin permisos'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Obtener tipo de archivo a generar
+        file_type = request.data.get('file_type', 'pdf')  # 'pdf' o 'xml'
+        
+        if file_type not in ['pdf', 'xml']:
+            return Response({
+                'error': 'INVALID_FILE_TYPE',
+                'message': 'El tipo de archivo debe ser "pdf" o "xml"'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Verificar estado del documento
+        files = get_document_files(document, doc_type)
+        
+        if file_type == 'pdf' and files['status'] != 'AUTHORIZED':
+            return Response({
+                'error': 'DOCUMENT_NOT_AUTHORIZED',
+                'message': 'El documento debe estar autorizado para generar PDF'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Intentar generar el archivo usando el procesador
+        try:
+            from apps.sri_integration.services.document_processor import DocumentProcessor
+            from apps.sri_integration.services.pdf_generator import PDFGenerator
+            
+            if file_type == 'pdf':
+                # Generar PDF
+                pdf_generator = PDFGenerator(document)
+                
+                if doc_type == 'credit_note':
+                    pdf_content = pdf_generator.generate_credit_note_pdf()
+                elif doc_type == 'debit_note':
+                    pdf_content = pdf_generator.generate_debit_note_pdf()
+                elif doc_type == 'retention':
+                    pdf_content = pdf_generator.generate_retention_pdf()
+                else:
+                    pdf_content = pdf_generator.generate_invoice_pdf()
+                
+                # Guardar PDF
+                from django.core.files.base import ContentFile
+                filename = f"{files['document_number']}_{doc_type}.pdf"
+                document.pdf_file.save(filename, ContentFile(pdf_content), save=True)
+                
+                return Response({
+                    'success': True,
+                    'message': 'PDF generado exitosamente',
+                    'file_type': 'pdf',
+                    'filename': filename
+                })
+                
+            elif file_type == 'xml':
+                # Generar XML (si no existe)
+                processor = DocumentProcessor(document.company)
+                success, message = processor._generate_xml(document)
+                
+                if success:
+                    return Response({
+                        'success': True,
+                        'message': 'XML generado exitosamente',
+                        'file_type': 'xml'
+                    })
+                else:
+                    return Response({
+                        'error': 'XML_GENERATION_FAILED',
+                        'message': message
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    
+        except Exception as e:
+            logger.error(f"Error generando {file_type} para documento {document_id}: {str(e)}")
+            return Response({
+                'error': 'GENERATION_ERROR',
+                'message': f'Error generando {file_type}: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+    except Exception as e:
+        logger.error(f"Error en generate_missing_files para documento {document_id}: {str(e)}")
+        return Response({
+            'error': 'SYSTEM_ERROR',
+            'message': f'Error del sistema: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+

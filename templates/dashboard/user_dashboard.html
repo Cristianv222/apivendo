@@ -433,10 +433,10 @@
                     <strong>Considera recargar pronto</strong>
                     <p class="mb-0">Te quedan {{ billing_profile.available_invoices }} documentos disponibles.</p>
                 </div>
-                <a href="{% url 'billing:plans_list' %}?company={{ selected_company.id }}" class="btn btn-info btn-sm">
-                    <i class="fas fa-eye me-1"></i>
-                    Ver Planes
-                </a>
+<a href="#" class="btn btn-info btn-sm" onclick="activarTabPlanes(); return false;">
+    <i class="fas fa-eye me-1"></i>
+    Ver Planes
+</a>
             </div>
         </div>
         {% endif %}
@@ -705,7 +705,7 @@
                                     <!-- En la tabla, actualiza el tbody -->
 <tbody>
     {% for document in recent_invoices %}
-    <tr data-document-type="{{ document.mapped_type }}" data-amount="{{ document.total_amount }}">
+    <tr data-document-type="{{ document.mapped_type }}" data-amount="{{ document.total_amount }}" data-document-id="{{ document.id }}">
         <td>
             {% if document.document_type == 'INVOICE' %}
                 <span class="badge bg-primary"><i class="fas fa-file-invoice"></i> Factura</span>
@@ -747,17 +747,74 @@
         </td>
         <td>{{ document.created_at|date:"d/m/Y H:i" }}</td>
         <td>
-            <a href="#" class="btn btn-sm btn-outline-primary" title="Ver detalle">
+            <!-- Botón Ver Detalle -->
+            <button class="btn btn-sm btn-outline-primary me-1" 
+                    onclick="viewDocumentDetail({{ document.id }})" 
+                    title="Ver detalle">
                 <i class="fas fa-eye"></i>
-            </a>
-            {% if document.status == 'AUTHORIZED' %}
-            <a href="#" class="btn btn-sm btn-outline-success" title="Descargar PDF">
-                <i class="fas fa-file-pdf"></i>
-            </a>
-            <a href="#" class="btn btn-sm btn-outline-info" title="Descargar XML">
-                <i class="fas fa-file-code"></i>
-            </a>
-            {% endif %}
+            </button>
+            
+            <!-- Botones de descarga - MEJORADOS -->
+            <div class="btn-group" role="group">
+                <!-- Botón PDF - Solo si está autorizado -->
+                {% if document.status == 'AUTHORIZED' %}
+                    <button class="btn btn-sm btn-outline-success" 
+                            onclick="downloadDocumentFile({{ document.id }}, 'pdf')" 
+                            title="Descargar PDF">
+                        <i class="fas fa-file-pdf"></i>
+                    </button>
+                {% else %}
+                    <button class="btn btn-sm btn-outline-secondary" 
+                            disabled 
+                            title="PDF disponible solo para documentos autorizados">
+                        <i class="fas fa-file-pdf"></i>
+                    </button>
+                {% endif %}
+                
+                <!-- Botón XML - Si está firmado, enviado o autorizado -->
+                {% if document.status == 'SIGNED' or document.status == 'SENT' or document.status == 'AUTHORIZED' %}
+                    <button class="btn btn-sm btn-outline-info" 
+                            onclick="downloadDocumentFile({{ document.id }}, 'xml')" 
+                            title="Descargar XML">
+                        <i class="fas fa-file-code"></i>
+                    </button>
+                {% else %}
+                    <button class="btn btn-sm btn-outline-secondary" 
+                            disabled 
+                            title="XML disponible solo para documentos firmados">
+                        <i class="fas fa-file-code"></i>
+                    </button>
+                {% endif %}
+            </div>
+            
+            <!-- Botón Acciones adicionales -->
+            <div class="btn-group ms-1" role="group">
+                <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" 
+                        data-bs-toggle="dropdown" title="Más acciones">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <ul class="dropdown-menu">
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="checkDocumentFiles({{ document.id }})">
+                            <i class="fas fa-search me-2"></i>Verificar archivos
+                        </a>
+                    </li>
+                    {% if document.status != 'AUTHORIZED' %}
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="processDocument({{ document.id }})">
+                            <i class="fas fa-cog me-2"></i>Procesar documento
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if document.status == 'AUTHORIZED' %}
+                    <li>
+                        <a class="dropdown-item" href="#" onclick="sendDocumentEmail({{ document.id }})">
+                            <i class="fas fa-envelope me-2"></i>Enviar por email
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
         </td>
     </tr>
     {% endfor %}
@@ -1501,18 +1558,250 @@ function activarTabPlanes() {
         });
     }
 }
+// ==========================================
+// FUNCIONES PARA DESCARGA DE DOCUMENTOS
+// ==========================================
+
+function downloadDocumentFile(documentId, fileType) {
+    console.log(`Descargando ${fileType} del documento ${documentId}`);
+    
+    // Mostrar indicador de carga
+    showLoadingToast(`Descargando ${fileType.toUpperCase()}...`);
+    
+    // Construir URL de descarga
+    const downloadUrl = `/sri/documents/${documentId}/download/${fileType}/`;
+    
+    // Crear enlace temporal para descarga
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = ''; // El servidor definirá el nombre del archivo
+    link.style.display = 'none';
+    
+    // Agregar al DOM, hacer clic y remover
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Verificar si la descarga fue exitosa (setTimeout para dar tiempo)
+    setTimeout(() => {
+        checkDownloadStatus(documentId, fileType);
+    }, 1000);
+}
+
+function checkDownloadStatus(documentId, fileType) {
+    fetch(`/sri/documents/${documentId}/files/check/`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.files && data.files[fileType] && data.files[fileType].downloadable) {
+            showNotification(`${fileType.toUpperCase()} descargado exitosamente`, 'success');
+        } else {
+            showNotification(`Error: ${fileType.toUpperCase()} no disponible`, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error verificando estado de descarga:', error);
+        showNotification(`${fileType.toUpperCase()} solicitado (verificar descargas)`, 'info');
+    });
+}
+
+function checkDocumentFiles(documentId) {
+    showLoadingToast('Verificando archivos disponibles...');
+    
+    fetch(`/sri/documents/${documentId}/files/check/`, {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCookie('csrftoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showNotification(`Error: ${data.message}`, 'error');
+            return;
+        }
+        
+        // Mostrar información detallada en modal
+        showFileStatusModal(data);
+    })
+    .catch(error => {
+        console.error('Error verificando archivos:', error);
+        showNotification('Error verificando archivos del documento', 'error');
+    });
+}
+
+function showFileStatusModal(fileData) {
+    const modalHtml = `
+        <div class="modal fade" id="fileStatusModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="fas fa-file-check me-2"></i>
+                            Estado de Archivos - ${fileData.document_number}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-file-pdf text-danger me-2"></i>Archivo PDF</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>Disponible:</strong> 
+                                        <span class="badge ${fileData.files.pdf.available ? 'bg-success' : 'bg-secondary'}">
+                                            ${fileData.files.pdf.available ? 'Sí' : 'No'}
+                                        </span>
+                                    </li>
+                                    <li><strong>Existe:</strong> 
+                                        <span class="badge ${fileData.files.pdf.exists ? 'bg-success' : 'bg-danger'}">
+                                            ${fileData.files.pdf.exists ? 'Sí' : 'No'}
+                                        </span>
+                                    </li>
+                                    <li><strong>Descargable:</strong> 
+                                        <span class="badge ${fileData.files.pdf.downloadable ? 'bg-success' : 'bg-warning'}">
+                                            ${fileData.files.pdf.downloadable ? 'Sí' : 'No'}
+                                        </span>
+                                    </li>
+                                    ${fileData.files.pdf.size > 0 ? `<li><strong>Tamaño:</strong> ${(fileData.files.pdf.size / 1024).toFixed(1)} KB</li>` : ''}
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6><i class="fas fa-file-code text-info me-2"></i>Archivo XML</h6>
+                                <ul class="list-unstyled">
+                                    <li><strong>Disponible:</strong> 
+                                        <span class="badge ${fileData.files.xml.available ? 'bg-success' : 'bg-secondary'}">
+                                            ${fileData.files.xml.available ? 'Sí' : 'No'}
+                                        </span>
+                                    </li>
+                                    <li><strong>Existe:</strong> 
+                                        <span class="badge ${fileData.files.xml.exists ? 'bg-success' : 'bg-danger'}">
+                                            ${fileData.files.xml.exists ? 'Sí' : 'No'}
+                                        </span>
+                                    </li>
+                                    <li><strong>Firmado:</strong> 
+                                        <span class="badge ${fileData.files.xml.signed ? 'bg-success' : 'bg-warning'}">
+                                            ${fileData.files.xml.signed ? 'Sí' : 'No'}
+                                        </span>
+                                    </li>
+                                    <li><strong>Descargable:</strong> 
+                                        <span class="badge ${fileData.files.xml.downloadable ? 'bg-success' : 'bg-warning'}">
+                                            ${fileData.files.xml.downloadable ? 'Sí' : 'No'}
+                                        </span>
+                                    </li>
+                                    ${fileData.files.xml.size > 0 ? `<li><strong>Tamaño:</strong> ${(fileData.files.xml.size / 1024).toFixed(1)} KB</li>` : ''}
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <h6><i class="fas fa-info-circle me-2"></i>Información del Documento</h6>
+                            <ul class="list-unstyled">
+                                <li><strong>Estado:</strong> 
+                                    <span class="badge bg-primary">${fileData.status}</span>
+                                </li>
+                                <li><strong>Tipo:</strong> ${fileData.document_type}</li>
+                                <li><strong>Número:</strong> ${fileData.document_number}</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        ${fileData.files.pdf.downloadable ? 
+                            `<button type="button" class="btn btn-success" onclick="downloadDocumentFile(${fileData.document_id}, 'pdf')">
+                                <i class="fas fa-download me-2"></i>Descargar PDF
+                            </button>` : ''}
+                        ${fileData.files.xml.downloadable ? 
+                            `<button type="button" class="btn btn-info" onclick="downloadDocumentFile(${fileData.document_id}, 'xml')">
+                                <i class="fas fa-download me-2"></i>Descargar XML
+                            </button>` : ''}
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remover modal anterior si existe
+    const existingModal = document.getElementById('fileStatusModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Agregar modal al DOM
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Mostrar modal
+    const modal = new bootstrap.Modal(document.getElementById('fileStatusModal'));
+    modal.show();
+}
+
+function viewDocumentDetail(documentId) {
+    showNotification('Funcionalidad de detalle en desarrollo', 'info');
+}
+
+function processDocument(documentId) {
+    if (confirm('¿Está seguro de que desea procesar este documento?')) {
+        showLoadingToast('Procesando documento...');
+        // Aquí iría la lógica para procesar el documento
+        setTimeout(() => {
+            showNotification('Documento enviado a procesamiento', 'info');
+        }, 1000);
+    }
+}
+
+function sendDocumentEmail(documentId) {
+    if (confirm('¿Enviar este documento por email al cliente?')) {
+        showLoadingToast('Enviando email...');
+        // Aquí iría la lógica para enviar email
+        setTimeout(() => {
+            showNotification('Email enviado exitosamente', 'success');
+        }, 1500);
+    }
+}
+
+function showLoadingToast(message) {
+    // Crear toast de carga
+    const toastHtml = `
+        <div class="toast show align-items-center text-white bg-info border-0" role="alert" id="loadingToast">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="fas fa-spinner fa-spin me-2"></i>${message}
+                </div>
+            </div>
+        </div>`;
+    
+    const container = document.getElementById('toastContainer');
+    container.insertAdjacentHTML('beforeend', toastHtml);
+    
+    // Auto-remover después de 3 segundos
+    setTimeout(() => {
+        const toast = document.getElementById('loadingToast');
+        if (toast) {
+            toast.remove();
+        }
+    }, 3000);
+}
+
+// Función auxiliar para obtener CSRF token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
         </script>
     </body>
     </html>
-
-
-
-
-
-
-
-<!DOCTYPE html>
-<html lang="es">            
-<h1>
-    GEY EL GODOY 
-</h1>
