@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:14
+    image: postgres:15
     container_name: pg13-sitemadefacturacion
     environment:
       POSTGRES_DB: ${DB_NAME}
@@ -27,8 +27,6 @@ services:
     build: .
     image: vendo_sri_web  
     container_name: vendo_sri_web
-   # command: gunicorn vendo_sri.wsgi:application --bind
-   # command: gunicorn vendo_sri.wsgi:application --bind 0.0.0.0:8000
     command: >
       sh -c "
         python manage.py migrate --noinput &&
@@ -38,8 +36,8 @@ services:
     volumes:
       - static_volumen:/app/staticfiles
       - media_volumen:/app/mediafiles
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
     depends_on:
       - db
       - redis
@@ -49,7 +47,6 @@ services:
     networks:
       - django-facturacion
       - general-net
-    
 
 volumes:
   postgres_data:

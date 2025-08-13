@@ -1,20 +1,26 @@
 ﻿# -*- coding: utf-8 -*-
 """
-Models for certificates app - CORREGIDO
+Models for certificates app - CORREGIDO DEFINITIVO CON STORAGE DUAL
 Modelos para certificados digitales del SRI
 """
 
 import os
 import hashlib
 import uuid
+import logging
+from pathlib import Path
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography import x509
 from apps.core.models import BaseModel
 from apps.companies.models import Company
+
+logger = logging.getLogger(__name__)
 
 
 def certificate_upload_path(instance, filename):
@@ -46,6 +52,15 @@ class DigitalCertificate(BaseModel):
         _('certificate file'),
         upload_to=certificate_upload_path,
         help_text=_('P12 certificate file')
+    )
+    
+    # ========== NUEVO CAMPO PARA STORAGE DUAL ==========
+    storage_path = models.CharField(
+        _('storage path'),
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text=_('Path to certificate file in storage/certificates/ directory')
     )
     
     # Clave hasheada - NUNCA almacenar en texto plano
@@ -166,12 +181,13 @@ class DigitalCertificate(BaseModel):
     
     def set_password(self, password):
         """Hashea y almacena la contraseña del certificado"""
-        self.password_hash = hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            self.company.ruc.encode('utf-8'),
-            100000
-        ).hex()
+        if password:
+            self.password_hash = hashlib.pbkdf2_hmac(
+                'sha256',
+                password.encode('utf-8'),
+                self.company.ruc.encode('utf-8'),
+                100000
+            ).hex()
     
     def verify_password(self, password):
         """Verifica la contraseña del certificado"""
@@ -185,8 +201,89 @@ class DigitalCertificate(BaseModel):
             100000
         ).hex()
     
+    def extract_real_certificate_info(self, password):
+        """
+        NUEVO MÉTODO: Extrae información REAL del certificado P12
+        
+        Args:
+            password: contraseña del certificado
+            
+        Returns:
+            bool: True si se extrajo correctamente, False si falló
+        """
+        try:
+            if not self.certificate_file or not password:
+                return False
+            
+            # Leer el archivo P12
+            cert_data = None
+            if hasattr(self.certificate_file, 'path') and os.path.exists(self.certificate_file.path):
+                with open(self.certificate_file.path, 'rb') as f:
+                    cert_data = f.read()
+            elif hasattr(self.certificate_file, 'read'):
+                self.certificate_file.seek(0)
+                cert_data = self.certificate_file.read()
+                self.certificate_file.seek(0)
+            
+            if not cert_data:
+                return False
+            
+            # Cargar certificado con contraseña
+            private_key, certificate, additional_certs = pkcs12.load_key_and_certificates(
+                cert_data,
+                password.encode('utf-8')
+            )
+            
+            if not certificate:
+                return False
+            
+            # Extraer información REAL
+            subject = certificate.subject
+            issuer = certificate.issuer
+            
+            # Formatear nombres de forma legible
+            subject_parts = []
+            issuer_parts = []
+            
+            for attribute in subject:
+                subject_parts.append(f"{attribute.oid._name}={attribute.value}")
+            
+            for attribute in issuer:
+                issuer_parts.append(f"{attribute.oid._name}={attribute.value}")
+            
+            # Actualizar campos con información REAL
+            self.subject_name = ", ".join(subject_parts)
+            self.issuer_name = ", ".join(issuer_parts)
+            self.serial_number = str(certificate.serial_number)
+            self.valid_from = certificate.not_valid_before
+            self.valid_to = certificate.not_valid_after
+            
+            # Calcular fingerprint REAL
+            self.fingerprint = hashlib.sha256(
+                certificate.public_bytes(serialization.Encoding.DER)
+            ).hexdigest()[:32]
+            
+            # Determinar estado basado en fechas
+            now = timezone.now()
+            if certificate.not_valid_after < now:
+                self.status = 'EXPIRED'
+            elif certificate.not_valid_before > now:
+                self.status = 'INACTIVE'
+            else:
+                self.status = 'ACTIVE'
+            
+            # Guardar cambios
+            self.save()
+            
+            print(f"✅ Información real extraída para {self.company.business_name}")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error extrayendo información real: {e}")
+            return False
+    
     def _extract_certificate_info(self):
-        """Extrae información del certificado P12"""
+        """Extrae información del certificado P12 (método legado simplificado)"""
         try:
             # Verificar que el archivo existe
             if not self.certificate_file:
@@ -216,6 +313,200 @@ class DigitalCertificate(BaseModel):
             self.fingerprint = str(uuid.uuid4()).replace('-', '')[:32]
             print(f'Warning extracting certificate info: {e}')
     
+    # ========== NUEVOS MÉTODOS PARA STORAGE DUAL ==========
+    
+    @property
+    def storage_file_exists(self):
+        """Verifica si el archivo existe en storage"""
+        if not self.storage_path:
+            return False
+        
+        full_path = Path(settings.BASE_DIR) / 'storage' / self.storage_path
+        return full_path.exists()
+    
+    @property
+    def storage_file_path(self):
+        """Ruta completa al archivo en storage"""
+        if not self.storage_path:
+            return None
+        
+        return Path(settings.BASE_DIR) / 'storage' / self.storage_path
+    
+    @property
+    def storage_file_size(self):
+        """Tamaño del archivo en storage"""
+        try:
+            if not self.storage_file_exists:
+                return 0
+            return self.storage_file_path.stat().st_size
+        except Exception:
+            return 0
+    
+    def get_certificate_content_from_storage(self):
+        """
+        Lee el contenido del certificado desde storage
+        
+        Returns:
+            bytes: contenido del archivo P12 o None si no existe
+        """
+        try:
+            if not self.storage_file_exists:
+                logger.warning(f"Archivo de certificado no existe en storage: {self.storage_path}")
+                return None
+            
+            with open(self.storage_file_path, 'rb') as f:
+                content = f.read()
+                logger.info(f"Certificado leído desde storage: {len(content)} bytes")
+                return content
+                
+        except Exception as e:
+            logger.error(f"Error leyendo certificado desde storage: {e}")
+            return None
+    
+    def get_certificate_content_from_media(self):
+        """
+        Lee el contenido del certificado desde media
+        
+        Returns:
+            bytes: contenido del archivo P12 o None si no existe
+        """
+        try:
+            if not self.certificate_file:
+                return None
+            
+            if hasattr(self.certificate_file, 'path') and os.path.exists(self.certificate_file.path):
+                with open(self.certificate_file.path, 'rb') as f:
+                    content = f.read()
+                    logger.info(f"Certificado leído desde media: {len(content)} bytes")
+                    return content
+            elif hasattr(self.certificate_file, 'read'):
+                self.certificate_file.seek(0)
+                content = self.certificate_file.read()
+                self.certificate_file.seek(0)
+                logger.info(f"Certificado leído desde file object: {len(content)} bytes")
+                return content
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error leyendo certificado desde media: {e}")
+            return None
+    
+    def get_certificate_content(self, prefer_storage=True):
+        """
+        Lee el contenido del certificado, con preferencia por storage o media
+        
+        Args:
+            prefer_storage: Si True, intenta storage primero, luego media
+            
+        Returns:
+            bytes: contenido del archivo P12
+        """
+        if prefer_storage:
+            # Intentar storage primero
+            content = self.get_certificate_content_from_storage()
+            if content:
+                return content
+            
+            # Fallback a media
+            logger.info("Archivo no encontrado en storage, intentando media...")
+            return self.get_certificate_content_from_media()
+        else:
+            # Intentar media primero
+            content = self.get_certificate_content_from_media()
+            if content:
+                return content
+            
+            # Fallback a storage
+            logger.info("Archivo no encontrado en media, intentando storage...")
+            return self.get_certificate_content_from_storage()
+    
+    def verify_storage_integrity(self):
+        """
+        Verifica que el archivo en media y storage sean idénticos
+        
+        Returns:
+            dict: estado de la verificación
+        """
+        result = {
+            'media_exists': False,
+            'storage_exists': False,
+            'sizes_match': False,
+            'contents_match': False,
+            'error': None
+        }
+        
+        try:
+            # Verificar media
+            media_content = self.get_certificate_content_from_media()
+            result['media_exists'] = media_content is not None
+            
+            # Verificar storage
+            storage_content = self.get_certificate_content_from_storage()
+            result['storage_exists'] = storage_content is not None
+            
+            # Comparar tamaños y contenido
+            if media_content and storage_content:
+                result['sizes_match'] = len(media_content) == len(storage_content)
+                result['contents_match'] = media_content == storage_content
+            
+            logger.info(f"Verificación de integridad: {result}")
+            
+        except Exception as e:
+            result['error'] = str(e)
+            logger.error(f"Error verificando integridad: {e}")
+        
+        return result
+    
+    def force_sync_to_storage(self):
+        """
+        Fuerza la sincronización del archivo desde media a storage
+        
+        Returns:
+            bool: True si se sincronizó exitosamente
+        """
+        try:
+            # Obtener contenido desde media
+            content = self.get_certificate_content_from_media()
+            if not content:
+                logger.error("No se pudo obtener contenido desde media para sincronizar")
+                return False
+            
+            # Asegurar directorio de storage
+            if not self.company or not self.company.ruc:
+                logger.error("No se puede sincronizar: empresa o RUC no válido")
+                return False
+            
+            storage_base = Path(settings.BASE_DIR) / 'storage' / 'certificates'
+            company_dir = storage_base / self.company.ruc
+            company_dir.mkdir(parents=True, exist_ok=True)
+            os.chmod(company_dir, 0o700)
+            
+            # Obtener nombre del archivo
+            filename = os.path.basename(self.certificate_file.name)
+            storage_file_path = company_dir / filename
+            
+            # Escribir archivo
+            with open(storage_file_path, 'wb') as f:
+                f.write(content)
+            
+            # Configurar permisos seguros
+            os.chmod(storage_file_path, 0o600)
+            
+            # Actualizar storage_path
+            relative_path = f"certificates/{self.company.ruc}/{filename}"
+            self.storage_path = relative_path
+            self.save(update_fields=['storage_path'])
+            
+            logger.info(f"Certificado sincronizado exitosamente a storage: {storage_file_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error sincronizando certificado a storage: {e}")
+            return False
+    
+    # ========== MÉTODOS EXISTENTES ==========
+    
     @property
     def is_expired(self):
         """Verifica si el certificado ha expirado"""
@@ -229,6 +520,83 @@ class DigitalCertificate(BaseModel):
         if not self.valid_to or self.is_expired:
             return 0
         return (self.valid_to - timezone.now()).days
+    
+    @property
+    def storage_status(self):
+        """Estado del almacenamiento dual"""
+        media_exists = bool(self.certificate_file)
+        storage_exists = self.storage_file_exists
+        
+        if media_exists and storage_exists:
+            integrity = self.verify_storage_integrity()
+            if integrity['contents_match']:
+                return 'synced'  # Sincronizado
+            else:
+                return 'differs'  # Archivos diferentes
+        elif media_exists and not storage_exists:
+            return 'media_only'  # Solo en media
+        elif not media_exists and storage_exists:
+            return 'storage_only'  # Solo en storage
+        else:
+            return 'missing'  # No existe en ningún lado
+    
+    def get_storage_status_display(self):
+        """Descripción legible del estado de storage"""
+        status_map = {
+            'synced': '✅ Sincronizado',
+            'differs': '⚠️ Archivos diferentes',
+            'media_only': '📄 Solo en media',
+            'storage_only': '💾 Solo en storage',
+            'missing': '❌ Archivos faltantes'
+        }
+        return status_map.get(self.storage_status, '❓ Estado desconocido')
+    
+    @classmethod
+    def create_with_password(cls, company, certificate_file, password, environment='TEST', **kwargs):
+        """
+        MÉTODO FACTORY: Crear certificado con contraseña de forma segura
+        
+        Args:
+            company: instancia de Company
+            certificate_file: archivo P12
+            password: contraseña del certificado
+            environment: ambiente SRI
+            **kwargs: otros campos opcionales
+            
+        Returns:
+            DigitalCertificate: instancia creada
+        """
+        now = timezone.now()
+        
+        # Crear certificado con valores mínimos
+        certificate = cls(
+            company=company,
+            certificate_file=certificate_file,
+            environment=environment,
+            status=kwargs.get('status', 'ACTIVE'),
+            # Valores temporales - se actualizarán si se extrae info real
+            subject_name=kwargs.get('subject_name', f'Procesando certificado - {company.business_name}'),
+            issuer_name=kwargs.get('issuer_name', 'Procesando información del emisor...'),
+            serial_number=kwargs.get('serial_number', f'temp_{uuid.uuid4().hex[:16]}'),
+            valid_from=kwargs.get('valid_from', now),
+            valid_to=kwargs.get('valid_to', now + timezone.timedelta(days=365)),
+            fingerprint=kwargs.get('fingerprint', f'temp_{uuid.uuid4().hex[:32]}'),
+            password_hash='temp'  # Se actualizará inmediatamente
+        )
+        
+        # Configurar contraseña
+        certificate.set_password(password)
+        
+        # Guardar
+        certificate.save()
+        
+        # Intentar extraer información real
+        try:
+            certificate.extract_real_certificate_info(password)
+        except Exception as e:
+            print(f'Warning: Could not extract real certificate info: {e}')
+        
+        return certificate
 
 
 class CertificateUsageLog(BaseModel):

@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Views completas para SRI integration - VERSIÓN FINAL CON ENDPOINTS DE PROCESO COMPLETO
-apps/api/views/sri_views.py - CON ENDPOINTS SEPARADOS PARA CADA TIPO DE DOCUMENTO
-✅ RESUELVE ERROR 35
-✅ COMPATIBLE CON TOKEN VSR
-✅ ENDPOINTS DE PROCESO COMPLETO PARA CADA TIPO
+Views completas para SRI integration
+apps/api/views/sri_views.py 
 """
 
 from rest_framework import viewsets, filters, status, permissions
@@ -14,6 +11,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db import transaction
 from django.db.models import Q
+from django.conf import settings
 import logging
 import os
 from functools import wraps
@@ -38,6 +36,228 @@ from apps.sri_integration.services.global_certificate_manager import get_certifi
 from apps.api.permissions import IsCompanyOwnerOrAdmin
 
 logger = logging.getLogger(__name__)
+
+
+# ========== FUNCIONES AUXILIARES PARA TOKEN VSR ==========
+
+def validate_company_certificate_for_vsr_token(company):
+    """
+    Valida certificado para token VSR (sin validación de usuario)
+    """
+    try:
+        cert_manager = get_certificate_manager()
+        cert_data = cert_manager.get_certificate(company.id)
+        
+        if not cert_data:
+            return False, "Certificate not available in GlobalCertificateManager. Please configure certificate."
+        
+        is_valid, message = cert_manager.validate_certificate(company.id)
+        if not is_valid:
+            return False, f"Certificate validation failed: {message}"
+        
+        if "expires in" in message:
+            logger.warning(f"Certificate warning for company {company.id}: {message}")
+        
+        return True, "Certificate is available and valid"
+        
+    except Exception as e:
+        logger.error(f"Error validating certificate for company {company.id}: {str(e)}")
+        return False, f"Error validating certificate: {str(e)}"
+
+
+def validate_company_sri_configuration_vsr(company):
+    """Valida que la empresa tenga configuración SRI completa - VSR VERSION"""
+    try:
+        sri_config = company.sri_configuration
+        
+        errors = []
+        
+        # Validar ambiente SRI
+        if not sri_config.environment:
+            errors.append("Ambiente SRI no configurado")
+        elif sri_config.environment not in ['TEST', 'PRODUCTION']:
+            errors.append("Ambiente SRI debe ser TEST o PRODUCTION")
+        
+        # Validar códigos de establecimiento y emisión
+        if not sri_config.establishment_code:
+            errors.append("Código de establecimiento no configurado")
+        elif len(sri_config.establishment_code) != 3 or not sri_config.establishment_code.isdigit():
+            errors.append("Código de establecimiento debe tener exactamente 3 dígitos")
+        
+        if not sri_config.emission_point:
+            errors.append("Punto de emisión no configurado")
+        elif len(sri_config.emission_point) != 3 or not sri_config.emission_point.isdigit():
+            errors.append("Punto de emisión debe tener exactamente 3 dígitos")
+        
+        # Validar secuencias (verificar que sean > 0)
+        sequence_fields = [
+            ('invoice_sequence', 'FACTURA'),
+            ('credit_note_sequence', 'NOTA DE CRÉDITO'),
+            ('debit_note_sequence', 'NOTA DE DÉBITO'),
+            ('retention_sequence', 'RETENCIÓN'),
+            ('purchase_settlement_sequence', 'LIQUIDACIÓN DE COMPRA')
+        ]
+        
+        for field_name, display_name in sequence_fields:
+            sequence_value = getattr(sri_config, field_name, 0)
+            if sequence_value <= 0:
+                errors.append(f"Secuencia de {display_name} no configurada o inválida")
+        
+        # Validar configuración de email si está habilitada
+        if sri_config.email_enabled:
+            if not sri_config.email_subject_template:
+                errors.append("Plantilla de asunto de email no configurada")
+            if not sri_config.email_body_template:
+                errors.append("Plantilla de cuerpo de email no configurada")
+        
+        # Verificar URLs automáticas (propiedad)
+        try:
+            reception_url = sri_config.reception_url
+            authorization_url = sri_config.authorization_url
+            if not reception_url or not authorization_url:
+                errors.append("URLs del SRI no generadas correctamente")
+        except Exception:
+            errors.append("Error al generar URLs del SRI")
+        
+        if errors:
+            return False, f"Configuración SRI incompleta: {'; '.join(errors)}"
+        
+        return True, f"Configuración SRI válida para ambiente {sri_config.environment}"
+        
+    except AttributeError:
+        return False, "Empresa no tiene configuración SRI. Debe crear una configuración SRI para esta empresa."
+
+
+def validate_company_basic_info_vsr(company):
+    """Valida información básica de la empresa - VSR VERSION"""
+    errors = []
+    
+    # Validar campos básicos
+    if not company.business_name or len(company.business_name.strip()) < 3:
+        errors.append("Razón social no configurada o muy corta (mínimo 3 caracteres)")
+    
+    if not company.ruc:
+        errors.append("RUC no configurado")
+    elif len(company.ruc) != 13:
+        errors.append("RUC debe tener exactamente 13 dígitos")
+    elif not company.ruc.isdigit():
+        errors.append("RUC debe contener solo números")
+    
+    if not company.address or len(company.address.strip()) < 10:
+        errors.append("Dirección no configurada o muy corta (mínimo 10 caracteres)")
+    
+    if not company.email:
+        errors.append("Email de la empresa no configurado")
+    
+    # Validar campos específicos del SRI usando el modelo Company
+    if not company.tipo_contribuyente:
+        errors.append("Tipo de contribuyente no configurado")
+    
+    if not company.obligado_contabilidad:
+        errors.append("Campo 'obligado a llevar contabilidad' no configurado")
+    
+    # Validar códigos adicionales si están configurados
+    if company.codigo_establecimiento and len(company.codigo_establecimiento) != 3:
+        errors.append("Código de establecimiento en empresa debe tener 3 dígitos")
+    
+    if company.codigo_punto_emision and len(company.codigo_punto_emision) != 3:
+        errors.append("Código de punto de emisión en empresa debe tener 3 dígitos")
+    
+    # Validar ambiente SRI
+    if not company.ambiente_sri:
+        errors.append("Ambiente SRI no configurado en empresa")
+    elif company.ambiente_sri not in ['1', '2']:
+        errors.append("Ambiente SRI debe ser '1' (Pruebas) o '2' (Producción)")
+    
+    # Validar tipo de emisión
+    if not company.tipo_emision:
+        errors.append("Tipo de emisión no configurado")
+    elif company.tipo_emision not in ['1', '2']:
+        errors.append("Tipo de emisión debe ser '1' (Normal) o '2' (Contingencia)")
+    
+    if errors:
+        return False, f"Información básica incompleta: {'; '.join(errors)}"
+    
+    return True, f"Información básica de empresa válida - {company.display_name}"
+
+
+# ========== DECORADOR ESPECÍFICO PARA TOKEN VSR ==========
+
+def require_vsr_token_only():
+    """
+    Decorador que SOLO permite tokens VSR (Token de empresa)
+    No permite tokens de usuario normales
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(self, request, *args, **kwargs):
+            # Obtener token del header
+            auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+            if not auth_header.startswith('Token '):
+                return Response(
+                    {
+                        'error': 'TOKEN_REQUIRED',
+                        'message': 'Se requiere token de autenticación',
+                        'required_token_type': 'VSR Company Token',
+                        'token_format': 'Token vsr_XXXXXXXXXXXXXXXXX'
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            token_key = auth_header.split(' ')[1]
+            
+            # Verificar que sea token VSR
+            if not token_key.startswith('vsr_'):
+                return Response(
+                    {
+                        'error': 'INVALID_TOKEN_TYPE',
+                        'message': 'Este endpoint requiere token de empresa (VSR)',
+                        'provided_token_type': 'User Token',
+                        'required_token_type': 'VSR Company Token',
+                        'token_format': 'Token vsr_XXXXXXXXXXXXXXXXX'
+                    },
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            # Validar token VSR
+            try:
+                from apps.companies.models import CompanyAPIToken
+                company_token = CompanyAPIToken.objects.get(key=token_key, is_active=True)
+                
+                if not company_token.is_valid():
+                    return Response(
+                        {
+                            'error': 'TOKEN_INVALID',
+                            'message': 'Token VSR inválido o expirado',
+                            'company_id': company_token.company.id if company_token.company else None
+                        },
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+                
+                # Agregar información de la empresa al request
+                request.company = company_token.company
+                request.company_token = company_token
+                
+                # Actualizar estadísticas del token
+                company_token.increment_usage(
+                    ip_address=request.META.get('REMOTE_ADDR')
+                )
+                
+                logger.info(f"✅ VSR Token validated for company {company_token.company.business_name}")
+                
+            except CompanyAPIToken.DoesNotExist:
+                return Response(
+                    {
+                        'error': 'TOKEN_NOT_FOUND',
+                        'message': 'Token VSR no encontrado o inactivo',
+                        'token_prefix': token_key[:10] + '...' if len(token_key) > 10 else token_key
+                    },
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            return view_func(self, request, *args, **kwargs)
+        return wrapper
+    return decorator
 
 
 # ========== DECORADORES CORREGIDOS PARA TOKEN VSR ==========
@@ -159,7 +379,7 @@ def require_document_access():
             request.validated_document_type = document_type
             request.validated_electronic_doc = electronic_doc
             
-            logger.info(f"✅ User {getattr(request.user, 'username', 'Unknown')} validated access to {document_type} {document_id}")
+            logger.info(f" User {getattr(request.user, 'username', 'Unknown')} validated access to {document_type} {document_id}")
             
             return view_func(self, request, *args, **kwargs)
         return wrapper
@@ -241,17 +461,7 @@ def audit_api_action(action_type=None, include_response_data=False):
                 # Calcular tiempo de ejecución
                 execution_time = time.time() - start_time
                 
-                logger.info(f"✅ [{action}] User {getattr(request.user, 'username', 'Unknown')} - SUCCESS - {execution_time:.2f}s")
-                
-                # Agregar información de auditoría a la respuesta
-                if hasattr(response, 'data') and isinstance(response.data, dict):
-                    response.data['audit_info'] = {
-                        'processed_by': getattr(request.user, 'username', 'Unknown'),
-                        'processing_time_ms': round(execution_time * 1000, 2),
-                        'action_type': action,
-                        'timestamp': timezone.now().isoformat(),
-                        'security_method': 'token_validation_with_decorators'
-                    }
+                logger.info(f" [{action}] User {getattr(request.user, 'username', 'Unknown')} - SUCCESS - {execution_time:.2f}s")
                 
                 return response
                 
@@ -259,7 +469,7 @@ def audit_api_action(action_type=None, include_response_data=False):
                 # Calcular tiempo hasta el error
                 execution_time = time.time() - start_time
                 
-                logger.error(f"❌ [{action}] User {getattr(request.user, 'username', 'Unknown')} - ERROR: {str(e)} - {execution_time:.2f}s")
+                logger.error(f" [{action}] User {getattr(request.user, 'username', 'Unknown')} - ERROR: {str(e)} - {execution_time:.2f}s")
                 
                 # Re-lanzar la excepción para que sea manejada normalmente
                 raise
@@ -296,10 +506,10 @@ def validate_sri_configuration():
             try:
                 sri_config = company.sri_configuration
                 request.validated_sri_config = sri_config
-                logger.info(f"✅ SRI configuration validated for company {company.id}")
+                logger.info(f" SRI configuration validated for company {company.id}")
                 
             except AttributeError:
-                logger.warning(f"❌ No SRI configuration found for company {company.id}")
+                logger.warning(f" No SRI configuration found for company {company.id}")
                 return Response(
                     {
                         'error': 'SRI_CONFIGURATION_MISSING',
@@ -340,7 +550,7 @@ def validate_request_data(required_fields=None):
                         missing_fields.append(field)
                 
                 if missing_fields:
-                    logger.warning(f"❌ Missing required fields: {missing_fields} - User: {getattr(request.user, 'username', 'Unknown')}")
+                    logger.warning(f" Missing required fields: {missing_fields} - User: {getattr(request.user, 'username', 'Unknown')}")
                     return Response(
                         {
                             'error': 'VALIDATION_ERROR',
@@ -353,7 +563,7 @@ def validate_request_data(required_fields=None):
                         status=status.HTTP_422_UNPROCESSABLE_ENTITY
                     )
             
-            logger.info(f"✅ Request data validated for {view_func.__name__} - User: {getattr(request.user, 'username', 'Unknown')}")
+            logger.info(f" Request data validated for {view_func.__name__} - User: {getattr(request.user, 'username', 'Unknown')}")
             return view_func(self, request, *args, **kwargs)
         return wrapper
     return decorator
@@ -368,13 +578,13 @@ def atomic_transaction():
         def wrapper(self, request, *args, **kwargs):
             try:
                 with transaction.atomic():
-                    logger.info(f"🔄 Transaction started for {view_func.__name__} - User: {getattr(request.user, 'username', 'Unknown')}")
+                    logger.info(f" Transaction started for {view_func.__name__} - User: {getattr(request.user, 'username', 'Unknown')}")
                     response = view_func(self, request, *args, **kwargs)
-                    logger.info(f"✅ Transaction committed for {view_func.__name__} - User: {getattr(request.user, 'username', 'Unknown')}")
+                    logger.info(f" Transaction committed for {view_func.__name__} - User: {getattr(request.user, 'username', 'Unknown')}")
                     return response
                     
             except Exception as e:
-                logger.error(f"🔄 Transaction rolled back for {view_func.__name__} - Error: {str(e)} - User: {getattr(request.user, 'username', 'Unknown')}")
+                logger.error(f" Transaction rolled back for {view_func.__name__} - Error: {str(e)} - User: {getattr(request.user, 'username', 'Unknown')}")
                 raise
                 
         return wrapper
@@ -445,7 +655,7 @@ def sri_document_endpoint(
     return decorator
 
 
-# ========== FUNCIONES AUXILIARES MEJORADAS ==========
+# ========== FUNCIONES AUXILIARES ==========
 
 def sync_document_to_electronic_document(document, document_type):
     """
@@ -618,14 +828,15 @@ def get_user_company_by_id(company_id, user):
     return get_user_company_by_id_or_token(company_id, user)
 
 
-# ========== CLASE PRINCIPAL CON ENDPOINTS DE PROCESO COMPLETO ==========
+# ========== CLASE PRINCIPAL CON RESPUESTAS SIMPLIFICADAS ==========
 
 class SRIDocumentViewSet(viewsets.ModelViewSet):
     """
     ViewSet principal para todos los documentos SRI 
-    ✅ CON ENDPOINTS DE PROCESO COMPLETO PARA CADA TIPO
+    ✅ CON RESPUESTAS SIMPLIFICADAS PARA PRODUCCIÓN
     ✅ RESUELVE ERROR 35
     ✅ COMPATIBLE CON TOKEN VSR
+    ✅ INCLUYE ENDPOINT DE VALIDACIÓN VSR
     """
     queryset = ElectronicDocument.objects.all()
     serializer_class = ElectronicDocumentSerializer
@@ -690,7 +901,276 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             )
         return super().handle_exception(exc)
     
-    # ========== ENDPOINTS DE PROCESO COMPLETO PARA CADA TIPO ==========
+    # ========== NUEVO: ENDPOINT DE VALIDACIÓN PARA TOKEN VSR ==========
+    
+    @action(detail=False, methods=['post', 'get'])
+    @require_vsr_token_only()
+    @audit_api_action(action_type='VALIDATE_COMPANY_CERTIFICATE_AND_CONFIG')
+    def validate_certificate_and_config(self, request):
+        """
+         VALIDACIÓN SIMPLE: Certificado y Configuraciones
+        
+         SOLO FUNCIONA CON TOKEN VSR (Token de empresa)
+        
+        Valida únicamente:
+        - Estado del certificado digital
+        - Configuración SRI básica  
+        - Información mínima de la empresa
+        
+        REQUIERE: Token vsr_XXXXXXXXXXXXXXXXX
+        """
+        try:
+            start_time = time.time()
+            company = request.company  # Obtenido del decorador VSR
+            company_token = request.company_token
+            
+            logger.info(f" [VSR_VALIDATION] Checking certificate and config for company {company.id} - Token: {company_token.name}")
+            
+            # Estructura de respuesta simple
+            validation_result = {
+                'company_id': company.id,
+                'company_name': company.business_name,
+                'company_ruc': company.ruc,
+                'token_info': {
+                    'name': company_token.name,
+                    'last_used': company_token.last_used_at.isoformat() if company_token.last_used_at else None,
+                    'total_requests': company_token.total_requests
+                },
+                'certificate': {
+                    'status': 'unknown',
+                    'valid': False,
+                    'message': '',
+                    'details': {}
+                },
+                'sri_configuration': {
+                    'status': 'unknown',
+                    'valid': False,
+                    'message': '',
+                    'missing_items': []
+                },
+                'company_basic_info': {
+                    'status': 'unknown',
+                    'valid': False,
+                    'message': '',
+                    'missing_items': []
+                },
+                'overall_status': 'incomplete',
+                'ready_for_documents': False,
+                'next_actions': []
+            }
+            
+            # ===== VALIDACIÓN 1: INFORMACIÓN BÁSICA DE EMPRESA =====
+            basic_valid, basic_msg = validate_company_basic_info_vsr(company)
+            missing_basic = []
+            if not basic_valid:
+                # Extraer items faltantes del mensaje
+                if "incompleta:" in basic_msg:
+                    missing_text = basic_msg.split("incompleta:")[1].strip()
+                    missing_basic = [item.strip() for item in missing_text.split(";")]
+            
+            validation_result['company_basic_info'] = {
+                'status': 'complete' if basic_valid else 'incomplete',
+                'valid': basic_valid,
+                'message': basic_msg,
+                'missing_items': missing_basic
+            }
+            
+            # ===== VALIDACIÓN 2: CONFIGURACIÓN SRI =====
+            sri_valid, sri_msg = validate_company_sri_configuration_vsr(company)
+            missing_sri = []
+            if not sri_valid:
+                # Extraer items faltantes del mensaje
+                if "incompleta:" in sri_msg:
+                    missing_text = sri_msg.split("incompleta:")[1].strip()
+                    missing_sri = [item.strip() for item in missing_text.split(";")]
+                elif "no tiene configuración SRI" in sri_msg:
+                    missing_sri = ["Configuración SRI completa (no existe)"]
+            
+            try:
+                sri_config = company.sri_configuration
+                validation_result['sri_configuration'] = {
+                    'status': 'complete' if sri_valid else 'incomplete',
+                    'valid': sri_valid,
+                    'message': sri_msg,
+                    'missing_items': missing_sri,
+                    'environment': sri_config.environment if sri_config else None,
+                    'establishment': sri_config.establishment_code if sri_config else None,
+                    'emission_point': sri_config.emission_point if sri_config else None
+                }
+            except AttributeError:
+                validation_result['sri_configuration'] = {
+                    'status': 'missing',
+                    'valid': False,
+                    'message': 'No existe configuración SRI para esta empresa',
+                    'missing_items': ["Configuración SRI completa (no existe)"]
+                }
+            
+            # ===== VALIDACIÓN 3: CERTIFICADO DIGITAL =====
+            cert_valid, cert_msg = validate_company_certificate_for_vsr_token(company)
+            
+            if cert_valid:
+                # Obtener detalles del certificado
+                try:
+                    cert_manager = get_certificate_manager()
+                    cert_data = cert_manager.get_certificate(company.id)
+                    cert_info = cert_manager.get_company_certificate_info(company.id)
+                    
+                    validation_result['certificate'] = {
+                        'status': 'valid',
+                        'valid': True,
+                        'message': cert_msg,
+                        'details': {
+                            'has_certificate': True,
+                            'certificate_info': cert_info,
+                            'expiration_warning': "expires in" in cert_msg.lower()
+                        }
+                    }
+                except Exception as e:
+                    validation_result['certificate'] = {
+                        'status': 'valid_with_warnings',
+                        'valid': True,
+                        'message': f"{cert_msg} (No se pudieron obtener detalles)",
+                        'details': {
+                            'has_certificate': True,
+                            'error_getting_details': str(e)
+                        }
+                    }
+            else:
+                validation_result['certificate'] = {
+                    'status': 'invalid',
+                    'valid': False,
+                    'message': cert_msg,
+                    'details': {
+                        'has_certificate': False,
+                        'error_details': cert_msg
+                    }
+                }
+            
+            # ===== EVALUACIÓN GENERAL =====
+            all_valid = (
+                validation_result['company_basic_info']['valid'] and
+                validation_result['sri_configuration']['valid'] and
+                validation_result['certificate']['valid']
+            )
+            
+            if all_valid:
+                validation_result['overall_status'] = 'ready'
+                validation_result['ready_for_documents'] = True
+                validation_result['next_actions'] = [
+                    " Empresa lista para crear documentos electrónicos",
+                    " Puede usar los endpoints de creación completa",
+                    " Todos los documentos se procesarán correctamente"
+                ]
+            else:
+                validation_result['overall_status'] = 'incomplete'
+                validation_result['ready_for_documents'] = False
+                
+                # Generar acciones específicas
+                next_actions = []
+                
+                if not validation_result['company_basic_info']['valid']:
+                    next_actions.append(f" Completar información básica: {', '.join(missing_basic)}")
+                
+                if not validation_result['sri_configuration']['valid']:
+                    if 'Configuración SRI completa (no existe)' in missing_sri:
+                        next_actions.append(" Crear configuración SRI para la empresa")
+                    else:
+                        next_actions.append(f" Completar configuración SRI: {', '.join(missing_sri)}")
+                
+                if not validation_result['certificate']['valid']:
+                    next_actions.append(" Configurar certificado digital válido")
+                
+                next_actions.append(" Volver a validar después de completar configuraciones")
+                
+                validation_result['next_actions'] = next_actions
+            
+            # ===== INFORMACIÓN ADICIONAL =====
+            processing_time = time.time() - start_time
+            validation_result.update({
+                'processing_time_ms': round(processing_time * 1000, 2),
+                'timestamp': timezone.now().isoformat(),
+                'validation_version': '2.4.0-VSR-ONLY'
+            })
+            
+            # ===== RESPUESTA =====
+            logger.info(f"🔍 [VSR_VALIDATION] Completed in {processing_time:.2f}s - Ready: {validation_result['ready_for_documents']} - Company: {company.business_name}")
+            
+            # Status HTTP según el resultado
+            if validation_result['ready_for_documents']:
+                response_status = status.HTTP_200_OK
+            else:
+                response_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+            
+            return Response(validation_result, status=response_status)
+            
+        except Exception as e:
+            logger.error(f" [VSR_VALIDATION] Critical error: {str(e)} - Company: {getattr(company, 'business_name', 'Unknown') if 'company' in locals() else 'Unknown'}")
+            return Response(
+                {
+                    'company_id': getattr(company, 'id', None) if 'company' in locals() else None,
+                    'error': 'VALIDATION_ERROR',
+                    'message': f'Error durante la validación: {str(e)}',
+                    'timestamp': timezone.now().isoformat(),
+                    'validation_version': '2.4.0-VSR-ONLY'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['get'])
+    @require_vsr_token_only()
+    @audit_api_action(action_type='VIEW_COMPANY_VALIDATION_STATUS')
+    def validation_status_summary(self, request):
+        """
+         RESUMEN RÁPIDO DE ESTADO DE VALIDACIÓN
+        
+         SOLO FUNCIONA CON TOKEN VSR
+        Endpoint GET simple para obtener el estado de LA empresa del token VSR
+        """
+        try:
+            company = request.company  # Solo una empresa con token VSR
+            company_token = request.company_token
+            
+            # Validación rápida de la empresa del token
+            basic_valid, _ = validate_company_basic_info_vsr(company)
+            sri_valid, _ = validate_company_sri_configuration_vsr(company)
+            cert_valid, cert_msg = validate_company_certificate_for_vsr_token(company)
+            
+            overall_ready = basic_valid and sri_valid and cert_valid
+            
+            summary = {
+                'company_id': company.id,
+                'company_name': company.business_name,
+                'company_ruc': company.ruc,
+                'token_info': {
+                    'name': company_token.name,
+                    'total_requests': company_token.total_requests,
+                    'last_used': company_token.last_used_at.isoformat() if company_token.last_used_at else None
+                },
+                'validations': {
+                    'basic_info': basic_valid,
+                    'sri_config': sri_valid,
+                    'certificate': cert_valid
+                },
+                'overall_status': 'ready' if overall_ready else 'incomplete',
+                'ready_for_documents': overall_ready,
+                'certificate_message': cert_msg,
+                'validation_timestamp': timezone.now().isoformat()
+            }
+            
+            return Response(summary, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f" Error getting VSR validation summary: {str(e)}")
+            return Response(
+                {
+                    'error': 'SUMMARY_ERROR',
+                    'message': str(e),
+                    'validation_version': '2.4.0-VSR-ONLY'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    # ========== ENDPOINTS CON RESPUESTAS SIMPLIFICADAS ==========
     
     @action(detail=False, methods=['post'])
     @sri_secure_endpoint(
@@ -703,10 +1183,8 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     )
     def create_and_process_invoice_complete(self, request):
         """
-        🚀 ENDPOINT COMPLETO PARA FACTURAS: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
-        ✅ TODO EL PROCESO EN UNA SOLA LLAMADA
+         ENDPOINT COMPLETO PARA FACTURAS: Crear + Procesar completamente
+         RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -717,7 +1195,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             company = request.validated_company
             sri_config = request.validated_sri_config
             
-            logger.info(f"🚀 [INVOICE_COMPLETE] Creating and processing invoice for user {getattr(request.user, 'username', 'Unknown')}")
+            logger.info(f" [INVOICE_COMPLETE] Creating and processing invoice for user {getattr(request.user, 'username', 'Unknown')}")
             
             # Función para manejar decimales
             def fix_decimal(value, places=2):
@@ -786,7 +1264,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             electronic_doc.save()
             
             creation_time = time.time()
-            logger.info(f"✅ [INVOICE_COMPLETE] Step 1: Invoice {electronic_doc.id} created in {creation_time - start_time:.2f}s")
+            logger.info(f" [INVOICE_COMPLETE] Step 1: Invoice {electronic_doc.id} created in {creation_time - start_time:.2f}s")
             
             # ===== PASO 2: PROCESAR COMPLETAMENTE =====
             send_email = data.get('send_email', True)
@@ -794,81 +1272,35 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
-                logger.info(f"✅ [INVOICE_COMPLETE] Step 2: Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
+                logger.info(f" [INVOICE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Invoice created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'INVOICE',
-                        'method': 'create_and_process_invoice_complete',
-                        'processing_details': {
-                            'step_1_create': 'COMPLETED',
-                            'step_2_xml_generation': 'COMPLETED_WITH_CORRECTED_XMLGenerator',
-                            'step_3_signing': 'COMPLETED_WITH_GlobalCertificateManager',
-                            'step_4_sri_submission': 'COMPLETED_NO_ERROR_35',
-                            'step_5_authorization': 'COMPLETED_IF_AVAILABLE'
-                        },
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Factura creada y enviada al SRI exitosamente',
+                        'invoice': {
                             'id': electronic_doc.id,
-                            'company': electronic_doc.company.id,
-                            'company_name': electronic_doc.company.business_name,
-                            'document_type': electronic_doc.document_type,
-                            'document_number': electronic_doc.document_number,
-                            'access_key': electronic_doc.access_key,
-                            'issue_date': electronic_doc.issue_date,
-                            'customer_name': electronic_doc.customer_name,
-                            'customer_identification': electronic_doc.customer_identification,
-                            'subtotal_without_tax': str(electronic_doc.subtotal_without_tax),
-                            'total_tax': str(electronic_doc.total_tax),
-                            'total_amount': str(electronic_doc.total_amount),
-                            'status': electronic_doc.status,
-                            'status_display': electronic_doc.get_status_display(),
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': electronic_doc.created_at,
-                            'updated_at': electronic_doc.updated_at
-                        },
-                        'files': {
-                            'has_xml': bool(electronic_doc.xml_file),
-                            'has_signed_xml': bool(electronic_doc.signed_xml_file),
-                            'has_pdf': bool(electronic_doc.pdf_file),
-                            'xml_path': str(electronic_doc.xml_file) if electronic_doc.xml_file else None,
-                            'signed_xml_path': str(electronic_doc.signed_xml_file) if electronic_doc.signed_xml_file else None
-                        },
-                        'processing_info': {
-                            'password_required': False,
-                            'automatic_processing': True,
-                            'certificate_cached': True,
-                            'error_35_resolved': True,
-                            'xmlgenerator_corrected': True,
-                            'vsr_token_compatible': True,
-                            'decorators_enhanced': True
-                        },
-                        'status_details': status_info
+                            'number': electronic_doc.document_number,
+                            'customer': electronic_doc.customer_name,
+                            'total': float(electronic_doc.total_amount),
+                            'status': electronic_doc.get_status_display(),
+                            'date': electronic_doc.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f"❌ [INVOICE_COMPLETE] Processing failed: {message}")
+                logger.error(f" [INVOICE_COMPLETE] Processing failed: {message}")
                 return Response(
                     {
                         'success': False,
-                        'message': f'Invoice created but processing failed: {message}',
-                        'data': {
+                        'message': f'Factura creada pero el procesamiento falló: {message}',
+                        'invoice': {
                             'id': electronic_doc.id,
-                            'document_number': electronic_doc.document_number,
-                            'access_key': electronic_doc.access_key,
-                            'status': electronic_doc.status,
+                            'number': electronic_doc.document_number,
                             'error_details': message
                         }
                     },
@@ -876,11 +1308,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
                 
         except Exception as e:
-            logger.error(f"❌ [INVOICE_COMPLETE] Critical error: {str(e)}")
+            logger.error(f" [INVOICE_COMPLETE] Critical error: {str(e)}")
             return Response(
                 {
                     'error': 'INVOICE_COMPLETE_ERROR',
-                    'message': f'Error in complete invoice process: {str(e)}'
+                    'message': f'Error en el proceso completo de factura: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -896,9 +1328,8 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     )
     def create_and_process_credit_note_complete(self, request):
         """
-        🚀 ENDPOINT COMPLETO PARA NOTAS DE CRÉDITO: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+         ENDPOINT COMPLETO PARA NOTAS DE CRÉDITO: Crear + Procesar completamente
+         RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -909,7 +1340,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             company = request.validated_company
             sri_config = request.validated_sri_config
             
-            logger.info(f"🚀 [CREDIT_NOTE_COMPLETE] Creating and processing credit note for user {getattr(request.user, 'username', 'Unknown')}")
+            logger.info(f" [CREDIT_NOTE_COMPLETE] Creating and processing credit note for user {getattr(request.user, 'username', 'Unknown')}")
             
             # Generar número de documento
             sequence = sri_config.get_next_sequence('CREDIT_NOTE')
@@ -942,7 +1373,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             electronic_doc = sync_document_to_electronic_document(credit_note, 'CREDIT_NOTE')
             
             creation_time = time.time()
-            logger.info(f"✅ [CREDIT_NOTE_COMPLETE] Step 1: Credit note {credit_note.id} created in {creation_time - start_time:.2f}s")
+            logger.info(f" [CREDIT_NOTE_COMPLETE] Step 1: Credit note {credit_note.id} created in {creation_time - start_time:.2f}s")
             
             # Procesar completamente
             send_email = data.get('send_email', True)
@@ -950,57 +1381,39 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
                 credit_note.status = electronic_doc.status
                 credit_note.save()
                 
-                logger.info(f"✅ [CREDIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
+                logger.info(f" [CREDIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Credit Note created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'CREDIT_NOTE',
-                        'method': 'create_and_process_credit_note_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Nota de crédito creada y enviada al SRI exitosamente',
+                        'credit_note': {
                             'id': credit_note.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': credit_note.company.id,
-                            'company_name': credit_note.company.business_name,
-                            'document_type': 'CREDIT_NOTE',
-                            'document_number': credit_note.document_number,
-                            'access_key': credit_note.access_key,
-                            'issue_date': credit_note.issue_date,
-                            'customer_name': credit_note.customer_name,
-                            'reason_description': credit_note.reason_description,
-                            'total_amount': str(credit_note.total_amount),
-                            'status': credit_note.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': credit_note.created_at
-                        },
-                        'status_details': status_info
+                            'number': credit_note.document_number,
+                            'customer': credit_note.customer_name,
+                            'total': float(credit_note.total_amount),
+                            'status': credit_note.get_status_display(),
+                            'date': credit_note.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f"❌ [CREDIT_NOTE_COMPLETE] Processing failed: {message}")
+                logger.error(f" [CREDIT_NOTE_COMPLETE] Processing failed: {message}")
                 return Response(
                     {
                         'success': False,
-                        'message': f'Credit Note created but processing failed: {message}',
-                        'data': {
+                        'message': f'Nota de crédito creada pero el procesamiento falló: {message}',
+                        'credit_note': {
                             'id': credit_note.id,
-                            'document_number': credit_note.document_number,
+                            'number': credit_note.document_number,
                             'error_details': message
                         }
                     },
@@ -1008,11 +1421,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
                 
         except Exception as e:
-            logger.error(f"❌ [CREDIT_NOTE_COMPLETE] Critical error: {str(e)}")
+            logger.error(f" [CREDIT_NOTE_COMPLETE] Critical error: {str(e)}")
             return Response(
                 {
                     'error': 'CREDIT_NOTE_COMPLETE_ERROR',
-                    'message': f'Error in complete credit note process: {str(e)}'
+                    'message': f'Error en el proceso completo de nota de crédito: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1028,9 +1441,8 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     )
     def create_and_process_debit_note_complete(self, request):
         """
-        🚀 ENDPOINT COMPLETO PARA NOTAS DE DÉBITO: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+         ENDPOINT COMPLETO PARA NOTAS DE DÉBITO: Crear + Procesar completamente
+         RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -1041,7 +1453,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             company = request.validated_company
             sri_config = request.validated_sri_config
             
-            logger.info(f"🚀 [DEBIT_NOTE_COMPLETE] Creating and processing debit note for user {getattr(request.user, 'username', 'Unknown')}")
+            logger.info(f" [DEBIT_NOTE_COMPLETE] Creating and processing debit note for user {getattr(request.user, 'username', 'Unknown')}")
             
             # Generar número de documento
             sequence = sri_config.get_next_sequence('DEBIT_NOTE')
@@ -1074,7 +1486,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             electronic_doc = sync_document_to_electronic_document(debit_note, 'DEBIT_NOTE')
             
             creation_time = time.time()
-            logger.info(f"✅ [DEBIT_NOTE_COMPLETE] Step 1: Debit note {debit_note.id} created in {creation_time - start_time:.2f}s")
+            logger.info(f" [DEBIT_NOTE_COMPLETE] Step 1: Debit note {debit_note.id} created in {creation_time - start_time:.2f}s")
             
             # Procesar completamente
             send_email = data.get('send_email', True)
@@ -1082,57 +1494,39 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
                 debit_note.status = electronic_doc.status
                 debit_note.save()
                 
-                logger.info(f"✅ [DEBIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
+                logger.info(f" [DEBIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Debit Note created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'DEBIT_NOTE',
-                        'method': 'create_and_process_debit_note_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Nota de débito creada y enviada al SRI exitosamente',
+                        'debit_note': {
                             'id': debit_note.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': debit_note.company.id,
-                            'company_name': debit_note.company.business_name,
-                            'document_type': 'DEBIT_NOTE',
-                            'document_number': debit_note.document_number,
-                            'access_key': debit_note.access_key,
-                            'issue_date': debit_note.issue_date,
-                            'customer_name': debit_note.customer_name,
-                            'reason_description': debit_note.reason_description,
-                            'total_amount': str(debit_note.total_amount),
-                            'status': debit_note.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': debit_note.created_at
-                        },
-                        'status_details': status_info
+                            'number': debit_note.document_number,
+                            'customer': debit_note.customer_name,
+                            'total': float(debit_note.total_amount),
+                            'status': debit_note.get_status_display(),
+                            'date': debit_note.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f"❌ [DEBIT_NOTE_COMPLETE] Processing failed: {message}")
+                logger.error(f" [DEBIT_NOTE_COMPLETE] Processing failed: {message}")
                 return Response(
                     {
                         'success': False,
-                        'message': f'Debit Note created but processing failed: {message}',
-                        'data': {
+                        'message': f'Nota de débito creada pero el procesamiento falló: {message}',
+                        'debit_note': {
                             'id': debit_note.id,
-                            'document_number': debit_note.document_number,
+                            'number': debit_note.document_number,
                             'error_details': message
                         }
                     },
@@ -1140,11 +1534,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
                 
         except Exception as e:
-            logger.error(f"❌ [DEBIT_NOTE_COMPLETE] Critical error: {str(e)}")
+            logger.error(f" [DEBIT_NOTE_COMPLETE] Critical error: {str(e)}")
             return Response(
                 {
                     'error': 'DEBIT_NOTE_COMPLETE_ERROR',
-                    'message': f'Error in complete debit note process: {str(e)}'
+                    'message': f'Error en el proceso completo de nota de débito: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1160,9 +1554,8 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     )
     def create_and_process_retention_complete(self, request):
         """
-        🚀 ENDPOINT COMPLETO PARA RETENCIONES: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+         ENDPOINT COMPLETO PARA RETENCIONES: Crear + Procesar completamente
+         RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -1173,7 +1566,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             company = request.validated_company
             sri_config = request.validated_sri_config
             
-            logger.info(f"🚀 [RETENTION_COMPLETE] Creating and processing retention for user {getattr(request.user, 'username', 'Unknown')}")
+            logger.info(f" [RETENTION_COMPLETE] Creating and processing retention for user {getattr(request.user, 'username', 'Unknown')}")
             
             # Generar número de documento
             sequence = sri_config.get_next_sequence('RETENTION')
@@ -1217,7 +1610,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             electronic_doc = sync_document_to_electronic_document(retention, 'RETENTION')
             
             creation_time = time.time()
-            logger.info(f"✅ [RETENTION_COMPLETE] Step 1: Retention {retention.id} created in {creation_time - start_time:.2f}s")
+            logger.info(f" [RETENTION_COMPLETE] Step 1: Retention {retention.id} created in {creation_time - start_time:.2f}s")
             
             # Procesar completamente
             send_email = data.get('send_email', True)
@@ -1225,57 +1618,39 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
                 retention.status = electronic_doc.status
                 retention.save()
                 
-                logger.info(f"✅ [RETENTION_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
+                logger.info(f" [RETENTION_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Retention created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'RETENTION',
-                        'method': 'create_and_process_retention_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Retención creada y enviada al SRI exitosamente',
+                        'retention': {
                             'id': retention.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': retention.company.id,
-                            'company_name': retention.company.business_name,
-                            'document_type': 'RETENTION',
-                            'document_number': retention.document_number,
-                            'access_key': retention.access_key,
-                            'issue_date': retention.issue_date,
-                            'supplier_name': retention.supplier_name,
-                            'fiscal_period': retention.fiscal_period,
-                            'total_retained': str(retention.total_retained),
-                            'status': retention.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': retention.created_at
-                        },
-                        'status_details': status_info
+                            'number': retention.document_number,
+                            'supplier': retention.supplier_name,
+                            'total': float(retention.total_retained),
+                            'status': retention.get_status_display(),
+                            'date': retention.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f"❌ [RETENTION_COMPLETE] Processing failed: {message}")
+                logger.error(f" [RETENTION_COMPLETE] Processing failed: {message}")
                 return Response(
                     {
                         'success': False,
-                        'message': f'Retention created but processing failed: {message}',
-                        'data': {
+                        'message': f'Retención creada pero el procesamiento falló: {message}',
+                        'retention': {
                             'id': retention.id,
-                            'document_number': retention.document_number,
+                            'number': retention.document_number,
                             'error_details': message
                         }
                     },
@@ -1283,11 +1658,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
                 
         except Exception as e:
-            logger.error(f"❌ [RETENTION_COMPLETE] Critical error: {str(e)}")
+            logger.error(f" [RETENTION_COMPLETE] Critical error: {str(e)}")
             return Response(
                 {
                     'error': 'RETENTION_COMPLETE_ERROR',
-                    'message': f'Error in complete retention process: {str(e)}'
+                    'message': f'Error en el proceso completo de retención: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1303,9 +1678,8 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
     )
     def create_and_process_purchase_settlement_complete(self, request):
         """
-        🚀 ENDPOINT COMPLETO PARA LIQUIDACIONES DE COMPRA: Crear + Procesar completamente
-        ✅ RESUELVE ERROR 35
-        ✅ COMPATIBLE CON TOKEN VSR
+         ENDPOINT COMPLETO PARA LIQUIDACIONES DE COMPRA: Crear + Procesar completamente
+         RESPUESTA SIMPLIFICADA PARA PRODUCCIÓN
         """
         try:
             from decimal import Decimal, ROUND_HALF_UP
@@ -1316,7 +1690,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             company = request.validated_company
             sri_config = request.validated_sri_config
             
-            logger.info(f"🚀 [PURCHASE_SETTLEMENT_COMPLETE] Creating and processing purchase settlement for user {getattr(request.user, 'username', 'Unknown')}")
+            logger.info(f" [PURCHASE_SETTLEMENT_COMPLETE] Creating and processing purchase settlement for user {getattr(request.user, 'username', 'Unknown')}")
             
             # Función para manejar decimales
             def fix_decimal(value, places=2):
@@ -1386,66 +1760,48 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             electronic_doc = sync_document_to_electronic_document(purchase_settlement, 'PURCHASE_SETTLEMENT')
             
             creation_time = time.time()
-            logger.info(f"✅ [PURCHASE_SETTLEMENT_COMPLETE] Step 1: Purchase settlement {purchase_settlement.id} created in {creation_time - start_time:.2f}s")
+            logger.info(f" [PURCHASE_SETTLEMENT_COMPLETE] Step 1: Purchase settlement {purchase_settlement.id} created in {creation_time - start_time:.2f}s")
             
             # Procesar completamente
             send_email = data.get('send_email', True)
+            
             processor = DocumentProcessor(company)
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
-            total_time = process_time - start_time
             
             if success:
                 # Actualizar documento original
                 purchase_settlement.status = electronic_doc.status
                 purchase_settlement.save()
                 
-                logger.info(f"✅ [PURCHASE_SETTLEMENT_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
-                status_info = processor.get_document_status(electronic_doc)
+                logger.info(f" [PURCHASE_SETTLEMENT_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
                 
+                # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
                     {
                         'success': True,
-                        'message': '🎉 Purchase Settlement created and processed completely - ERROR 35 RESOLVED',
-                        'document_type': 'PURCHASE_SETTLEMENT',
-                        'method': 'create_and_process_purchase_settlement_complete',
-                        'timing': {
-                            'creation_time_s': round(creation_time - start_time, 2),
-                            'processing_time_s': round(process_time - creation_time, 2),
-                            'total_time_s': round(total_time, 2)
-                        },
-                        'data': {
+                        'message': 'Liquidación de compra creada y enviada al SRI exitosamente',
+                        'purchase_settlement': {
                             'id': purchase_settlement.id,
-                            'electronic_doc_id': electronic_doc.id,
-                            'company': purchase_settlement.company.id,
-                            'company_name': purchase_settlement.company.business_name,
-                            'document_type': 'PURCHASE_SETTLEMENT',
-                            'document_number': purchase_settlement.document_number,
-                            'access_key': purchase_settlement.access_key,
-                            'issue_date': purchase_settlement.issue_date,
-                            'supplier_name': purchase_settlement.supplier_name,
-                            'subtotal_without_tax': str(purchase_settlement.subtotal_without_tax),
-                            'total_tax': str(purchase_settlement.total_tax),
-                            'total_amount': str(purchase_settlement.total_amount),
-                            'status': purchase_settlement.status,
-                            'sri_authorization_code': electronic_doc.sri_authorization_code,
-                            'sri_authorization_date': electronic_doc.sri_authorization_date,
-                            'created_at': purchase_settlement.created_at
-                        },
-                        'status_details': status_info
+                            'number': purchase_settlement.document_number,
+                            'supplier': purchase_settlement.supplier_name,
+                            'total': float(purchase_settlement.total_amount),
+                            'status': purchase_settlement.get_status_display(),
+                            'date': purchase_settlement.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
                     },
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f"❌ [PURCHASE_SETTLEMENT_COMPLETE] Processing failed: {message}")
+                logger.error(f" [PURCHASE_SETTLEMENT_COMPLETE] Processing failed: {message}")
                 return Response(
                     {
                         'success': False,
-                        'message': f'Purchase Settlement created but processing failed: {message}',
-                        'data': {
+                        'message': f'Liquidación de compra creada pero el procesamiento falló: {message}',
+                        'purchase_settlement': {
                             'id': purchase_settlement.id,
-                            'document_number': purchase_settlement.document_number,
+                            'number': purchase_settlement.document_number,
                             'error_details': message
                         }
                     },
@@ -1453,11 +1809,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
                 
         except Exception as e:
-            logger.error(f"❌ [PURCHASE_SETTLEMENT_COMPLETE] Critical error: {str(e)}")
+            logger.error(f" [PURCHASE_SETTLEMENT_COMPLETE] Critical error: {str(e)}")
             return Response(
                 {
                     'error': 'PURCHASE_SETTLEMENT_COMPLETE_ERROR',
-                    'message': f'Error in complete purchase settlement process: {str(e)}'
+                    'message': f'Error en el proceso completo de liquidación de compra: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -1657,7 +2013,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             )
             
         except Exception as e:
-            logger.error(f"❌ Error generating XML for document {pk}: {str(e)}")
+            logger.error(f" Error generating XML for document {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'XML_GENERATION_ERROR',
@@ -1735,7 +2091,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             )
             
         except Exception as e:
-            logger.error(f"❌ Error signing {document_type} {pk}: {str(e)}")
+            logger.error(f" Error signing {document_type} {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'SIGNING_ERROR',
@@ -1820,7 +2176,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             )
             
         except Exception as e:
-            logger.error(f"❌ Error sending {document_type} {pk} to SRI: {str(e)}")
+            logger.error(f" Error sending {document_type} {pk} to SRI: {str(e)}")
             return Response(
                 {
                     'error': 'SRI_SUBMISSION_ERROR',
@@ -1897,7 +2253,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 )
                 
         except Exception as e:
-            logger.error(f"❌ Error in complete process for document {pk}: {str(e)}")
+            logger.error(f" Error in complete process for document {pk}: {str(e)}")
             return Response(
                 {
                     'error': 'PROCESS_ERROR',
@@ -1927,7 +2283,11 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 'decorator_validation': True,
                 'vsr_token_support': True,
                 'error_35_resolved': True,
+                'simplified_responses': True,
+                'vsr_validation_endpoint': True,
                 'available_endpoints': [
+                    'validate_certificate_and_config (VSR only)',
+                    'validation_status_summary (VSR only)',
                     'create_and_process_invoice_complete',
                     'create_and_process_credit_note_complete',
                     'create_and_process_debit_note_complete',
@@ -2006,7 +2366,7 @@ class SRIResponseViewSet(viewsets.ReadOnlyModelViewSet):
 
 class DocumentationViewSet(viewsets.ViewSet):
     """
-    Documentación de la API FINAL con endpoints de proceso completo
+    Documentación de la API con respuestas simplificadas
     """
     permission_classes = [permissions.IsAuthenticated]
     
@@ -2014,22 +2374,54 @@ class DocumentationViewSet(viewsets.ViewSet):
     @audit_api_action(action_type='VIEW_API_DOCUMENTATION')
     def api_info(self, request):
         """
-        Información general de la API FINAL con endpoints de proceso completo
+        Información general de la API con respuestas simplificadas
         """
         return Response({
-            'api_name': 'SRI Integration API v2.2 FINAL - Complete Process Endpoints',
-            'description': 'API completa con endpoints de proceso completo para cada tipo de documento SRI',
-            'version': '2.2.0-FINAL-COMPLETE-PROCESS',
+            'api_name': 'SRI Integration API v2.4 FINAL - Simplified Responses + VSR Validation',
+            'description': 'API completa con respuestas simplificadas para producción y endpoint de validación VSR',
+            'version': '2.4.0-FINAL-SIMPLIFIED-VSR',
             'certificate_manager': 'GlobalCertificateManager',
             'error_35_status': 'RESOLVED',
             'password_required': False,
             'vsr_token_support': True,
             'user_token_support': True,
+            'simplified_responses': True,
+            'vsr_validation_endpoint': True,
+            'validation_endpoints': {
+                'certificate_validation': {
+                    'endpoint': 'POST /api/sri/documents/validate_certificate_and_config/',
+                    'description': 'Validar certificado y configuraciones de empresa (SOLO Token VSR)',
+                    'token_required': 'Token vsr_XXXXXXXXXXXXXXXXX',
+                    'response_codes': {
+                        '200': 'Empresa lista para facturación',
+                        '422': 'Faltan configuraciones',
+                        '403': 'Token no es VSR',
+                        '401': 'Token VSR inválido'
+                    }
+                },
+                'status_summary': {
+                    'endpoint': 'GET /api/sri/documents/validation_status_summary/',
+                    'description': 'Resumen rápido del estado de la empresa (SOLO Token VSR)',
+                    'token_required': 'Token vsr_XXXXXXXXXXXXXXXXX'
+                }
+            },
             'complete_process_endpoints': {
                 'invoice': {
                     'endpoint': 'POST /api/sri/documents/create_and_process_invoice_complete/',
                     'description': 'Crear y procesar factura completamente en una sola llamada',
-                    'required_fields': ['customer_identification_type', 'customer_identification', 'customer_name', 'issue_date', 'items']
+                    'required_fields': ['customer_identification_type', 'customer_identification', 'customer_name', 'issue_date', 'items'],
+                    'response_example': {
+                        'success': True,
+                        'message': 'Factura creada y enviada al SRI exitosamente',
+                        'invoice': {
+                            'id': 175,
+                            'number': '001-001-000001102',
+                            'customer': 'VASQUEZ PINEDA CRISTIAN DAVID',
+                            'total': 115.0,
+                            'status': 'Enviada al SRI',
+                            'date': '2025-08-04 17:39'
+                        }
+                    }
                 },
                 'credit_note': {
                     'endpoint': 'POST /api/sri/documents/create_and_process_credit_note_complete/',
@@ -2052,40 +2444,29 @@ class DocumentationViewSet(viewsets.ViewSet):
                     'required_fields': ['supplier_identification_type', 'supplier_identification', 'supplier_name', 'items']
                 }
             },
-            'individual_endpoints': {
-                'creation_only': [
-                    'POST /api/sri/documents/create_invoice/',
-                    'POST /api/sri/documents/create_credit_note/',
-                    'POST /api/sri/documents/create_debit_note/',
-                    'POST /api/sri/documents/create_retention/',
-                    'POST /api/sri/documents/create_purchase_settlement/'
-                ],
-                'processing_only': [
-                    'POST /api/sri/documents/{id}/generate_xml/',
-                    'POST /api/sri/documents/{id}/sign_document/',
-                    'POST /api/sri/documents/{id}/send_to_sri/',
-                    'POST /api/sri/documents/{id}/process_complete/'
-                ]
-            },
             'token_usage': {
                 'vsr_token': {
                     'format': 'Token vsr_XXXXXXXXXXXXXXX',
                     'company_detection': 'automatic',
-                    'recommended_for': 'Single company integrations'
+                    'recommended_for': 'Single company integrations',
+                    'validation_endpoints': 'YES - validate_certificate_and_config'
                 },
                 'user_token': {
                     'format': 'Token XXXXXXXXXXXXXXX',
                     'company_field_required': True,
-                    'recommended_for': 'Multi-company integrations'
+                    'recommended_for': 'Multi-company integrations',
+                    'validation_endpoints': 'NO - use company-specific endpoints'
                 }
             },
             'features': [
                 'Complete process endpoints for all document types',
+                'Simplified responses for production',
                 'Error 35 resolution built-in',
                 'Automatic certificate management',
                 'VSR token compatibility',
                 'Decorator-based security',
                 'Transaction safety',
-                'Comprehensive audit logging'
+                'Comprehensive audit logging',
+                'VSR validation endpoint for certificate and config checking'
             ]
         })

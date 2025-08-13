@@ -171,19 +171,19 @@
     <div class="card-body">
         <div class="row">
             <div class="col-md-3 col-sm-6 mb-3">
-                <a href="#" class="quick-action bg-light" onclick="VendoAdmin.openCreateModal('user'); return false;">
+                <a href="{% url 'custom_admin:users' %}" class="quick-action bg-light">
                     <i class="fas fa-user-plus quick-action-icon text-primary"></i>
                     <h6>Nuevo Usuario</h6>
                 </a>
             </div>
             <div class="col-md-3 col-sm-6 mb-3">
-                <a href="#" class="quick-action bg-light" onclick="VendoAdmin.openCreateModal('company'); return false;">
+                <a href="{% url 'custom_admin:companies' %}" class="quick-action bg-light">
                     <i class="fas fa-building quick-action-icon text-success"></i>
                     <h6>Nueva Empresa</h6>
                 </a>
             </div>
             <div class="col-md-3 col-sm-6 mb-3">
-                <a href="#" class="quick-action bg-light" onclick="VendoAdmin.openCreateModal('certificate'); return false;">
+                <a href="{% url 'custom_admin:certificates' %}" class="quick-action bg-light">
                     <i class="fas fa-certificate quick-action-icon text-warning"></i>
                     <h6>Nuevo Certificado</h6>
                 </a>

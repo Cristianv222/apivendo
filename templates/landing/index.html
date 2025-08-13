@@ -1,0 +1,1536 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APIVENDO - Sistema de Facturación Electrónica SRI Ecuador</title>
+    
+    <!-- SEO Meta Tags mejorados -->
+    <meta name="description" content="Sistema líder de facturación electrónica certificado por SRI Ecuador. API REST, autorización automática, certificados digitales y soporte completo.">
+    <meta name="keywords" content="facturación electrónica, SRI Ecuador, API REST, certificados digitales, facturas electrónicas">
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Variables CSS para mejor mantenimiento */
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #7b68ee;
+            --accent-color: #4ade80;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.9);
+            --text-muted: rgba(255, 255, 255, 0.8);
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        /* Focus mejorado para accesibilidad */
+        *:focus {
+            outline: 2px solid var(--accent-color);
+            outline-offset: 2px;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #7209b7 100%);
+            color: white;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* Background shapes con z-index bajo para estar detrás de todo */
+        .background-shapes {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1; /* Z-index muy bajo */
+            pointer-events: none;
+            will-change: transform; /* Performance mejorado */
+        }
+
+        .sun {
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(74, 144, 226, 0.6);
+            animation: pulse 4s ease-in-out infinite;
+            will-change: transform;
+        }
+
+        .mountain-1, .mountain-2, .mountain-3 {
+            position: absolute;
+            bottom: 0;
+            will-change: transform;
+        }
+
+        .mountain-1 {
+            left: -10%;
+            width: 40%;
+            height: 50%;
+            background: linear-gradient(45deg, #1a1a2e, #16213e);
+            clip-path: polygon(0 100%, 0 40%, 30% 20%, 60% 35%, 100% 25%, 100% 100%);
+        }
+
+        .mountain-2 {
+            left: 25%;
+            width: 35%;
+            height: 45%;
+            background: linear-gradient(45deg, #0f3460, #533483);
+            clip-path: polygon(0 100%, 0 45%, 40% 25%, 70% 40%, 100% 30%, 100% 100%);
+        }
+
+        .mountain-3 {
+            right: -10%;
+            width: 45%;
+            height: 55%;
+            background: linear-gradient(45deg, #533483, #7209b7);
+            clip-path: polygon(0 100%, 0 35%, 25% 20%, 50% 30%, 75% 15%, 100% 25%, 100% 100%);
+        }
+
+        .stars {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+        }
+
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 2s infinite alternate;
+        }
+
+        .star:nth-child(1) { top: 20%; left: 15%; animation-delay: 0s; }
+        .star:nth-child(2) { top: 30%; right: 20%; animation-delay: 0.5s; }
+        .star:nth-child(3) { top: 45%; left: 25%; animation-delay: 1s; }
+        .star:nth-child(4) { top: 15%; right: 35%; animation-delay: 1.5s; }
+        .star:nth-child(5) { top: 55%; right: 15%; animation-delay: 2s; }
+        .star:nth-child(6) { top: 10%; left: 45%; animation-delay: 0.3s; }
+
+        @keyframes twinkle {
+            0% { opacity: 0.3; transform: scale(1); }
+            100% { opacity: 1; transform: scale(1.2); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.1); }
+        }
+
+        /* Contenido principal */
+        .content {
+            position: relative;
+            z-index: 10;
+            min-height: 100vh;
+        }
+
+        /* Header con altura definida para cálculos - MEJORADO */
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 1rem 0;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            height: auto;
+            min-height: 80px; /* Altura mínima definida */
+            transition: all 0.3s ease; /* Transición suave */
+        }
+
+        /* Efecto de scroll en header */
+        .header.scrolled {
+            background: rgba(26, 26, 46, 0.95);
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .header-nav {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+        }
+
+        .header-nav .nav-tabs-custom {
+            border: none;
+            margin-bottom: 0;
+            gap: 0.5rem;
+        }
+
+        .header-nav .nav-tabs-custom .nav-link {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: rgba(255, 255, 255, 0.9);
+            padding: 0.6rem 1.2rem;
+            margin: 0;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            white-space: nowrap;
+            position: relative; /* Para el efecto de borde inferior */
+        }
+
+        /* Efecto de borde inferior en hover */
+        .header-nav .nav-tabs-custom .nav-link::before {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 50%;
+            width: 0;
+            height: 2px;
+            background: var(--accent-color);
+            transition: all 0.3s ease;
+            transform: translateX(-50%);
+        }
+
+        .header-nav .nav-tabs-custom .nav-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+        }
+
+        .header-nav .nav-tabs-custom .nav-link:hover::before {
+            width: 80%;
+        }
+
+        .header-nav .nav-tabs-custom .nav-link.active {
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            border-color: #4a90e2;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.4);
+        }
+
+        .header-nav .nav-tabs-custom .nav-link.active::before {
+            width: 100%;
+            background: white;
+        }
+
+        .logo-placeholder {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+            transition: transform 0.3s ease; /* Efecto hover */
+        }
+
+        .logo-placeholder:hover {
+            transform: scale(1.05);
+        }
+
+        .logo-placeholder i {
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        .logo-text {
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: white;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .api-badge {
+            background: rgba(74, 144, 226, 0.2);
+            color: #4a90e2;
+            padding: 0.3rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+
+        /* Navegación de tabs - REMOVIDA DEL MAIN */
+        .main-nav {
+            display: none; /* Ocultamos la navegación principal ya que está en el header */
+        }
+
+        .nav-tabs-custom {
+            border: none;
+            justify-content: center;
+            margin-bottom: 0;
+        }
+
+        .nav-tabs-custom .nav-link {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            color: rgba(255, 255, 255, 0.8);
+            padding: 1rem 2rem;
+            margin: 0 0.5rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-tabs-custom .nav-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.4);
+            color: white;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(74, 144, 226, 0.3);
+        }
+
+        .nav-tabs-custom .nav-link.active {
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            border-color: #4a90e2;
+            color: white;
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(74, 144, 226, 0.4);
+        }
+
+        /* Contenido de tabs con padding para evitar que se tape con el header */
+        .tab-content-custom {
+            min-height: 60vh;
+            padding: 1rem 0 2rem;
+            margin-top: 1rem; /* Espacio adicional para separar del header */
+        }
+
+        /* Tab panes normales - CONSERVADO ORIGINAL */
+        .tab-pane-custom {
+            display: none;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        .tab-pane-custom.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* HOME TAB STYLES normal */
+        .hero-section {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        .hero-title {
+            font-size: 3.5rem;
+            font-weight: 800;
+            margin-bottom: 1.5rem;
+            text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            line-height: 1.2;
+        }
+
+        .hero-subtitle {
+            font-size: 1.3rem;
+            font-weight: 400;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .hero-badges {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .hero-badge {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.8rem 1.2rem;
+            border-radius: 25px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.3s ease; /* Efecto hover */
+        }
+
+        .hero-badge:hover {
+            transform: translateY(-3px);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 25px rgba(74, 144, 226, 0.3);
+        }
+
+        .features-grid {
+            margin-top: 4rem;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            padding: 2rem;
+            text-align: center;
+            height: 100%;
+            transition: all 0.3s ease;
+            margin-bottom: 1.5rem;
+            position: relative; /* Para efecto overlay */
+            overflow: hidden;
+        }
+
+        /* Efecto de overlay en hover */
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            z-index: -1;
+        }
+
+        .feature-card:hover::before {
+            opacity: 0.1;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.2);
+            border-color: var(--primary-color);
+        }
+
+        .feature-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            box-shadow: 0 8px 25px rgba(74, 144, 226, 0.3);
+            transition: transform 0.3s ease; /* Efecto en el ícono */
+        }
+
+        .feature-card:hover .feature-icon {
+            transform: scale(1.1) rotate(5deg);
+        }
+
+        .feature-icon i {
+            font-size: 2rem;
+            color: white;
+        }
+
+        .feature-card h3 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        /* PLANES TAB STYLES limpio */
+        .plans-header {
+            text-align: center;
+            margin-bottom: 3rem;
+            /* Removido padding-top ya que se maneja globalmente */
+        }
+
+        .plans-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+
+        .plans-subtitle {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .plans-loading {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        .loading-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top: 3px solid #4a90e2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .plan-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 2.5rem 2rem;
+            text-align: center;
+            height: 100%;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+        }
+
+        .plan-card.featured {
+            border-color: #4a90e2;
+            box-shadow: 0 0 30px rgba(74, 144, 226, 0.3);
+            transform: scale(1.05);
+        }
+
+        .plan-card.featured::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+        }
+
+        .plan-card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+
+        .plan-card.featured:hover {
+            transform: scale(1.05) translateY(-10px);
+        }
+
+        .plan-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            color: white;
+            padding: 0.4rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+
+        .plan-name {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .plan-price {
+            font-size: 3rem;
+            font-weight: 800;
+            color: #4a90e2;
+            margin-bottom: 0.5rem;
+        }
+
+        .plan-period {
+            opacity: 0.8;
+            margin-bottom: 1.5rem;
+        }
+
+        .plan-feature {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.8rem;
+            font-size: 0.95rem;
+            text-align: left;
+        }
+
+        .plan-feature i {
+            color: #4ade80;
+            margin-right: 0.8rem;
+            font-size: 1rem;
+            min-width: 20px;
+        }
+
+        .plan-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            margin-top: 1.5rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .plan-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(74, 144, 226, 0.4);
+            color: white;
+            text-decoration: none;
+        }
+
+        /* LOGIN TAB STYLES limpio */
+        .login-container {
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 1rem 0 2rem;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 20px;
+            padding: 3rem 2.5rem;
+            text-align: center;
+        }
+
+        .login-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .login-subtitle {
+            opacity: 0.9;
+            margin-bottom: 2rem;
+        }
+
+        .security-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            background: rgba(74, 144, 226, 0.1);
+            color: #4a90e2;
+            padding: 0.3rem 0.6rem;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            margin-bottom: 2rem;
+        }
+
+        .btn-login-primary {
+            width: 100%;
+            background: linear-gradient(135deg, #4a90e2, #7b68ee);
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: inline-block;
+            margin-bottom: 1rem;
+        }
+
+        .btn-login-primary:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(74, 144, 226, 0.4);
+            color: white;
+            text-decoration: none;
+        }
+
+        .btn-login-secondary {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 13px 28px;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            font-size: 1.1rem;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            display: inline-block;
+        }
+
+        .btn-login-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-3px);
+            color: white;
+            text-decoration: none;
+        }
+
+        /* Footer mejorado */
+        .footer {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 3rem 0 1.5rem;
+            margin-top: 4rem;
+        }
+
+        .footer-main {
+            margin-bottom: 2rem;
+        }
+
+        .footer-section h5 {
+            color: white;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            font-size: 1.1rem;
+        }
+
+        .footer-section p,
+        .footer-section li {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-section ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .footer-section a {
+            color: rgba(255, 255, 255, 0.8);
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .footer-section a:hover {
+            color: #4a90e2;
+        }
+
+        .footer-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(74, 144, 226, 0.15);
+            color: #4a90e2;
+            padding: 0.6rem 1rem;
+            border-radius: 25px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            border: 1px solid rgba(74, 144, 226, 0.3);
+        }
+
+        .contact-info {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .contact-item i {
+            color: #4a90e2;
+            font-size: 1.1rem;
+            width: 20px;
+            text-align: center;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .social-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: rgba(255, 255, 255, 0.8);
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+
+        .social-link:hover {
+            background: #4a90e2;
+            color: white;
+            transform: translateY(-2px);
+        }
+
+        .footer-bottom {
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 1.5rem;
+            text-align: center;
+        }
+
+        .footer-bottom p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.85rem;
+            margin: 0;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.3s ease;
+        }
+
+        .footer-links a:hover {
+            color: #4a90e2;
+        }
+
+        /* SCROLL TO TOP BUTTON - NUEVA FUNCIONALIDAD */
+        .scroll-to-top {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 1000;
+            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.3);
+        }
+
+        .scroll-to-top.show {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .scroll-to-top:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 30px rgba(74, 144, 226, 0.4);
+        }
+
+        /* Responsive con padding-top ajustado */
+        @media (max-width: 768px) {
+            body {
+                padding-top: 120px; /* Más espacio en tablet para nav vertical */
+            }
+
+            .header {
+                height: 120px; /* Header más alto en tablet */
+            }
+
+            .hero-title {
+                font-size: 2.5rem;
+            }
+
+            .hero-subtitle {
+                font-size: 1.1rem;
+            }
+
+            .hero-badges {
+                flex-direction: column;
+                align-items: center;
+            }
+
+            .header-nav .nav-tabs-custom {
+                flex-direction: column;
+                gap: 0.3rem;
+            }
+
+            .header-nav .nav-tabs-custom .nav-link {
+                width: 120px;
+                justify-content: center;
+                padding: 0.5rem 0.8rem;
+                font-size: 0.8rem;
+            }
+
+            .plans-title {
+                font-size: 2rem;
+            }
+
+            .plan-card.featured {
+                transform: none;
+                margin-bottom: 2rem;
+            }
+
+            .plan-card.featured:hover {
+                transform: translateY(-10px);
+            }
+
+            .login-card {
+                padding: 2rem 1.5rem;
+            }
+
+            .footer-links {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .social-links {
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                padding-top: 140px; /* Aún más espacio en mobile */
+            }
+
+            .header {
+                height: 140px; /* Header más alto en mobile para nav apilado */
+                padding: 0.8rem 0;
+            }
+
+            .logo-text {
+                font-size: 1.4rem;
+            }
+
+            .hero-title {
+                font-size: 2rem;
+            }
+
+            .plans-title {
+                font-size: 1.8rem;
+            }
+
+            .plan-card {
+                padding: 2rem 1.5rem;
+            }
+
+            .login-title {
+                font-size: 1.6rem;
+            }
+
+            .header-nav .nav-tabs-custom .nav-link {
+                width: 100px;
+                padding: 0.4rem 0.6rem;
+                font-size: 0.75rem;
+            }
+
+            .header-nav .nav-tabs-custom .nav-link i {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Fondo con formas abstractas -->
+    <div class="background-shapes">
+        <div class="sun"></div>
+        <div class="mountain-1"></div>
+        <div class="mountain-2"></div>
+        <div class="mountain-3"></div>
+        
+        <div class="stars">
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+            <div class="star"></div>
+        </div>
+    </div>
+
+    <!-- Contenido principal -->
+    <div class="content">
+        <!-- Header renovado -->
+        <header class="header" id="header">
+            <div class="container">
+                <div class="row align-items-center">
+                    <!-- Logo a la izquierda -->
+                    <div class="col-md-6">
+                        <div class="logo-section">
+                            <div class="logo-placeholder">
+                                <!-- Aquí irá tu logo cuando lo tengas -->
+                                <i class="fas fa-receipt"></i>
+                            </div>
+                            <div>
+                                <div class="logo-text">
+                                    APIVENDO<span class="api-badge">SRI</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Navegación a la derecha -->
+                    <div class="col-md-6">
+                        <div class="header-nav">
+                            <ul class="nav nav-tabs-custom" id="headerTabs" role="tablist">
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link active" id="home-tab" data-bs-toggle="tab" href="#home" role="tab" aria-selected="true">
+                                        <i class="fas fa-home"></i>Inicio
+                                    </a>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link" id="planes-tab" data-bs-toggle="tab" href="#planes" role="tab" aria-selected="false">
+                                        <i class="fas fa-tag"></i>Planes
+                                    </a>
+                                </li>
+                                <li class="nav-item" role="presentation">
+                                    <a class="nav-link" id="login-tab" href="/accounts/login/" role="tab" aria-selected="false">
+                                        <i class="fas fa-sign-in-alt"></i>Acceso
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navegación principal -->
+        <div class="container main-nav">
+            <ul class="nav nav-tabs-custom" id="mainTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link active" id="home-tab" data-bs-toggle="tab" href="#home" role="tab">
+                        <i class="fas fa-home"></i>Inicio
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="planes-tab" data-bs-toggle="tab" href="#planes" role="tab">
+                        <i class="fas fa-tag"></i>Planes
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="login-tab" href="/accounts/login/" role="tab">
+                        <i class="fas fa-sign-in-alt"></i>Acceso
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Contenido de los tabs -->
+        <div class="container tab-content-custom">
+            <!-- TAB INICIO/HOME -->
+            <div class="tab-pane-custom active" id="home">
+                <div class="hero-section">
+                    <h1 class="hero-title">Facturación Electrónica<br>SRI Ecuador</h1>
+                    <p class="hero-subtitle">
+                        Sistema completo de facturación electrónica con integración directa al SRI. 
+                        Emite facturas, notas de crédito y retenciones con validación automática.
+                    </p>
+                    
+                    <div class="hero-badges">
+                        <div class="hero-badge">
+                            <i class="fas fa-shield-alt"></i>
+                            Certificado SRI
+                        </div>
+                        <div class="hero-badge">
+                            <i class="fas fa-code"></i>
+                            API REST
+                        </div>
+                        <div class="hero-badge">
+                            <i class="fas fa-clock"></i>
+                            Tiempo Real
+                        </div>
+                        <div class="hero-badge">
+                            <i class="fas fa-lock"></i>
+                            Seguro
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Características principales -->
+                <div class="features-grid">
+                    <h2 class="text-center mb-4">¿Por qué elegir APIVENDO?</h2>
+                    <div class="row g-4">
+                        <div class="col-lg-3 col-md-6">
+                            <div class="feature-card">
+                                <div class="feature-icon">
+                                    <i class="fas fa-file-invoice"></i>
+                                </div>
+                                <h3>Facturación Completa</h3>
+                                <p>Emite facturas, notas de crédito, retenciones y guías de remisión con total conformidad SRI.</p>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="feature-card">
+                                <div class="feature-icon">
+                                    <i class="fas fa-certificate"></i>
+                                </div>
+                                <h3>Firma Digital</h3>
+                                <p>Gestión automática de certificados digitales con firmado electrónico seguro y validado.</p>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="feature-card">
+                                <div class="feature-icon">
+                                    <i class="fas fa-sync"></i>
+                                </div>
+                                <h3>Sincronización SRI</h3>
+                                <p>Autorización automática con el SRI en tiempo real. Sin esperas ni procesos manuales.</p>
+                            </div>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <div class="feature-card">
+                                <div class="feature-icon">
+                                    <i class="fas fa-code"></i>
+                                </div>
+                                <h3>API Moderna</h3>
+                                <p>Integra fácilmente con tu sistema existente usando nuestra API REST con documentación completa.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB PLANES -->
+            <div class="tab-pane-custom" id="planes">
+                <div class="plans-header">
+                    <h2 class="plans-title">Planes de Facturación</h2>
+                    <p class="plans-subtitle">
+                        Elige el plan que mejor se adapte a tu volumen de facturación. 
+                        Todos incluyen las mismas funcionalidades premium.
+                    </p>
+                </div>
+                
+                <!-- Loading state -->
+                <div id="plansLoading" class="plans-loading">
+                    <div class="loading-spinner"></div>
+                    <p>Cargando planes disponibles...</p>
+                </div>
+
+                <!-- Plans container -->
+                <div id="plansContainer" class="row g-4" style="display: none;">
+                    <!-- Los planes se cargarán aquí dinámicamente -->
+                </div>
+
+                <!-- Error state -->
+                <div id="plansError" class="text-center" style="display: none;">
+                    <div class="alert alert-warning d-inline-block">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        No se pudieron cargar los planes. 
+                        <a href="#login" class="text-decoration-none" onclick="switchTab('login-tab')">Inicia sesión</a> para verlos.
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB LOGIN -->
+            <div class="tab-pane-custom" id="login">
+                <div class="login-container">
+                    <div class="login-card">
+                        <h2 class="login-title">Acceso al Sistema</h2>
+                        <p class="login-subtitle">Panel de administración y control</p>
+                        
+                        <div class="security-badge">
+                            <i class="fas fa-lock"></i>
+                            Conexión segura
+                        </div>
+                        
+                        <div class="d-grid gap-3">
+                            <a href="/accounts/login/" class="btn-login-primary">
+                                <i class="fas fa-sign-in-alt me-2"></i>
+                                Iniciar Sesión
+                            </a>
+                            
+                            <a href="/accounts/login/" class="btn-login-secondary">
+                                <i class="fas fa-key me-2"></i>
+                                Acceso con Token API
+                            </a>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <small class="text-muted">
+                                <i class="fas fa-info-circle me-1"></i>
+                                ¿No tienes cuenta? Contacta a tu administrador
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer mejorado -->
+        <footer class="footer">
+            <div class="container">
+                <div class="footer-main">
+                    <div class="row">
+                        <!-- Información de la empresa -->
+                        <div class="col-lg-4 col-md-6 mb-4">
+                            <div class="footer-section">
+                                <h5>APIVENDO</h5>
+                                <div class="footer-badge">
+                                    <i class="fas fa-check-circle"></i>
+                                    Certificado SRI Ecuador
+                                </div>
+                                <p>
+                                    Sistema líder en facturación electrónica para empresas ecuatorianas. 
+                                    Integración completa con el SRI, certificados digitales y API moderna.
+                                </p>
+                                <div class="social-links">
+                                    <a href="#" class="social-link" title="Facebook" aria-label="Facebook">
+                                        <i class="fab fa-facebook-f"></i>
+                                    </a>
+                                    <a href="#" class="social-link" title="Twitter" aria-label="Twitter">
+                                        <i class="fab fa-twitter"></i>
+                                    </a>
+                                    <a href="#" class="social-link" title="LinkedIn" aria-label="LinkedIn">
+                                        <i class="fab fa-linkedin-in"></i>
+                                    </a>
+                                    <a href="#" class="social-link" title="WhatsApp" aria-label="WhatsApp">
+                                        <i class="fab fa-whatsapp"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Servicios -->
+                        <div class="col-lg-2 col-md-6 mb-4">
+                            <div class="footer-section">
+                                <h5>Servicios</h5>
+                                <ul>
+                                    <li><a href="#planes">Facturación Electrónica</a></li>
+                                    <li><a href="#planes">Notas de Crédito</a></li>
+                                    <li><a href="#planes">Retenciones</a></li>
+                                    <li><a href="#planes">Guías de Remisión</a></li>
+                                    <li><a href="#planes">API REST</a></li>
+                                    <li><a href="#planes">Certificados Digitales</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Soporte -->
+                        <div class="col-lg-2 col-md-6 mb-4">
+                            <div class="footer-section">
+                                <h5>Soporte</h5>
+                                <ul>
+                                    <li><a href="#login">Documentación</a></li>
+                                    <li><a href="#login">Guías de Integración</a></li>
+                                    <li><a href="#login">Soporte Técnico</a></li>
+                                    <li><a href="#login">Preguntas Frecuentes</a></li>
+                                    <li><a href="#login">Estado del Sistema</a></li>
+                                    <li><a href="#login">Actualizaciones</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Contacto -->
+                        <div class="col-lg-4 col-md-6 mb-4">
+                            <div class="footer-section">
+                                <h5>Contacto</h5>
+                                <div class="contact-info">
+                                    <div class="contact-item">
+                                        <i class="fas fa-envelope"></i>
+                                        <span>soporte@apivendo.com</span>
+                                    </div>
+                                    <div class="contact-item">
+                                        <i class="fas fa-phone"></i>
+                                        <span>+593 99 999 9999</span>
+                                    </div>
+                                    <div class="contact-item">
+                                        <i class="fas fa-map-marker-alt"></i>
+                                        <span>Quito, Ecuador</span>
+                                    </div>
+                                    <div class="contact-item">
+                                        <i class="fas fa-clock"></i>
+                                        <span>Lun - Vie: 8:00 AM - 6:00 PM</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer bottom -->
+                <div class="footer-bottom">
+                    <div class="footer-links">
+                        <a href="#login">Términos de Servicio</a>
+                        <a href="#login">Política de Privacidad</a>
+                        <a href="#login">Política de Cookies</a>
+                        <a href="#login">Aviso Legal</a>
+                    </div>
+                    <p>
+                        © 2025 APIVENDO. Todos los derechos reservados. 
+                        Sistema de facturación electrónica certificado por el SRI Ecuador.
+                    </p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- BOTÓN SCROLL TO TOP - NUEVA FUNCIONALIDAD -->
+    <button class="scroll-to-top" id="scrollToTop" aria-label="Volver arriba">
+        <i class="fas fa-arrow-up"></i>
+    </button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Datos de planes desde el backend - IGUAL QUE EN EL DASHBOARD -->
+    <script>
+        // Los planes se pasan desde el template Django igual que en el dashboard
+        window.plansData = {{ plans_data|safe }};
+    </script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Inicializar tabs y cargar planes - FUNCIONALIDAD ORIGINAL CONSERVADA
+            initializeTabs();
+            loadPlans();
+            
+            // NUEVAS FUNCIONALIDADES AGREGADAS
+            initializeScrollEffects();
+        });
+
+        // FUNCIÓN ORIGINAL CONSERVADA - MODIFICADA PARA MANEJAR ACCESO
+        function initializeTabs() {
+            // Manejar el cambio de tabs desde el header
+            const tabLinks = document.querySelectorAll('#headerTabs .nav-link');
+            const tabPanes = document.querySelectorAll('.tab-pane-custom');
+
+            tabLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    // Si es el link de acceso, permitir navegación normal
+                    if (this.id === 'login-tab') {
+                        return; // Permitir que siga el href="/accounts/login/"
+                    }
+                    
+                    e.preventDefault();
+                    
+                    // Remover clase active de todos los links y panes
+                    tabLinks.forEach(l => l.classList.remove('active'));
+                    tabPanes.forEach(p => p.classList.remove('active'));
+                    
+                    // Agregar clase active al link clickeado
+                    this.classList.add('active');
+                    
+                    // Mostrar el pane correspondiente
+                    const targetId = this.getAttribute('href').substring(1);
+                    const targetPane = document.getElementById(targetId);
+                    if (targetPane) {
+                        targetPane.classList.add('active');
+                        
+                        // Si se activa el tab de planes, cargar planes
+                        if (targetId === 'planes') {
+                            loadPlans();
+                        }
+                    }
+                });
+            });
+
+            // Verificar si hay hash en la URL
+            const hash = window.location.hash;
+            if (hash && hash.length > 1) {
+                const hashTab = hash.substring(1);
+                const targetTab = document.querySelector(`[href="#${hashTab}"]`);
+                if (targetTab) {
+                    targetTab.click();
+                }
+            }
+        }
+
+        // FUNCIÓN ORIGINAL CONSERVADA
+        function switchTab(tabId) {
+            const targetTab = document.getElementById(tabId);
+            if (targetTab) {
+                targetTab.click();
+            }
+        }
+
+        // Variable global para almacenar los planes - ORIGINAL CONSERVADA
+        let availablePlans = [];
+
+        // FUNCIÓN ORIGINAL CONSERVADA
+        async function loadPlans() {
+            const plansLoading = document.getElementById('plansLoading');
+            const plansContainer = document.getElementById('plansContainer');
+            const plansError = document.getElementById('plansError');
+
+            // Mostrar loading y ocultar otros elementos
+            plansLoading.style.display = 'block';
+            plansContainer.style.display = 'none';
+            plansError.style.display = 'none';
+
+            // Los planes se cargarán desde el backend vía template context
+            // Este enfoque es igual al usado en el dashboard
+            if (window.plansData && window.plansData.length > 0) {
+                availablePlans = window.plansData;
+                displayPlans(availablePlans);
+            } else {
+                // Si no hay planes disponibles, mostrar error
+                plansLoading.style.display = 'none';
+                plansError.style.display = 'block';
+            }
+        }
+
+        // FUNCIÓN ORIGINAL CONSERVADA
+        function displayPlans(plans) {
+            const plansLoading = document.getElementById('plansLoading');
+            const plansContainer = document.getElementById('plansContainer');
+            const plansError = document.getElementById('plansError');
+
+            plansLoading.style.display = 'none';
+            
+            if (!plans || plans.length === 0) {
+                plansError.style.display = 'block';
+                return;
+            }
+
+            plansContainer.innerHTML = '';
+            
+            plans.forEach(plan => {
+                // Calcular precio por documento igual que en el dashboard
+                const pricePerInvoice = (parseFloat(plan.price) / plan.invoice_limit).toFixed(3);
+                
+                const planCard = document.createElement('div');
+                planCard.className = 'col-lg-3 col-md-6';
+                
+                planCard.innerHTML = `
+                    <div class="plan-card ${plan.is_featured ? 'featured' : ''}">
+                        ${plan.is_featured ? '<div class="plan-badge">Más Popular</div>' : ''}
+                        <h3 class="plan-name">${plan.name}</h3>
+                        <div class="plan-price">${parseFloat(plan.price).toFixed(0)}</div>
+                        <div class="plan-period">${plan.invoice_limit} documentos</div>
+                        <div class="mb-3">
+                            <small class="text-muted">${pricePerInvoice} por documento</small>
+                        </div>
+                        
+                        <div class="text-start mb-4">
+                            <div class="plan-feature">
+                                <i class="fas fa-check"></i>
+                                <span>${plan.invoice_limit} documentos incluidos</span>
+                            </div>
+                            <div class="plan-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Facturas, notas de crédito y retenciones</span>
+                            </div>
+                            <div class="plan-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Autorización automática SRI</span>
+                            </div>
+                            <div class="plan-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Soporte técnico incluido</span>
+                            </div>
+                            <div class="plan-feature">
+                                <i class="fas fa-check"></i>
+                                <span>API REST completa</span>
+                            </div>
+                            <div class="plan-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Certificados digitales</span>
+                            </div>
+                            <div class="plan-feature">
+                                <i class="fas fa-check"></i>
+                                <span>Panel de administración</span>
+                            </div>
+                        </div>
+                        
+                        <a href="/accounts/login/?plan=${plan.id}&plan_name=${encodeURIComponent(plan.name)}" class="plan-btn">
+                            Seleccionar Plan
+                        </a>
+                    </div>
+                `;
+                
+                plansContainer.appendChild(planCard);
+            });
+            
+            plansContainer.style.display = 'flex';
+        }
+
+        // NUEVA FUNCIONALIDAD - EFECTOS DE SCROLL
+        function initializeScrollEffects() {
+            const header = document.getElementById('header');
+            const scrollToTop = document.getElementById('scrollToTop');
+
+            window.addEventListener('scroll', function() {
+                const scrollTop = window.pageYOffset;
+
+                // Efecto en el header al hacer scroll
+                if (scrollTop > 50) {
+                    header.classList.add('scrolled');
+                } else {
+                    header.classList.remove('scrolled');
+                }
+
+                // Mostrar/ocultar botón scroll to top
+                if (scrollTop > 300) {
+                    scrollToTop.classList.add('show');
+                } else {
+                    scrollToTop.classList.remove('show');
+                }
+            });
+
+            // Funcionalidad del botón scroll to top
+            scrollToTop.addEventListener('click', function() {
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+            });
+        }
+
+        // Smooth scroll para enlaces internos - FUNCIONALIDAD ORIGINAL CONSERVADA
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Actualizar URL con el tab activo - FUNCIONALIDAD ORIGINAL CONSERVADA
+        document.querySelectorAll('#headerTabs .nav-link:not(#login-tab)').forEach(link => {
+            link.addEventListener('click', function() {
+                const targetHash = this.getAttribute('href');
+                if (targetHash.startsWith('#')) {
+                    history.pushState(null, null, targetHash);
+                }
+            });
+        });
+    </script>
+</body>
+</html>

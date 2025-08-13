@@ -59,24 +59,25 @@ urlpatterns = [
    path('sri-documents/<int:document_id>/resend/', views.sri_document_resend, name='sri_document_resend'),
    path('sri-documents/batch-process/', views.sri_documents_batch_process, name='sri_documents_batch_process'),
    
-   # ==========================================
-   # BILLING / PLANES DE FACTURACIÓN
-   # ==========================================
-   # Planes
-   path('billing/plans/', views.billing_plans_list, name='billing_plans'),
-   path('billing/plans/create/', views.billing_plan_create, name='billing_plan_create'),
-   path('billing/plans/<int:plan_id>/update/', views.billing_plan_update, name='billing_plan_update'),
-   path('billing/plans/<int:plan_id>/delete/', views.billing_plan_delete, name='billing_plan_delete'),
-   
-   # Compras
-   path('billing/purchases/', views.billing_purchases_list, name='billing_purchases'),
-   path('billing/purchases/<uuid:purchase_id>/', views.billing_purchase_detail, name='billing_purchase_detail'),
-   path('billing/purchases/<uuid:purchase_id>/approve/', views.billing_purchase_approve, name='billing_purchase_approve'),
-   path('billing/purchases/<uuid:purchase_id>/reject/', views.billing_purchase_reject, name='billing_purchase_reject'),
-   
-   # Perfiles de facturación
-   path('billing/profiles/', views.billing_company_profiles, name='billing_profiles'),
-   path('billing/profiles/<int:company_id>/add-invoices/', views.billing_add_invoices, name='billing_add_invoices'),
+
+# ==========================================
+# BILLING / PLANES DE FACTURACIÓN - CORREGIDO
+# ==========================================
+# Planes
+    path('billing/plans/', views.billing_plans_list, name='billing_plans'),
+    path('billing/plans/create/', views.billing_plan_create, name='billing_plan_create'),
+    path('billing/plans/<int:plan_id>/update/', views.billing_plan_update, name='billing_plan_update'), 
+    path('billing/plans/<int:plan_id>/delete/', views.billing_plan_delete, name='billing_plan_delete'),
+
+    # Compras
+    path('billing/purchases/', views.billing_purchases_list, name='billing_purchases'),
+    path('billing/purchases/<uuid:purchase_id>/', views.billing_purchase_detail, name='billing_purchase_detail'),
+    path('billing/purchases/<uuid:purchase_id>/approve/', views.billing_purchase_approve, name='billing_purchase_approve'),
+    path('billing/purchases/<uuid:purchase_id>/reject/', views.billing_purchase_reject, name='billing_purchase_reject'),
+
+    # Perfiles de facturación
+    path('billing/profiles/', views.billing_company_profiles, name='billing_profiles'),
+    path('billing/profiles/<int:company_id>/add-invoices/', views.billing_add_invoices, name='billing_add_invoices'),
    
    # Settings
    path('settings/', views.settings_list, name='settings'),

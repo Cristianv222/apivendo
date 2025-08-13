@@ -20,7 +20,20 @@ from datetime import datetime, timedelta
 from functools import wraps
 
 from apps.companies.models import Company, CompanyAPIToken
-from apps.certificates.models import DigitalCertificate
+
+# Importar DigitalCertificate de forma segura
+try:
+    from apps.certificates.models import DigitalCertificate
+except ImportError:
+    try:
+        from apps.core.models import DigitalCertificate
+    except ImportError:
+        # Si no existe el modelo, crear una clase dummy
+        class DigitalCertificate:
+            objects = None
+            
+            class DoesNotExist:
+                pass
 
 # Importar User del sistema de autenticación de Django
 from django.contrib.auth import get_user_model
@@ -362,7 +375,7 @@ def user_dashboard(request):
     has_certificate = False
     certificate_info = {}
     
-    if selected_company:
+    if selected_company and hasattr(DigitalCertificate, 'objects') and DigitalCertificate.objects is not None:
         try:
             certificate = DigitalCertificate.objects.filter(
                 company=selected_company,
@@ -375,12 +388,14 @@ def user_dashboard(request):
                     'issuer': certificate.issuer_name,
                     'subject': certificate.subject_name,
                     'expiry': certificate.valid_to,
-                    'days_left': certificate.days_until_expiration,
-                    'expired': certificate.is_expired,
+                    'days_left': getattr(certificate, 'days_until_expiration', 0),
+                    'expired': getattr(certificate, 'is_expired', False),
                     'serial': certificate.serial_number
                 }
         except Exception as e:
             logger.error(f"Error obteniendo certificado: {e}")
+    elif selected_company:
+        logger.warning("DigitalCertificate model not available - certificate info disabled")
     
     # ==================== BILLING ====================
     current_plan = None
@@ -434,13 +449,13 @@ def user_dashboard(request):
         except Exception as e:
             logger.error(f"Error loading billing data: {e}")
             BILLING_AVAILABLE = False
-    # En la sección de ESTADÍSTICAS, reemplaza desde la línea que dice "# ==================== ESTADÍSTICAS ====================" hasta "except Exception as e:"
 
-    # ==================== ESTADÍSTICAS ====================
+    # ==================== ESTADÍSTICAS CORREGIDAS ====================
     stats = {
         'total_invoices': 0,
         'authorized_invoices': 0,
         'pending_invoices': 0,
+        'rejected_invoices': 0,
         'total_amount': 0
     }
     
@@ -453,116 +468,248 @@ def user_dashboard(request):
         'notas_debito': 0,
     }
     
-    try:
-        from apps.sri_integration.models import ElectronicDocument
-        
-        if selected_company:
-            # Obtener TODOS los tipos de documentos, no solo facturas
-            all_documents = ElectronicDocument.objects.filter(
-                company=selected_company
-            )
+    if selected_company:
+        try:
+            # Intentar obtener SRIConfiguration de la empresa
+            sri_config = None
+            try:
+                from apps.sri_integration.models import SRIConfiguration
+                sri_config = SRIConfiguration.objects.filter(company=selected_company).first()
+            except ImportError:
+                logger.warning("SRIConfiguration model not available")
             
-            # Estadísticas generales (manteniendo compatibilidad)
-            stats = {
-                'total_invoices': all_documents.count(),  # Total de TODOS los documentos
-                'authorized_invoices': all_documents.filter(
-                    status='AUTHORIZED'
-                ).count(),
-                'pending_invoices': all_documents.filter(
-                    status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']
-                ).count(),
-                'total_amount': all_documents.filter(
-                    status='AUTHORIZED'
-                ).aggregate(
-                    total=Sum('total_amount')
-                )['total'] or 0
-            }
-            
-            # Estadísticas por tipo de documento
-            document_stats = {
-                'facturas': all_documents.filter(document_type='INVOICE').count(),
-                'retenciones': all_documents.filter(document_type='RETENTION').count(),
-                'liquidaciones': all_documents.filter(document_type='PURCHASE_SETTLEMENT').count(),
-                'notas_credito': all_documents.filter(document_type='CREDIT_NOTE').count(),
-                'notas_debito': all_documents.filter(document_type='DEBIT_NOTE').count(),
-            }
-            
-            # Documentos recientes - TODOS los tipos
-            recent_invoices = all_documents.order_by('-created_at')[:50]
-            
-            # Agregar campo mapped_type para el filtro del template
-            for doc in recent_invoices:
-                # Mapear los tipos de documento del modelo a los valores del filtro
-                type_mapping = {
-                    'INVOICE': 'factura',
-                    'RETENTION': 'retencion',
-                    'PURCHASE_SETTLEMENT': 'liquidacion',
-                    'CREDIT_NOTE': 'nota_credito',
-                    'DEBIT_NOTE': 'nota_debito',
-                    'REMISSION_GUIDE': 'guia_remision',
-                }
-                doc.mapped_type = type_mapping.get(doc.document_type, 'factura')
+            # Intentar usar el modelo ElectronicDocument si existe
+            try:
+                from apps.sri_integration.models import ElectronicDocument
                 
-                # También agregar el nombre del cliente/proveedor según el tipo
-                if doc.document_type in ['RETENTION', 'PURCHASE_SETTLEMENT']:
-                    # Para retenciones y liquidaciones, buscar el campo supplier
-                    doc.client_name = getattr(doc, 'supplier_name', doc.customer_name)
-                else:
-                    doc.client_name = doc.customer_name
-            
-    except Exception as e:
-        logger.error(f"Error obteniendo estadísticas: {e}")
-    
-    # Estados disponibles para el filtro
-    INVOICE_STATUS_CHOICES = [
-        ('pending', 'Pendiente'),
-        ('authorized', 'Autorizada'),
-        ('rejected', 'Rechazada'),
-        ('cancelled', 'Cancelada'),
-        ('sent', 'Enviada'),
-    ]
-    
-    # 🔑 Obtener el token actual de la URL
-    current_token = request.GET.get('token')
-    
+                all_documents = ElectronicDocument.objects.filter(
+                    company=selected_company
+                )
+                
+                # Estadísticas generales
+                stats = {
+                    'total_invoices': all_documents.count(),
+                    'authorized_invoices': all_documents.filter(status='AUTHORIZED').count(),
+                    'pending_invoices': all_documents.filter(
+                        status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']
+                    ).count(),
+                    'rejected_invoices': all_documents.filter(
+                        status__in=['REJECTED', 'ERROR']
+                    ).count(),
+                    'total_amount': all_documents.filter(
+                        status='AUTHORIZED'
+                    ).aggregate(total=Sum('total_amount'))['total'] or 0
+                }
+                
+                # Estadísticas por tipo
+                document_stats = {
+                    'facturas': all_documents.filter(document_type='INVOICE').count(),
+                    'retenciones': all_documents.filter(document_type='RETENTION').count(),
+                    'liquidaciones': all_documents.filter(document_type='PURCHASE_SETTLEMENT').count(),
+                    'notas_credito': all_documents.filter(document_type='CREDIT_NOTE').count(),
+                    'notas_debito': all_documents.filter(document_type='DEBIT_NOTE').count(),
+                }
+                
+                # Documentos recientes
+                recent_docs = all_documents.order_by('-created_at')[:50]
+                
+                for doc in recent_docs:
+                    # Mapear tipos para el template
+                    type_mapping = {
+                        'INVOICE': 'factura',
+                        'RETENTION': 'retencion', 
+                        'PURCHASE_SETTLEMENT': 'liquidacion',
+                        'CREDIT_NOTE': 'nota_credito',
+                        'DEBIT_NOTE': 'nota_debito',
+                    }
+                    
+                    # Crear objeto compatible con el template
+                    doc_data = {
+                        'id': doc.id,
+                        'document_type': doc.document_type,
+                        'mapped_type': type_mapping.get(doc.document_type, 'factura'),
+                        'document_number': getattr(doc, 'document_number', None) or getattr(doc, 'sequence_number', str(doc.id)),
+                        'client_name': getattr(doc, 'customer_name', None) or getattr(doc, 'supplier_name', 'Cliente'),
+                        'total_amount': float(getattr(doc, 'total_amount', 0) or 0),
+                        'status': doc.status,
+                        'created_at': doc.created_at,
+                    }
+                    recent_invoices.append(type('Document', (), doc_data)())
+                
+            except ImportError:
+                logger.info("ElectronicDocument model not available, trying individual models...")
+                
+                # Fallback: usar modelos individuales si ElectronicDocument no existe
+                all_documents = []
+                
+                try:
+                    from apps.sri_integration.models import Invoice
+                    if sri_config:
+                        facturas = Invoice.objects.filter(sri_config=sri_config)
+                    else:
+                        facturas = Invoice.objects.filter(company=selected_company)
+                    
+                    document_stats['facturas'] = facturas.count()
+                    
+                    for factura in facturas.order_by('-created_at')[:20]:
+                        doc_data = {
+                            'id': factura.id,
+                            'document_type': 'INVOICE',
+                            'mapped_type': 'factura',
+                            'document_number': getattr(factura, 'sequence_number', str(factura.id)),
+                            'client_name': getattr(factura, 'customer_name', 'Cliente'),
+                            'total_amount': float(getattr(factura, 'total_amount', 0) or 0),
+                            'status': factura.status,
+                            'created_at': factura.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("Invoice model not available")
+                
+                try:
+                    from apps.sri_integration.models import Retention
+                    if sri_config:
+                        retenciones = Retention.objects.filter(sri_config=sri_config)
+                    else:
+                        retenciones = Retention.objects.filter(company=selected_company)
+                    
+                    document_stats['retenciones'] = retenciones.count()
+                    
+                    for retencion in retenciones.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': retencion.id,
+                            'document_type': 'RETENTION',
+                            'mapped_type': 'retencion',
+                            'document_number': getattr(retencion, 'sequence_number', str(retencion.id)),
+                            'client_name': getattr(retencion, 'supplier_name', 'Proveedor'),
+                            'total_amount': float(getattr(retencion, 'total_amount', 0) or 0),
+                            'status': retencion.status,
+                            'created_at': retencion.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("Retention model not available")
+                
+                try:
+                    from apps.sri_integration.models import PurchaseSettlement
+                    if sri_config:
+                        liquidaciones = PurchaseSettlement.objects.filter(sri_config=sri_config)
+                    else:
+                        liquidaciones = PurchaseSettlement.objects.filter(company=selected_company)
+                    
+                    document_stats['liquidaciones'] = liquidaciones.count()
+                    
+                    for liquidacion in liquidaciones.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': liquidacion.id,
+                            'document_type': 'PURCHASE_SETTLEMENT',
+                            'mapped_type': 'liquidacion',
+                            'document_number': getattr(liquidacion, 'sequence_number', str(liquidacion.id)),
+                            'client_name': getattr(liquidacion, 'supplier_name', 'Proveedor'),
+                            'total_amount': float(getattr(liquidacion, 'total_amount', 0) or 0),
+                            'status': liquidacion.status,
+                            'created_at': liquidacion.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("PurchaseSettlement model not available")
+                
+                try:
+                    from apps.sri_integration.models import CreditNote
+                    if sri_config:
+                        notas_credito = CreditNote.objects.filter(sri_config=sri_config)
+                    else:
+                        notas_credito = CreditNote.objects.filter(company=selected_company)
+                    
+                    document_stats['notas_credito'] = notas_credito.count()
+                    
+                    for nota in notas_credito.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': nota.id,
+                            'document_type': 'CREDIT_NOTE',
+                            'mapped_type': 'nota_credito',
+                            'document_number': getattr(nota, 'sequence_number', str(nota.id)),
+                            'client_name': getattr(nota, 'customer_name', 'Cliente'),
+                            'total_amount': float(getattr(nota, 'total_amount', 0) or 0),
+                            'status': nota.status,
+                            'created_at': nota.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("CreditNote model not available")
+                
+                try:
+                    from apps.sri_integration.models import DebitNote
+                    if sri_config:
+                        notas_debito = DebitNote.objects.filter(sri_config=sri_config)
+                    else:
+                        notas_debito = DebitNote.objects.filter(company=selected_company)
+                    
+                    document_stats['notas_debito'] = notas_debito.count()
+                    
+                    for nota in notas_debito.order_by('-created_at')[:10]:
+                        doc_data = {
+                            'id': nota.id,
+                            'document_type': 'DEBIT_NOTE',
+                            'mapped_type': 'nota_debito',
+                            'document_number': getattr(nota, 'sequence_number', str(nota.id)),
+                            'client_name': getattr(nota, 'customer_name', 'Cliente'),
+                            'total_amount': float(getattr(nota, 'total_amount', 0) or 0),
+                            'status': nota.status,
+                            'created_at': nota.created_at,
+                        }
+                        all_documents.append(doc_data)
+                except ImportError:
+                    logger.warning("DebitNote model not available")
+                
+                # Ordenar todos los documentos por fecha
+                all_documents.sort(key=lambda x: x['created_at'], reverse=True)
+                
+                # Convertir a objetos para compatibilidad con template
+                for doc_data in all_documents[:50]:
+                    recent_invoices.append(type('Document', (), doc_data)())
+                
+                # Calcular estadísticas generales
+                total_docs = len(all_documents)
+                authorized_docs = len([d for d in all_documents if d['status'] == 'AUTHORIZED'])
+                pending_docs = len([d for d in all_documents if d['status'] in ['DRAFT', 'GENERATED', 'SIGNED', 'SENT']])
+                rejected_docs = len([d for d in all_documents if d['status'] in ['REJECTED', 'ERROR']])
+                total_amount = sum(d['total_amount'] for d in all_documents if d['status'] == 'AUTHORIZED')
+                
+                stats = {
+                    'total_invoices': total_docs,
+                    'authorized_invoices': authorized_docs,
+                    'pending_invoices': pending_docs,
+                    'rejected_invoices': rejected_docs,
+                    'total_amount': total_amount
+                }
+                
+        except Exception as e:
+            logger.error(f"Error obteniendo estadísticas para empresa {selected_company.business_name}: {e}")
+            # Mantener valores por defecto en caso de error
+
+    # ==================== PREPARAR CONTEXTO FINAL ====================
     context = {
-        'user_companies': user_companies,
+        'user': user,
         'selected_company': selected_company,
         'selected_token': selected_token,
         'available_companies_with_tokens': available_companies_with_tokens,
         'has_certificate': has_certificate,
         'certificate_info': certificate_info,
-        'certificate_expired': certificate_info.get('expired', False),
-        'certificate_expiry': certificate_info.get('expiry'),
-        'certificate_days_left': certificate_info.get('days_left', 0),
-        'certificate_issuer': certificate_info.get('issuer'),
         'stats': stats,
-        'recent_invoices': recent_invoices,
         'document_stats': document_stats,
-        'status_choices': INVOICE_STATUS_CHOICES,
-        'is_admin': False,
-        'current_filters': {
-            'token': current_token,
-            'status': request.GET.get('status'),
-            'date_from': request.GET.get('date_from'),
-            'date_to': request.GET.get('date_to'),
-        },
-        'token_mode': True,
-        'smart_mode': True,
-        'security_validation': {
-            'validated_by_decorator': True,
-            'user_access_confirmed': True,
-            'companies_filtered_by_user': True,
-            'token_based_access': True,
-            'smart_redirect_enabled': True,
-            'current_token': current_token[:20] + '...' if current_token else None,
-        },
-        # Variables de billing
-        'billing_available': BILLING_AVAILABLE,
-        'billing_profile': billing_profile,
+        'recent_invoices': recent_invoices,
         'current_plan': current_plan,
         'all_plans': all_plans,
         'recent_purchases': recent_purchases,
+        'billing_profile': billing_profile,
+        'billing_available': BILLING_AVAILABLE,
+        'page_title': 'Dashboard Principal',
+        'security_validation': {
+            'token_system_enabled': True,
+            'user_access_confirmed': True,
+            'company_validated': selected_company is not None,
+        }
     }
     
     return render(request, 'dashboard/user_dashboard.html', context)
@@ -573,7 +720,7 @@ def user_dashboard(request):
 @require_POST
 def company_update(request, company_id):
     """
-    Vista AJAX para actualizar información de la empresa
+    Vista AJAX para actualizar información de la empresa - VERSIÓN CORREGIDA
     """
     company = get_object_or_404(Company, id=company_id)
     
@@ -587,61 +734,161 @@ def company_update(request, company_id):
     
     try:
         with transaction.atomic():
-            # Actualizar campos básicos
-            company.business_name = request.POST.get('business_name', company.business_name)
-            company.trade_name = request.POST.get('trade_name', '')
-            company.email = request.POST.get('email', company.email)
-            company.phone = request.POST.get('phone', '')
-            company.address = request.POST.get('address', company.address)
-            company.ciudad = request.POST.get('ciudad', '')
-            company.provincia = request.POST.get('provincia', '')
-            company.codigo_postal = request.POST.get('codigo_postal', '')
-            company.website = request.POST.get('website', '')
+            # Validar datos obligatorios
+            required_fields = {
+                'business_name': 'La razón social es obligatoria',
+                'email': 'El email es obligatorio',
+                'address': 'La dirección es obligatoria',
+                'codigo_establecimiento': 'El código de establecimiento es obligatorio',
+                'codigo_punto_emision': 'El código de punto emisión es obligatorio',
+            }
             
-            # Actualizar campos SRI
+            errors = {}
+            for field, error_msg in required_fields.items():
+                value = request.POST.get(field, '').strip()
+                if not value:
+                    errors[field] = [error_msg]
+            
+            if errors:
+                return JsonResponse({
+                    'success': False,
+                    'errors': errors
+                }, status=400)
+            
+            # Actualizar campos básicos con validación
+            business_name = request.POST.get('business_name', '').strip()
+            if len(business_name) < 3:
+                errors['business_name'] = ['La razón social debe tener al menos 3 caracteres']
+            
+            email = request.POST.get('email', '').strip().lower()
+            if not email or '@' not in email:
+                errors['email'] = ['Ingrese un email válido']
+            
+            address = request.POST.get('address', '').strip()
+            if len(address) < 10:
+                errors['address'] = ['La dirección debe tener al menos 10 caracteres']
+            
+            # Validar códigos SRI
+            codigo_establecimiento = request.POST.get('codigo_establecimiento', '').strip()
+            if not codigo_establecimiento.isdigit() or len(codigo_establecimiento) != 3:
+                errors['codigo_establecimiento'] = ['Debe ser exactamente 3 dígitos']
+            
+            codigo_punto_emision = request.POST.get('codigo_punto_emision', '').strip()
+            if not codigo_punto_emision.isdigit() or len(codigo_punto_emision) != 3:
+                errors['codigo_punto_emision'] = ['Debe ser exactamente 3 dígitos']
+            
+            if errors:
+                return JsonResponse({
+                    'success': False,
+                    'errors': errors
+                }, status=400)
+            
+            # Actualizar campos validados
+            company.business_name = business_name
+            company.trade_name = request.POST.get('trade_name', '').strip()
+            company.email = email
+            company.phone = request.POST.get('phone', '').strip()
+            company.address = address
+            
+            # Campos geográficos - IMPORTANTE: estos estaban fallando
+            company.ciudad = request.POST.get('ciudad', '').strip().title()
+            company.provincia = request.POST.get('provincia', '').strip().title()
+            company.codigo_postal = request.POST.get('codigo_postal', '').strip()
+            company.website = request.POST.get('website', '').strip()
+            
+            # Campos SRI
             company.tipo_contribuyente = request.POST.get('tipo_contribuyente', company.tipo_contribuyente)
             company.obligado_contabilidad = request.POST.get('obligado_contabilidad', company.obligado_contabilidad)
-            company.contribuyente_especial = request.POST.get('contribuyente_especial', '') or None
-            company.codigo_establecimiento = request.POST.get('codigo_establecimiento', company.codigo_establecimiento)
-            company.codigo_punto_emision = request.POST.get('codigo_punto_emision', company.codigo_punto_emision)
+            
+            # Contribuyente especial - puede estar vacío
+            contribuyente_especial = request.POST.get('contribuyente_especial', '').strip()
+            company.contribuyente_especial = contribuyente_especial if contribuyente_especial else None
+            
+            company.codigo_establecimiento = codigo_establecimiento
+            company.codigo_punto_emision = codigo_punto_emision
             company.ambiente_sri = request.POST.get('ambiente_sri', company.ambiente_sri)
             company.tipo_emision = request.POST.get('tipo_emision', company.tipo_emision)
             
             # Manejar logo si se subió
             if 'logo' in request.FILES:
-                company.logo = request.FILES['logo']
+                logo_file = request.FILES['logo']
+                
+                # Validar tipo de archivo
+                valid_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+                file_extension = logo_file.name.lower()[logo_file.name.rfind('.'):]
+                
+                if file_extension not in valid_extensions:
+                    return JsonResponse({
+                        'success': False,
+                        'errors': {'logo': ['Solo se permiten archivos de imagen (JPG, PNG, GIF, BMP, WebP)']}
+                    }, status=400)
+                
+                # Validar tamaño (máximo 5MB)
+                if logo_file.size > 5 * 1024 * 1024:
+                    return JsonResponse({
+                        'success': False,
+                        'errors': {'logo': ['El archivo no puede superar los 5MB']}
+                    }, status=400)
+                
+                company.logo = logo_file
             
             # Validar y guardar
             company.full_clean()
             company.save()
             
-            # Manejar certificado si se subió
-            if 'certificate_file' in request.FILES:
-                handle_certificate_upload(
-                    company=company,
-                    file=request.FILES['certificate_file'],
-                    password=request.POST.get('certificate_password', ''),
-                    alias=request.POST.get('certificate_alias', ''),
-                    user=request.user
-                )
-            
+            # Log de éxito
             logger.info(f"✅ Company {company.business_name} updated by {request.user.username}")
+            logger.info(f"✅ Campos actualizados: ciudad={company.ciudad}, provincia={company.provincia}")
+            
+            # Manejar certificado si se subió
+            certificate_message = ""
+            if 'certificate_file' in request.FILES and request.POST.get('certificate_password'):
+                try:
+                    certificate = handle_certificate_upload(
+                        company=company,
+                        file=request.FILES['certificate_file'],
+                        password=request.POST.get('certificate_password', ''),
+                        alias=request.POST.get('certificate_alias', 'Certificado Principal'),
+                        user=request.user
+                    )
+                    certificate_message = " y certificado actualizado"
+                except Exception as cert_error:
+                    logger.error(f"Error actualizando certificado: {cert_error}")
+                    # No fallar toda la operación por el certificado
+                    certificate_message = " (error al actualizar certificado)"
             
             return JsonResponse({
                 'success': True,
-                'message': 'Información actualizada correctamente'
+                'message': f'Información actualizada correctamente{certificate_message}',
+                'data': {
+                    'business_name': company.business_name,
+                    'trade_name': company.trade_name,
+                    'ciudad': company.ciudad,
+                    'provincia': company.provincia,
+                    'email': company.email,
+                    'phone': company.phone,
+                    'address': company.address,
+                }
             })
             
     except ValidationError as e:
+        logger.error(f"Validation error: {e}")
+        error_dict = {}
+        if hasattr(e, 'message_dict'):
+            error_dict = e.message_dict
+        else:
+            error_dict = {'general': str(e)}
+        
         return JsonResponse({
             'success': False,
-            'errors': e.message_dict if hasattr(e, 'message_dict') else {'general': str(e)}
+            'errors': error_dict
         }, status=400)
+        
     except Exception as e:
-        logger.error(f"Error updating company: {str(e)}")
+        logger.error(f"Error updating company {company_id}: {str(e)}")
         return JsonResponse({
             'success': False,
-            'errors': {'general': f'Error al actualizar: {str(e)}'}
+            'errors': {'general': f'Error interno: {str(e)}'}
         }, status=500)
 
 
@@ -712,6 +959,10 @@ def handle_certificate_upload(company, file, password, alias, user):
     """
     Maneja la carga y procesamiento del certificado digital
     """
+    # Verificar si el modelo DigitalCertificate está disponible
+    if not hasattr(DigitalCertificate, 'objects') or DigitalCertificate.objects is None:
+        raise ValueError("El sistema de certificados no está disponible. Contacte al administrador.")
+    
     from cryptography.hazmat.primitives.serialization import pkcs12
     from cryptography import x509
     from cryptography.hazmat.backends import default_backend
@@ -761,11 +1012,15 @@ def handle_certificate_upload(company, file, password, alias, user):
             valid_to=certificate.not_valid_after,
             status='ACTIVE',
             created_by=user,
-            environment='TEST' if company.ambiente_sri == '1' else 'PRODUCTION'
         )
         
-        # Establecer contraseña hasheada
-        new_cert.set_password(password)
+        # Solo agregar environment si el campo existe
+        if hasattr(new_cert, 'environment'):
+            new_cert.environment = 'TEST' if company.ambiente_sri == '1' else 'PRODUCTION'
+        
+        # Establecer contraseña hasheada si el método existe
+        if hasattr(new_cert, 'set_password'):
+            new_cert.set_password(password)
         
         # Guardar archivo
         file.seek(0)  # Volver al inicio del archivo
@@ -797,18 +1052,28 @@ def company_info_modal(request, company_id):
     
     # Obtener información del certificado si existe
     certificate_info = None
-    try:
-        certificate = company.digital_certificate
-        if certificate:
-            certificate_info = {
-                'has_certificate': True,
-                'issuer': certificate.issuer_name,
-                'valid_until': certificate.valid_to.strftime('%d/%m/%Y'),
-                'days_left': certificate.days_until_expiration,
-                'is_expired': certificate.is_expired,
-                'is_active': certificate.status == 'ACTIVE'
-            }
-    except:
+    if hasattr(DigitalCertificate, 'objects') and DigitalCertificate.objects is not None:
+        try:
+            certificate = DigitalCertificate.objects.filter(
+                company=company,
+                status='ACTIVE'
+            ).first()
+            
+            if certificate:
+                certificate_info = {
+                    'has_certificate': True,
+                    'issuer': certificate.issuer_name,
+                    'valid_until': certificate.valid_to.strftime('%d/%m/%Y'),
+                    'days_left': getattr(certificate, 'days_until_expiration', 0),
+                    'is_expired': getattr(certificate, 'is_expired', False),
+                    'is_active': certificate.status == 'ACTIVE'
+                }
+            else:
+                certificate_info = {'has_certificate': False}
+        except Exception as e:
+            logger.error(f"Error getting certificate info: {e}")
+            certificate_info = {'has_certificate': False}
+    else:
         certificate_info = {'has_certificate': False}
     
     # Preparar datos para el formulario
@@ -1354,3 +1619,396 @@ def company_tokens_view(request):
     }
     
     return render(request, 'dashboard/company_tokens.html', context)
+
+
+@login_required  
+@audit_html_action('CREATE_COMPANY_TOKEN')
+@require_POST
+def create_company_token(request, company_id):
+    """
+    🔑 API para crear nuevo token para una empresa
+    
+    POST /dashboard/companies/{company_id}/tokens/create/
+    """
+    company = get_object_or_404(Company, id=company_id)
+    
+    # Verificar permisos
+    user_companies = get_user_companies_secure(request.user)
+    if not user_companies.filter(id=company.id).exists() and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': 'No tienes permisos para crear tokens de esta empresa'
+        }, status=403)
+    
+    try:
+        # Obtener nombre del token del request
+        token_name = request.POST.get('name', f'Token para {company.business_name}')
+        
+        # Crear nuevo token
+        new_token = CompanyAPIToken.objects.create(
+            company=company,
+            name=token_name,
+            is_active=True
+        )
+        
+        logger.info(f"✅ New token created for company {company.business_name} by {request.user.username}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': True,
+                'message': 'Token creado exitosamente',
+                'token': {
+                    'id': new_token.id,
+                    'key': new_token.key,
+                    'name': new_token.name,
+                    'created_at': new_token.created_at.strftime('%d/%m/%Y %H:%M'),
+                    'is_active': new_token.is_active,
+                    'dashboard_url': f"/dashboard/?token={new_token.key}",
+                    'token_display': new_token.key[:20] + '...'
+                }
+            })
+        
+        messages.success(request, f'Token creado exitosamente para {company.business_name}')
+        return redirect('core:dashboard')
+        
+    except Exception as e:
+        logger.error(f"Error creating token for company {company_id}: {str(e)}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': False,
+                'error': f'Error al crear token: {str(e)}'
+            }, status=500)
+        
+        messages.error(request, f'Error al crear token: {str(e)}')
+        return redirect('core:dashboard')
+
+
+@login_required
+@audit_html_action('DEACTIVATE_COMPANY_TOKEN')
+@require_POST
+def deactivate_company_token(request, token_id):
+    """
+    🔑 API para desactivar un token específico
+    
+    POST /dashboard/tokens/{token_id}/deactivate/
+    """
+    token = get_object_or_404(CompanyAPIToken, id=token_id)
+    
+    # Verificar permisos
+    user_companies = get_user_companies_secure(request.user)
+    if not user_companies.filter(id=token.company.id).exists() and not request.user.is_staff:
+        return JsonResponse({
+            'success': False,
+            'error': 'No tienes permisos para gestionar tokens de esta empresa'
+        }, status=403)
+    
+    try:
+        # Verificar que no sea el único token activo
+        active_tokens = CompanyAPIToken.objects.filter(
+            company=token.company,
+            is_active=True
+        ).count()
+        
+        if active_tokens == 1:
+            return JsonResponse({
+                'success': False,
+                'error': 'No puedes desactivar el único token activo. Crea otro token primero.'
+            }, status=400)
+        
+        # Desactivar token
+        token.is_active = False
+        token.save()
+        
+        logger.info(f"✅ Token {token.key[:20]}... deactivated by {request.user.username}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': True,
+                'message': 'Token desactivado exitosamente'
+            })
+        
+        messages.success(request, 'Token desactivado exitosamente')
+        return redirect('core:dashboard')
+        
+    except Exception as e:
+        logger.error(f"Error deactivating token {token_id}: {str(e)}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': False,
+                'error': f'Error al desactivar token: {str(e)}'
+            }, status=500)
+        
+        messages.error(request, f'Error al desactivar token: {str(e)}')
+        return redirect('core:dashboard')
+
+
+# ========== VISTAS DE UTILIDAD ==========
+
+@login_required
+def test_api_connection(request):
+    """
+    🔧 Vista de prueba para validar conexión API con tokens
+    """
+    user_companies = get_user_companies_secure(request.user)
+    
+    test_results = []
+    
+    for company in user_companies:
+        try:
+            # Obtener token de la empresa
+            company_token = CompanyAPIToken.objects.filter(
+                company=company,
+                is_active=True
+            ).first()
+            
+            if company_token:
+                test_result = {
+                    'company_name': company.business_name,
+                    'company_id': company.id,
+                    'token_available': True,
+                    'token_display': company_token.key[:20] + '...',
+                    'api_url': f"/api/companies/?token={company_token.key}",
+                    'dashboard_url': f"/dashboard/?token={company_token.key}",
+                    'status': 'OK'
+                }
+            else:
+                test_result = {
+                    'company_name': company.business_name,
+                    'company_id': company.id,
+                    'token_available': False,
+                    'token_display': 'N/A',
+                    'api_url': 'N/A',
+                    'dashboard_url': 'N/A',
+                    'status': 'ERROR: No token available'
+                }
+            
+            test_results.append(test_result)
+            
+        except Exception as e:
+            test_results.append({
+                'company_name': company.business_name,
+                'company_id': company.id,
+                'token_available': False,
+                'token_display': 'ERROR',
+                'api_url': 'N/A',
+                'dashboard_url': 'N/A',
+                'status': f'ERROR: {str(e)}'
+            })
+    
+    context = {
+        'test_results': test_results,
+        'user': request.user,
+        'total_companies': user_companies.count(),
+        'page_title': 'Test de Conexión API'
+    }
+    
+    return render(request, 'dashboard/api_test.html', context)
+
+
+@login_required
+def health_check(request):
+    """
+    🏥 Health check para verificar el estado del sistema
+    """
+    try:
+        # Verificar conexión a base de datos
+        db_status = "OK"
+        try:
+            User.objects.count()
+        except Exception as e:
+            db_status = f"ERROR: {str(e)}"
+        
+        # Verificar modelos principales
+        models_status = {}
+        try:
+            models_status['companies'] = Company.objects.count()
+            models_status['tokens'] = CompanyAPIToken.objects.count()
+            models_status['certificates'] = DigitalCertificate.objects.count()
+        except Exception as e:
+            models_status['error'] = str(e)
+        
+        # Verificar funciones críticas
+        functions_status = {}
+        try:
+            test_companies = get_user_companies_secure(request.user)
+            functions_status['get_user_companies'] = f"OK - {test_companies.count()} companies"
+        except Exception as e:
+            functions_status['get_user_companies'] = f"ERROR: {str(e)}"
+        
+        health_data = {
+            'status': 'OK' if db_status == 'OK' else 'ERROR',
+            'timestamp': timezone.now().isoformat(),
+            'user': request.user.username,
+            'database': db_status,
+            'models': models_status,
+            'functions': functions_status,
+            'version': '2.0.0-tokens'
+        }
+        
+        return JsonResponse(health_data)
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'ERROR',
+            'timestamp': timezone.now().isoformat(),
+            'error': str(e)
+        }, status=500)
+
+
+# ========== MANEJADORES DE ERRORES ==========
+
+def handler404(request, exception):
+    """
+    Manejador personalizado para errores 404
+    """
+    logger.warning(f"404 Error: {request.path} requested by {getattr(request.user, 'username', 'anonymous')}")
+    
+    context = {
+        'error_code': '404',
+        'error_message': 'Página no encontrada',
+        'error_description': 'La página que buscas no existe o ha sido movida',
+        'user': request.user if request.user.is_authenticated else None,
+    }
+    
+    return render(request, 'errors/404.html', context, status=404)
+
+
+def handler500(request):
+    """
+    Manejador personalizado para errores 500
+    """
+    logger.error(f"500 Error: {request.path} requested by {getattr(request.user, 'username', 'anonymous')}")
+    
+    context = {
+        'error_code': '500',
+        'error_message': 'Error interno del servidor',
+        'error_description': 'Ha ocurrido un error interno. El equipo técnico ha sido notificado.',
+        'user': request.user if request.user.is_authenticated else None,
+    }
+    
+    return render(request, 'errors/500.html', context, status=500)
+def prepare_documents_for_template(all_documents):
+    """
+    Prepara los documentos para el template asegurando que tengan todos los campos necesarios
+    """
+    prepared_documents = []
+    
+    for doc in all_documents:
+        try:
+            # Determinar si es un objeto o diccionario
+            if hasattr(doc, '__dict__'):
+                # Es un objeto del modelo
+                doc_data = {
+                    'id': getattr(doc, 'id', 0),
+                    'document_type': getattr(doc, 'document_type', 'UNKNOWN'),
+                    'mapped_type': _get_mapped_type(getattr(doc, 'document_type', 'UNKNOWN')),
+                    'document_number': getattr(doc, 'document_number', str(getattr(doc, 'id', 'N/A'))),
+                    'client_name': _get_client_name(doc),
+                    'total_amount': float(getattr(doc, 'total_amount', 0) or 0),
+                    'status': getattr(doc, 'status', 'UNKNOWN'),
+                    'created_at': getattr(doc, 'created_at', None),
+                }
+            else:
+                # Es un diccionario
+                doc_data = {
+                    'id': doc.get('id', 0),
+                    'document_type': doc.get('document_type', 'UNKNOWN'),
+                    'mapped_type': _get_mapped_type(doc.get('document_type', 'UNKNOWN')),
+                    'document_number': doc.get('document_number', str(doc.get('id', 'N/A'))),
+                    'client_name': doc.get('client_name', 'Cliente'),
+                    'total_amount': float(doc.get('total_amount', 0) or 0),
+                    'status': doc.get('status', 'UNKNOWN'),
+                    'created_at': doc.get('created_at', None),
+                }
+            
+            # Crear objeto tipo documento para compatibilidad con template
+            document_obj = type('Document', (), doc_data)()
+            prepared_documents.append(document_obj)
+            
+        except Exception as e:
+            logger.error(f"Error preparando documento para template: {e}")
+            # Crear documento por defecto en caso de error
+            fallback_doc = type('Document', (), {
+                'id': getattr(doc, 'id', 0) if hasattr(doc, 'id') else doc.get('id', 0),
+                'document_type': 'UNKNOWN',
+                'mapped_type': 'unknown',
+                'document_number': 'ERROR',
+                'client_name': 'Error',
+                'total_amount': 0.0,
+                'status': 'ERROR',
+                'created_at': None,
+            })()
+            prepared_documents.append(fallback_doc)
+    
+    return prepared_documents
+
+
+def _get_mapped_type(document_type):
+    """Mapea el tipo de documento al formato esperado por el template"""
+    type_mapping = {
+        'INVOICE': 'factura',
+        'RETENTION': 'retencion', 
+        'PURCHASE_SETTLEMENT': 'liquidacion',
+        'CREDIT_NOTE': 'nota_credito',
+        'DEBIT_NOTE': 'nota_debito',
+        'REMISSION_GUIDE': 'guia_remision',
+    }
+    return type_mapping.get(document_type, 'documento')
+
+
+def _get_client_name(doc):
+    """Obtiene el nombre del cliente según el tipo de documento"""
+    # Lista de posibles campos de nombre de cliente
+    client_fields = [
+        'customer_name', 'client_name', 'supplier_name', 
+        'customer', 'client', 'supplier'
+    ]
+    
+    for field in client_fields:
+        value = getattr(doc, field, None)
+        if value:
+            return value
+    
+    return 'Cliente'
+# Al final de apps/core/views.py agregar:
+
+def public_landing_view(request):
+    """
+    Vista PÚBLICA para la landing page - NO requiere autenticación
+    """
+    try:
+        from apps.billing.models import Plan
+        import json
+        
+        # Obtener planes activos (consulta pública)
+        all_plans = Plan.objects.filter(is_active=True).order_by('sort_order', 'price')
+        
+        # Serializar para JavaScript igual que el dashboard
+        plans_data = []
+        for plan in all_plans:
+            plans_data.append({
+                'id': plan.id,
+                'name': plan.name,
+                'description': plan.description or f'Plan {plan.name}',
+                'invoice_limit': plan.invoice_limit,
+                'price': float(plan.price),
+                'is_featured': plan.is_featured,
+            })
+        
+        context = {
+            'plans_data': json.dumps(plans_data),
+            'total_plans': len(plans_data),
+            'page_title': 'APIVENDO - Sistema de Facturación Electrónica SRI Ecuador',
+        }
+        
+    except Exception as e:
+        # Si hay error, mostrar página sin planes
+        context = {
+            'plans_data': json.dumps([]),
+            'total_plans': 0,
+            'page_title': 'APIVENDO - Sistema de Facturación Electrónica SRI Ecuador',
+        }
+    
+    return render(request, 'landing/index.html', context)
