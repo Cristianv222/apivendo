@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VENDO API - Inicia Sesión</title>
+    <title>FronteraTech - Inicia Sesión</title>
     {% load static %}
     {% load socialaccount %}
     
@@ -815,11 +815,10 @@
         <!-- Sección izquierda - Información de API -->
         <div class="info-section">
             <div class="logo-section">
-                <div class="logo-icon">
-                    <i class="fas fa-code"></i>
-                </div>
-                <div class="logo-text">VENDO<span class="api-badge">API</span></div>
-            </div>
+                <img src="{% static 'images/frontera-logo-full.png' %}" alt="FronteraTech" 
+                    style="height: 64px; width: auto; margin-bottom: 12px; max-width: 100%;">
+                <div class="api-badge">API</div>
+            </div>  
             
             <div class="description">
                 API REST de facturación electrónica con integración directa al SRI Ecuador. Sistema completo para emisión y gestión de documentos tributarios.
@@ -889,9 +888,6 @@
                 <div class="mode-selector">
                     <button class="mode-btn active" data-mode="session" id="sessionModeBtn">
                         <i class="fas fa-globe"></i> Navegador
-                    </button>
-                    <button class="mode-btn" data-mode="token" id="tokenModeBtn">
-                        <i class="fas fa-key"></i> Tokens API
                     </button>
                 </div>
                 <div class="mode-description" id="modeDescription">
