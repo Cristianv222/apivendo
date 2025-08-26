@@ -12,306 +12,923 @@
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
         <style>
-            body {
-                background-color: #f8f9fa;
-            }
-            
-            .stat-card {
-                background: white;
-                border-radius: 8px;
-                padding: 1.25rem;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                height: 100%;
-                border: 1px solid #e9ecef;
-            }
-            
-            .stat-card h3 {
-                font-size: 1.75rem;
-                font-weight: 600;
-                margin: 0;
-                color: #333;
-            }
-            
-            .stat-card p {
-                color: #6c757d;
-                margin: 0;
-                font-size: 0.875rem;
-            }
-            
-            .stat-card .icon {
-                font-size: 2rem;
-                opacity: 0.2;
-                position: absolute;
-                right: 1rem;
-                top: 1rem;
-            }
-            
-            .section-card {
-                background: white;
-                border-radius: 8px;
-                padding: 1.5rem;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                margin-bottom: 1.5rem;
-                border: 1px solid #e9ecef;
-            }
-            
-            .section-title {
-                font-size: 1.125rem;
-                font-weight: 600;
-                margin-bottom: 1rem;
-                color: #333;
-            }
-            
-            .plan-badge {
-                background: #0d6efd;
-                color: white;
-                padding: 0.375rem 0.75rem;
-                border-radius: 4px;
-                display: inline-block;
-                font-weight: 500;
-                font-size: 0.875rem;
-            }
-            
-            .plan-badge.no-plan {
-                background: #6c757d;
-            }
-            
-            .invoice-counter {
-                font-size: 2.5rem;
-                font-weight: 700;
-                color: #333;
-            }
-            
-            .invoice-counter.danger {
-                color: #dc3545;
-            }
-            
-            .invoice-counter.warning {
-                color: #f39c12;
-            }
-            
-            .invoice-counter.success {
-                color: #28a745;
-            }
-            
-            .progress {
-                height: 8px;
-                border-radius: 4px;
-                background-color: #e9ecef;
-            }
-            
-            .progress-bar {
-                background-color: #0d6efd;
-            }
-            
-            .alert-custom {
-                border-radius: 6px;
-                border: none;
-                padding: 1rem;
-                font-size: 0.875rem;
-            }
-            
-            .alert-danger {
-                background-color: #f8d7da;
-                color: #721c24;
-            }
-            
-            .alert-warning {
-                background-color: #fff3cd;
-                color: #856404;
-            }
-            
-            .table-custom th {
-                border-top: none;
-                font-weight: 600;
-                color: #6c757d;
-                font-size: 0.875rem;
-                text-transform: uppercase;
-            }
-            
-            .badge-status {
-                padding: 0.25rem 0.5rem;
-                border-radius: 3px;
-                font-size: 0.75rem;
-                font-weight: 500;
-            }
-            
-            .badge-pending { background: #fff3cd; color: #856404; }
-            .badge-approved { background: #d4edda; color: #155724; }
-            .badge-rejected { background: #f8d7da; color: #721c24; }
-            
-            .chart-container {
-                position: relative;
-                height: 250px;
-                margin-bottom: 1rem;
-            }
-            
-            .token-display {
-                background: #f8f9fa;
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                padding: 0.75rem;
-                font-family: monospace;
-                font-size: 0.875rem;
-                word-break: break-all;
-            }
-            
-            .copy-btn {
-                cursor: pointer;
-                color: #6c757d;
-                transition: color 0.2s;
-            }
-            
-            .copy-btn:hover {
-                color: #0d6efd;
-            }
-            
-            .plan-selector {
-                display: flex;
-                gap: 1rem;
-                margin-bottom: 1rem;
-                flex-wrap: wrap;
-            }
-            
-            .plan-option {
-                flex: 1;
-                min-width: 200px;
-                padding: 1rem;
-                border: 2px solid #e9ecef;
-                border-radius: 6px;
-                text-align: center;
-                cursor: pointer;
-                transition: all 0.2s;
-            }
-            
-            .plan-option:hover {
-                border-color: #0d6efd;
-                background: #f8f9fa;
-            }
-            
-            .plan-option.selected {
-                border-color: #0d6efd;
-                background: #e7f3ff;
-            }
-            
-            .plan-price {
-                font-size: 1.5rem;
-                font-weight: 700;
-                color: #0d6efd;
-            }
-            
-            .notification-toast {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 1050;
-                min-width: 300px;
-            }
-            
-            .navbar {
-                box-shadow: 0 2px 4px rgba(0,0,0,0.08);
-            }
-            
-            .dropdown-menu {
-                border: none;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            }
-            
-            .nav-tabs {
-                border-bottom: 2px solid #e9ecef;
-                margin-bottom: 1.5rem;
-            }
-            
-            .nav-tabs .nav-link {
-                color: #6c757d;
-                border: none;
-                border-bottom: 2px solid transparent;
-                padding: 0.75rem 1rem;
-                font-weight: 500;
-            }
-            
-            .nav-tabs .nav-link.active {
-                color: #0d6efd;
-                border-bottom-color: #0d6efd;
-                background: none;
-            }
-            
-            .invoice-alert {
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                z-index: 1000;
-                max-width: 350px;
-                animation: slideIn 0.3s ease-out;
-            }
-            
-            @keyframes slideIn {
-                from {
-                    transform: translateX(100%);
-                    opacity: 0;
-                }
-                to {
-                    transform: translateX(0);
-                    opacity: 1;
-                }
-            }
-            
-            .metric-card {
-                background: #f8f9fa;
-                padding: 1rem;
-                border-radius: 6px;
-                text-align: center;
-                margin-bottom: 0.5rem;
-            }
-            
-            .metric-card .value {
-                font-size: 1.5rem;
-                font-weight: 700;
-                color: #333;
-            }
-            
-            .metric-card .label {
-                font-size: 0.75rem;
-                color: #6c757d;
-                text-transform: uppercase;
-            }
-            
-            .company-header {
-                background: white;
-                padding: 1rem;
-                border-radius: 8px;
-                box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-                margin-bottom: 1.5rem;
-            }
-            
-            .company-actions {
-                display: flex;
-                gap: 0.5rem;
-            }
-            
-            .certificate-status {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.5rem;
-                padding: 0.25rem 0.75rem;
-                border-radius: 4px;
-                font-size: 0.875rem;
-            }
-            
-            .certificate-status.active {
-                background: #d4edda;
-                color: #155724;
-            }
-            
-            .certificate-status.expired {
-                background: #f8d7da;
-                color: #721c24;
-            }
-            
-            .certificate-status.missing {
-                background: #fff3cd;
-                color: #856404;
-            }
+/* Base styles */
+body {
+    background-color: #f8f9fa;
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* Container responsive */
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+/* Stat cards - responsive grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 8px;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid #e9ecef;
+    position: relative;
+    transition: transform 0.2s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.stat-card h3 {
+    font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+    font-weight: 600;
+    margin: 0 2rem 0 0;
+    color: #333;
+    line-height: 1.2;
+}
+
+.stat-card p {
+    color: #6c757d;
+    margin: 0;
+    font-size: 0.875rem;
+    margin-top: 0.5rem;
+}
+
+.stat-card .icon {
+    font-size: 2rem;
+    opacity: 0.2;
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+}
+
+/* Section cards */
+.section-card {
+    background: white;
+    border-radius: 8px;
+    padding: clamp(1rem, 3vw, 1.5rem);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+    border: 1px solid #e9ecef;
+}
+
+.section-title {
+    font-size: clamp(1rem, 2vw, 1.125rem);
+    font-weight: 600;
+    margin-bottom: 1rem;
+    color: #333;
+}
+
+/* Plan badges */
+.plan-badge {
+    background: #0d6efd;
+    color: white;
+    padding: 0.375rem 0.75rem;
+    border-radius: 4px;
+    display: inline-block;
+    font-weight: 500;
+    font-size: 0.875rem;
+    white-space: nowrap;
+}
+
+.plan-badge.no-plan {
+    background: #6c757d;
+}
+
+/* Invoice counters */
+.invoice-counter {
+    font-size: clamp(1.5rem, 4vw, 2.5rem);
+    font-weight: 700;
+    color: #333;
+    line-height: 1;
+}
+
+.invoice-counter.danger { color: #dc3545; }
+.invoice-counter.warning { color: #f39c12; }
+.invoice-counter.success { color: #28a745; }
+
+/* Progress bars */
+.progress {
+    height: 8px;
+    border-radius: 4px;
+    background-color: #e9ecef;
+    width: 100%;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background-color: #0d6efd;
+    transition: width 0.3s ease;
+}
+
+/* Alerts */
+.alert-custom {
+    border-radius: 6px;
+    border: none;
+    padding: 1rem;
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.alert-warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+/* Tables responsive */
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-custom {
+    width: 100%;
+    margin-bottom: 1rem;
+    border-collapse: collapse;
+    min-width: 600px; /* Ancho mínimo para evitar colapso excesivo */
+}
+
+.table-custom th {
+    border-top: none;
+    font-weight: 600;
+    color: #6c757d;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    padding: 0.75rem;
+    border-bottom: 2px solid #e9ecef;
+    white-space: nowrap;
+}
+
+.table-custom td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* Controles de documentos responsive */
+.documents-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.documents-filters {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.documents-metrics {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* Badges de resumen de documentos responsive */
+.document-summary-badges {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+}
+
+/* Status badges */
+.badge-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.badge-pending { background: #fff3cd; color: #856404; }
+.badge-approved { background: #d4edda; color: #155724; }
+.badge-rejected { background: #f8d7da; color: #721c24; }
+
+/* Charts */
+.chart-container {
+    position: relative;
+    height: 250px;
+    margin-bottom: 1rem;
+    overflow: hidden;
+}
+
+/* Token display */
+.token-display {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0.75rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    word-break: break-all;
+    overflow-wrap: break-word;
+}
+
+.copy-btn {
+    cursor: pointer;
+    color: #6c757d;
+    transition: color 0.2s;
+    padding: 0.25rem;
+}
+
+.copy-btn:hover {
+    color: #0d6efd;
+}
+
+/* Plan selector */
+.plan-selector {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.plan-option {
+    padding: 1rem;
+    border: 2px solid #e9ecef;
+    border-radius: 6px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.plan-option:hover {
+    border-color: #0d6efd;
+    background: #f8f9fa;
+}
+
+.plan-option.selected {
+    border-color: #0d6efd;
+    background: #e7f3ff;
+}
+
+.plan-price {
+    font-size: clamp(1rem, 3vw, 1.5rem);
+    font-weight: 700;
+    color: #0d6efd;
+}
+
+/* Notifications */
+.notification-toast {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1050;
+    min-width: 300px;
+    max-width: 90vw;
+}
+
+/* Navbar */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    padding: 0.5rem 1rem;
+}
+
+.dropdown-menu {
+    border: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+/* Navigation tabs */
+.nav-tabs {
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.nav-tabs .nav-link {
+    color: #6c757d;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.75rem 1rem;
+    font-weight: 500;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.nav-tabs .nav-link.active {
+    color: #0d6efd;
+    border-bottom-color: #0d6efd;
+    background: none;
+}
+
+/* Invoice alert */
+.invoice-alert {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+    max-width: min(350px, 90vw);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Metric cards */
+.metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.metric-card {
+    background: #f8f9fa;
+    padding: 1rem;
+    border-radius: 6px;
+    text-align: center;
+}
+
+.metric-card .value {
+    font-size: clamp(1rem, 3vw, 1.5rem);
+    font-weight: 700;
+    color: #333;
+}
+
+.metric-card .label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    margin-top: 0.25rem;
+}
+
+/* Company header - diseño mejorado con botón reposicionado en responsive */
+.company-header {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* Línea superior con nombre y certificado */
+.company-info-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+/* Contenedor del nombre y certificado */
+.company-name-info {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+/* Línea de botones separada */
+.company-buttons-line {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.company-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Crear un contenedor para el nombre y los botones responsive */
+.company-name-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+/* Botones responsive que van debajo del nombre - OCULTOS POR DEFECTO */
+.company-actions-responsive {
+    display: none !important; /* Forzar ocultar en desktop */
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.company-actions-responsive .btn {
+    font-size: 0.875rem;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    background: #007bff;
+    color: white;
+    border: none;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.company-actions-responsive .btn:hover {
+    background: #0056b3;
+}
+
+/* Botones originales (desktop) - VISIBLES POR DEFECTO */
+.company-actions {
+    display: flex !important; /* Forzar mostrar en desktop */
+    flex-wrap: nowrap;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    justify-content: flex-end;
+    width: auto;
+    max-width: 200px;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+/* Botones dentro de company-actions - versión desktop normal */
+.company-actions .btn,
+.company-actions button,
+.company-actions a {
+    white-space: nowrap;
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 4px;
+    background: #007bff;
+    color: white;
+    border: none;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+    box-sizing: border-box;
+}
+
+.company-actions .btn:hover,
+.company-actions button:hover,
+.company-actions a:hover {
+    background: #0056b3;
+}
+
+/* Certificate status */
+.certificate-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+}
+
+.certificate-status.active {
+    background: #d4edda;
+    color: #155724;
+}
+
+.certificate-status.expired {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.certificate-status.missing {
+    background: #fff3cd;
+    color: #856404;
+}
+
+/* Media Queries for responsive design */
+
+/* Tablet styles */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 0.75rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-card .icon {
+        font-size: 1.5rem;
+        right: 0.75rem;
+        top: 0.75rem;
+    }
+    
+    .section-card {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .chart-container {
+        height: 200px;
+    }
+    
+    .plan-selector {
+        grid-template-columns: 1fr;
+    }
+    
+    .notification-toast {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        min-width: auto;
+    }
+    
+    .invoice-alert {
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+    
+/* Tablet styles */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 0.75rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-card .icon {
+        font-size: 1.5rem;
+        right: 0.75rem;
+        top: 0.75rem;
+    }
+    
+    .section-card {
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .chart-container {
+        height: 200px;
+    }
+    
+    .plan-selector {
+        grid-template-columns: 1fr;
+    }
+    
+    .notification-toast {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        min-width: auto;
+    }
+    
+    .invoice-alert {
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+    }
+    
+    /* Company header responsive - mostrar botones debajo del nombre */
+    .company-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    /* Mantener la línea de información pero hacer responsive */
+    .company-info-line {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+    
+    /* Ocultar la línea de botones separada en responsive */
+    .company-buttons-line {
+        display: none !important;
+    }
+    
+    /* MOSTRAR los botones responsive debajo del nombre */
+    .company-actions-responsive {
+        display: flex !important;
+        justify-content: flex-start;
+        margin-top: 0.5rem;
+    }
+    
+    /* OCULTAR los botones originales en responsive */
+    .company-actions {
+        display: none !important;
+    }
+    
+    .company-name-section {
+        width: 100%;
+    }
+}
+}
+
+/* Mobile styles */
+@media (max-width: 480px) {
+    .container {
+        padding: 0 0.5rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .stat-card {
+        padding: 0.75rem;
+    }
+    
+    .stat-card h3 {
+        margin-right: 1.5rem;
+    }
+    
+    .section-card {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.25rem;
+    }
+    
+    .metric-card {
+        padding: 0.5rem;
+    }
+    
+    .chart-container {
+        height: 150px;
+    }
+    
+    .nav-tabs {
+        border-bottom: 1px solid #e9ecef;
+        margin-bottom: 1rem;
+    }
+    
+    .nav-tabs .nav-link {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+    }
+    
+    .table-custom th,
+    .table-custom td {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.8rem;
+    }
+    
+    .plan-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* Controles de documentos en móvil */
+    .documents-controls {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    .documents-filters {
+        justify-content: center;
+        width: 100%;
+    }
+    
+    .documents-filters select {
+        width: 100%;
+        max-width: none !important;
+    }
+    
+    .documents-metrics {
+        justify-content: space-around;
+        width: 100%;
+    }
+    
+    .documents-metrics .metric-card {
+        flex: 1;
+        min-width: 0;
+        padding: 0.5rem;
+        text-align: center;
+    }
+    
+    .documents-metrics .metric-card .label,
+    .documents-metrics .metric-card .value {
+        font-size: 0.75rem;
+    }
+    
+    /* Badges de resumen responsive en móvil */
+    .document-summary-badges {
+        justify-content: center;
+        gap: 0.25rem;
+    }
+    
+    .document-summary-badges .badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.5rem;
+        text-align: center;
+        flex: 1 1 auto;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+/* Mobile styles */
+@media (max-width: 480px) {
+    .container {
+        padding: 0 0.5rem;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
+    
+    .stat-card {
+        padding: 0.75rem;
+    }
+    
+    .stat-card h3 {
+        margin-right: 1.5rem;
+    }
+    
+    .section-card {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .metrics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.25rem;
+    }
+    
+    .metric-card {
+        padding: 0.5rem;
+    }
+    
+    .chart-container {
+        height: 150px;
+    }
+    
+    .nav-tabs {
+        border-bottom: 1px solid #e9ecef;
+        margin-bottom: 1rem;
+    }
+    
+    .nav-tabs .nav-link {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.875rem;
+    }
+    
+    .table-custom th,
+    .table-custom td {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.8rem;
+    }
+    
+    .plan-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* Company header mobile - comportamiento responsive igual que tablet */
+    .company-header {
+        padding: 0.75rem;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+    
+    /* Hacer responsive la línea de información */
+    .company-info-line {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+    
+    /* Ocultar la línea de botones separada en móvil */
+    .company-buttons-line {
+        display: none !important;
+    }
+    
+    /* OCULTAR botones originales en móvil */
+    .company-actions {
+        display: none !important;
+    }
+    
+    /* MOSTRAR botones responsive en móvil - en columna */
+    .company-actions-responsive {
+        display: flex !important;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-top: 0.75rem;
+    }
+    
+    .company-actions-responsive .btn {
+        width: 100%;
+        text-align: center;
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        font-size: 0.875rem;
+    }
+    
+    .company-name-section {
+        width: 100%;
+    }
+}
+}
+
+/* Print styles */
+@media print {
+    .notification-toast,
+    .invoice-alert,
+    .company-actions {
+        display: none !important;
+    }
+    
+    .section-card,
+    .stat-card {
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+    }
+    
+    body {
+        background: white !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .stat-card,
+    .section-card {
+        border: 2px solid #333;
+    }
+    
+    .plan-option {
+        border: 2px solid #333;
+    }
+    
+    .plan-option.selected {
+        border-color: #000;
+        background: #f0f0f0;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .invoice-alert {
+        animation: none;
+    }
+}
+
+/* Mantenemos los colores originales, sin modo oscuro automático */
+
         </style>
     </head>
     <body>
@@ -354,59 +971,86 @@
             {% if selected_company %}
                 <!-- Company Header con botón de edición -->
                 <div class="company-header">
-                    <div class="d-flex align-items-center justify-content-between">
-                        <div class="d-flex align-items-center">
-                            <h4 class="mb-0 text-secondary">
-                                <i class="fas fa-building me-2"></i>{{ selected_company.business_name|default:selected_company.trade_name }}
-                            </h4>
-                            {% if selected_company.ruc %}
-                                <small class="text-muted ms-3">(RUC: {{ selected_company.ruc }})</small>
+    <div class="d-flex align-items-center justify-content-between">
+        <div class="company-name-section">
+            <h4 class="mb-0 text-secondary">
+                <i class="fas fa-building me-2"></i>{{ selected_company.business_name|default:selected_company.trade_name }}
+            </h4>
+            {% if selected_company.ruc %}
+                <small class="text-muted ms-3">(RUC: {{ selected_company.ruc }})</small>
+            {% endif %}
+            
+            <!-- Estado del certificado -->
+            {% if has_certificate %}
+                {% if certificate_expired %}
+                <span class="certificate-status expired ms-3">
+                    <i class="fas fa-exclamation-circle"></i>Certificado Expirado
+                </span>
+                {% else %}
+                <span class="certificate-status active ms-3">
+                    <i class="fas fa-check-circle"></i>Certificado Activo
+                </span>
+                {% endif %}
+            {% else %}
+            <span class="certificate-status missing ms-3">
+                <i class="fas fa-times-circle"></i>Sin Certificado
+            </span>
+            {% endif %}
+
+            <!-- Botones responsive (solo visibles en móvil/tablet) -->
+            <div class="company-actions-responsive">
+                <button class="btn" onclick="openEditCompanyModal()">
+                    <i class="fas fa-edit me-1"></i>Editar Empresa
+                </button>
+                
+                {% if user_companies %}
+                <div class="dropdown">
+                    <button class="btn dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-exchange-alt"></i>
+                    </button>
+                    <div class="dropdown-menu shadow">
+                        <h6 class="dropdown-header">Cambiar empresa</h6>
+                        {% for company_data in available_companies_with_tokens %}
+                            {% if not company_data.is_selected %}
+                            <a class="dropdown-item" href="{{ company_data.dashboard_url }}">
+                                <i class="fas fa-building me-2 text-muted"></i>
+                                {{ company_data.company.business_name|default:company_data.company.trade_name }}
+                            </a>
                             {% endif %}
-                            
-                            <!-- Estado del certificado -->
-                            {% if has_certificate %}
-                                {% if certificate_expired %}
-                                <span class="certificate-status expired ms-3">
-                                    <i class="fas fa-exclamation-circle"></i>Certificado Expirado
-                                </span>
-                                {% else %}
-                                <span class="certificate-status active ms-3">
-                                    <i class="fas fa-check-circle"></i>Certificado Activo
-                                </span>
-                                {% endif %}
-                            {% else %}
-                            <span class="certificate-status missing ms-3">
-                                <i class="fas fa-times-circle"></i>Sin Certificado
-                            </span>
-                            {% endif %}
-                        </div>
-                        
-                        <div class="company-actions">
-                            <button class="btn btn-sm btn-outline-primary" onclick="openEditCompanyModal()">
-                                <i class="fas fa-edit me-1"></i>Editar Empresa
-                            </button>
-                            
-                            {% if user_companies %}
-                            <div class="dropdown">
-                                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
-                                    <i class="fas fa-exchange-alt"></i>
-                                </button>
-                                <div class="dropdown-menu dropdown-menu-end shadow">
-                                    <h6 class="dropdown-header">Cambiar empresa</h6>
-                                    {% for company_data in available_companies_with_tokens %}
-                                        {% if not company_data.is_selected %}
-                                        <a class="dropdown-item" href="{{ company_data.dashboard_url }}">
-                                            <i class="fas fa-building me-2 text-muted"></i>
-                                            {{ company_data.company.business_name|default:company_data.company.trade_name }}
-                                        </a>
-                                        {% endif %}
-                                    {% endfor %}
-                                </div>
-                            </div>
-                            {% endif %}
-                        </div>
+                        {% endfor %}
                     </div>
                 </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Botones originales (solo visibles en desktop) -->
+        <div class="company-actions">
+            <button class="btn btn-sm btn-outline-primary" onclick="openEditCompanyModal()">
+                <i class="fas fa-edit me-1"></i>Editar Empresa
+            </button>
+            
+            {% if user_companies %}
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-exchange-alt"></i>
+                </button>
+                <div class="dropdown-menu dropdown-menu-end shadow">
+                    <h6 class="dropdown-header">Cambiar empresa</h6>
+                    {% for company_data in available_companies_with_tokens %}
+                        {% if not company_data.is_selected %}
+                        <a class="dropdown-item" href="{{ company_data.dashboard_url }}">
+                            <i class="fas fa-building me-2 text-muted"></i>
+                            {{ company_data.company.business_name|default:company_data.company.trade_name }}
+                        </a>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
 
                 <!-- Alertas de Billing -->
 <div id="alertContainer">
@@ -650,29 +1294,32 @@
                     <!-- Documentos Tab -->
                     <div class="tab-pane fade" id="documentosTab">
                         <div class="section-card">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <div class="section-title mb-0">Todos los Documentos</div>
-                                <div class="d-flex gap-3">
-                                    <!-- Filtro de tipo de documento -->
-                                    <select class="form-select form-select-sm" id="documentTypeFilter" onchange="filterDocuments()" style="width: auto;">
-                                        <option value="">Todos los documentos</option>
-                                        <option value="factura">Facturas</option>
-                                        <option value="retencion">Retenciones</option>
-                                        <option value="liquidacion">Liquidaciones de Compra</option>
-                                        <option value="nota_credito">Notas de Crédito</option>
-                                        <option value="nota_debito">Notas de Débito</option>
-                                    </select>
-                                    
-                                    <div class="metric-card px-3 py-2 mb-0">
-                                        <span class="label me-2">Total:</span>
-                                        <span class="value" id="documentCount">{{ stats.total_invoices|default:"0" }}</span>
-                                    </div>
-                                    <div class="metric-card px-3 py-2 mb-0">
-                                        <span class="label me-2">Monto:</span>
-                                        <span class="value" id="documentAmount">${{ stats.total_amount|default:"0"|floatformat:2 }}</span>
-                                    </div>
-                                </div>
-                            </div>
+                            <div class="documents-controls">
+    <div class="section-title mb-0">Todos los Documentos</div>
+    
+    <div class="documents-filters">
+        <!-- Filtro de tipo de documento -->
+        <select class="form-select form-select-sm" id="documentTypeFilter" onchange="filterDocuments()">
+            <option value="">Todos los documentos</option>
+            <option value="factura">Facturas</option>
+            <option value="retencion">Retenciones</option>
+            <option value="liquidacion">Liquidaciones de Compra</option>
+            <option value="nota_credito">Notas de Crédito</option>
+            <option value="nota_debito">Notas de Débito</option>
+        </select>
+    </div>
+    
+    <div class="documents-metrics">
+        <div class="metric-card">
+            <div class="label">Total</div>
+            <div class="value" id="documentCount">{{ stats.total_invoices|default:"0" }}</div>
+        </div>
+        <div class="metric-card">
+            <div class="label">Monto</div>
+            <div class="value" id="documentAmount">${{ stats.total_amount|default:"0"|floatformat:2 }}</div>
+        </div>
+    </div>
+</div>
                             
                             <!-- Resumen por tipo de documento -->
                             <div class="row mb-3">

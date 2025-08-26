@@ -4,7 +4,7 @@
 
 INFORMACIÓN GENERAL
 -------------------
-Fecha de generación: 2025-08-08 09:11:34
+Fecha de generación: 2025-08-26 10:02:47
 Ubicación: C:\Users\godoy\Desktop\apivendo
 Python Version: Python 3.13.2
 Pip Version: pip 24.3.1 from C:\Users\godoy\Desktop\apivendo\venv\Lib\site-packages\pip (python 3.13)
@@ -42,7 +42,7 @@ Usuario: Desconocido
 │   │   │   ├── auth_views.py (7.7KB)
 │   │   │   ├── certificate_views.py (14.9KB)
 │   │   │   ├── company_views.py (9.3KB)
-│   │   │   └── sri_views.py (86.2KB)
+│   │   │   └── sri_views.py (109.1KB)
 │   │   ├── __init__.py (0B)
 │   │   ├── admin.py (0B)
 │   │   ├── apps.py (0B)
@@ -131,8 +131,8 @@ Usuario: Desconocido
 │   │   ├── middleware.py (1.9KB)
 │   │   ├── models.py (11.1KB)
 │   │   ├── session_views.py (5.6KB)
-│   │   ├── urls.py (8.3KB)
-│   │   └── views.py (79.6KB)
+│   │   ├── urls.py (8.4KB)
+│   │   └── views.py (81.0KB)
 │   ├── custom_admin/ (5 elementos)
 │   │   ├── __init__.py (63.0B)
 │   │   ├── apps.py (234.0B)
@@ -264,19 +264,24 @@ Usuario: Desconocido
 │       └── LC_MESSAGES/ (0 elementos)
 ├── logs/ (4 elementos)
 │   ├── celery.log (0B)
-│   ├── certificates.log (64.4KB)
-│   ├── sri_integration.log (4.1KB)
-│   └── vendo_sri.log (112.0KB)
+│   ├── certificates.log (86.8KB)
+│   ├── sri_integration.log (5.5KB)
+│   └── vendo_sri.log (161.9KB)
 ├── mediafiles/ (0 elementos)
 ├── scripts/ (0 elementos)
 ├── services/ (1 elementos)
 │   └── __init__.py (0B)
-├── static/ (3 elementos)
+├── static/ (4 elementos)
 │   ├── admin/ (3 elementos)
 │   │   ├── css/ (0 elementos)
 │   │   ├── img/ (0 elementos)
 │   │   └── js/ (0 elementos)
 │   ├── api_docs/ (0 elementos)
+│   ├── images/ (4 elementos)
+│   │   ├── frontera-logo-complete.png (33.3KB)
+│   │   ├── frontera-logo-ft.png (3.4KB)
+│   │   ├── frontera-logo-full.png (41.4KB)
+│   │   └── frontera-logo-hex.png (6.6KB)
 │   └── js/ (2 elementos)
 │       ├── auto-logout.js (5.0KB)
 │       └── session-manager.js (14.8KB)
@@ -319,7 +324,7 @@ Usuario: Desconocido
 │           └── 07/ (1 elementos)
 │               └── 13/ (1 elementos)
 │                   └── acer-predator-logo-4k-wallpaper-uhdpaper.com-4623a.jpg (1.7MB)
-├── templates/ (8 elementos)
+├── templates/ (9 elementos)
 │   ├── admin/ (1 elementos)
 │   │   └── custom/ (0 elementos)
 │   ├── api_docs/ (0 elementos)
@@ -359,18 +364,20 @@ Usuario: Desconocido
 │   │   │   ├── form_modal.html (9.7KB)
 │   │   │   ├── list.html (21.6KB)
 │   │   │   └── view_modal.html (6.8KB)
-│   │   ├── base.html (34.2KB)
+│   │   ├── base.html (35.4KB)
 │   │   └── dashboard.html (12.8KB)
 │   ├── dashboard/ (3 elementos)
 │   │   ├── admin_dashboard.html (22.4KB)
 │   │   ├── no_companies.html (7.5KB)
-│   │   └── user_dashboard.html (91.6KB)
+│   │   └── user_dashboard.html (92.0KB)
 │   ├── email_templates/ (0 elementos)
+│   ├── landing/ (1 elementos)
+│   │   └── index.html (55.4KB)
 │   ├── socialaccount/ (1 elementos)
 │   │   └── authentication_error.html (13.3KB)
 │   └── users/ (3 elementos)
 │       ├── account_rejected.html (10.7KB)
-│       ├── login.html (49.8KB)
+│       ├── login.html (49.6KB)
 │       └── waiting_room.html (12.0KB)
 ├── tests/ (2 elementos)
 │   ├── fixtures/ (0 elementos)
@@ -382,7 +389,7 @@ Usuario: Desconocido
 │   ├── asgi.py (425.0B)
 │   ├── celery.py (8.8KB)
 │   ├── settings.py (32.3KB)
-│   ├── urls.py (15.1KB)
+│   ├── urls.py (15.2KB)
 │   └── wsgi.py (425.0B)
 ├── .env (5.3KB)
 ├── .gitignore (4.0KB)
@@ -412,12 +419,12 @@ setup.cfg                 ❌ Faltante
 
 ESTADÍSTICAS POR EXTENSIÓN
 --------------------------
-.py                   189 archivos ( 73.8%)
-.html                  34 archivos ( 13.3%)
-.png                   15 archivos (  5.9%)
-.log                    4 archivos (  1.6%)
-.jpg                    4 archivos (  1.6%)
-(sin extensión)         3 archivos (  1.2%)
+.py                   189 archivos ( 72.4%)
+.html                  35 archivos ( 13.4%)
+.png                   19 archivos (  7.3%)
+.log                    4 archivos (  1.5%)
+.jpg                    4 archivos (  1.5%)
+(sin extensión)         3 archivos (  1.1%)
 .js                     2 archivos (  0.8%)
 .p12                    1 archivos (  0.4%)
 .jpeg                   1 archivos (  0.4%)
@@ -425,8 +432,8 @@ ESTADÍSTICAS POR EXTENSIÓN
 
 TOTALES
 -------
-Total de archivos: 256
-Total de directorios: 119
+Total de archivos: 261
+Total de directorios: 121
 
 ================================================================================
                            APLICACIONES DJANGO
@@ -579,7 +586,7 @@ storage/invoices/sent/              ❌ Facturas enviadas al SRI
 storage/logs/                       ❌ Logs del sistema 
 storage/backups/                    ❌ Respaldos de BD 
 media/                              ❌ Archivos de media 
-static/                             ✅ Archivos estáticos (12 archivos)
+static/                             ✅ Archivos estáticos (17 archivos)
 uploads/                            ❌ Archivos subidos 
 
 ================================================================================
@@ -639,13 +646,13 @@ Documentación:           ⚠️  Iniciada (20%)
 
 ESTADÍSTICAS GENERALES
 ---------------------
-Total directorios:       119
-Total archivos:          256
+Total directorios:       121
+Total archivos:          261
 Apps Django:             11
 Archivos Python:         189
 Paquetes instalados:     0
 
 ================================================================================
-Reporte generado automáticamente el 2025-08-08 09:11:34
+Reporte generado automáticamente el 2025-08-26 10:02:47
 Para actualizar, ejecuta: python documenter.py
 ================================================================================

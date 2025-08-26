@@ -25,7 +25,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            padding: 1rem;
+            padding: clamp(0.5rem, 2vw, 1rem);
             position: relative;
             overflow: hidden;
         }
@@ -45,8 +45,8 @@
             top: 10%;
             left: 50%;
             transform: translateX(-50%);
-            width: 40px;
-            height: 40px;
+            width: clamp(30px, 5vw, 40px);
+            height: clamp(30px, 5vw, 40px);
             background: linear-gradient(135deg, #4a90e2, #7b68ee);
             border-radius: 50%;
             box-shadow: 0 0 30px rgba(74, 144, 226, 0.6);
@@ -58,7 +58,7 @@
             bottom: 0;
             left: -10%;
             width: 40%;
-            height: 50%;
+            height: clamp(40%, 50vw, 50%);
             background: linear-gradient(45deg, #1a1a2e, #16213e);
             clip-path: polygon(0 100%, 0 40%, 30% 20%, 60% 35%, 100% 25%, 100% 100%);
             z-index: 3;
@@ -69,7 +69,7 @@
             bottom: 0;
             left: 25%;
             width: 35%;
-            height: 45%;
+            height: clamp(35%, 45vw, 45%);
             background: linear-gradient(45deg, #0f3460, #533483);
             clip-path: polygon(0 100%, 0 45%, 40% 25%, 70% 40%, 100% 30%, 100% 100%);
             z-index: 4;
@@ -80,7 +80,7 @@
             bottom: 0;
             right: -10%;
             width: 45%;
-            height: 55%;
+            height: clamp(45%, 55vw, 55%);
             background: linear-gradient(45deg, #533483, #7209b7);
             clip-path: polygon(0 100%, 0 35%, 25% 20%, 50% 30%, 75% 15%, 100% 25%, 100% 100%);
             z-index: 2;
@@ -96,8 +96,8 @@
 
         .star {
             position: absolute;
-            width: 2px;
-            height: 2px;
+            width: clamp(1.5px, 0.3vw, 2px);
+            height: clamp(1.5px, 0.3vw, 2px);
             background: white;
             border-radius: 50%;
             animation: twinkle 2s infinite alternate;
@@ -115,18 +115,18 @@
             100% { opacity: 1; transform: scale(1.2); }
         }
 
-        /* Container principal - EXPANDIDO PARA TOKENS */
+        /* Container principal - MEJORADO RESPONSIVO */
         .main-container {
             position: relative;
             z-index: 10;
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 12px;
+            border-radius: clamp(8px, 2vw, 12px);
             box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
             width: 100%;
-            max-width: 900px;
-            min-height: 550px;
+            max-width: clamp(320px, 90vw, 900px);
+            min-height: clamp(450px, 70vh, 550px);
             display: grid;
             grid-template-columns: 1fr 1fr;
             overflow: hidden;
@@ -134,7 +134,7 @@
         }
 
         .main-container.tokens-mode {
-            max-width: 1200px;
+            max-width: clamp(320px, 95vw, 1200px);
             grid-template-columns: 1fr 1fr 1fr;
         }
 
@@ -142,7 +142,7 @@
         .info-section {
             background: rgba(26, 26, 46, 0.85);
             backdrop-filter: blur(20px);
-            padding: 1.5rem;
+            padding: clamp(1rem, 3vw, 1.5rem);
             color: white;
             display: flex;
             flex-direction: column;
@@ -153,26 +153,28 @@
         .logo-section {
             display: flex;
             align-items: center;
-            gap: 0.6rem;
-            margin-bottom: 1rem;
+            gap: clamp(0.4rem, 1.2vw, 0.6rem);
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
+            flex-wrap: wrap;
         }
 
         .logo-icon {
             background: linear-gradient(135deg, #4a90e2, #7b68ee);
-            padding: 0.6rem;
-            border-radius: 10px;
+            padding: clamp(0.4rem, 1.2vw, 0.6rem);
+            border-radius: clamp(8px, 2vw, 10px);
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
         }
 
         .logo-icon i {
-            font-size: 1.2rem;
+            font-size: clamp(1rem, 2.4vw, 1.2rem);
             color: white;
         }
 
         .logo-text {
-            font-size: 1.6rem;
+            font-size: clamp(1.2rem, 3.2vw, 1.6rem);
             font-weight: 700;
             color: white;
         }
@@ -181,86 +183,89 @@
             display: inline-block;
             background: rgba(74, 144, 226, 0.2);
             color: #4a90e2;
-            padding: 0.2rem 0.5rem;
+            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 0.8vw, 0.5rem);
             border-radius: 4px;
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             font-weight: 600;
-            margin-left: 0.5rem;
+            margin-left: clamp(0.3rem, 0.8vw, 0.5rem);
         }
 
         .description {
-            font-size: 0.85rem;
-            line-height: 1.4;
-            margin-bottom: 1rem;
+            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
+            line-height: 1.5;
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
             opacity: 0.9;
         }
 
         .features-title {
-            font-size: 0.9rem;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             font-weight: 600;
-            margin-bottom: 0.8rem;
+            margin-bottom: clamp(0.6rem, 1.6vw, 0.8rem);
             color: white;
         }
 
         .features-list {
             list-style: none;
             padding: 0;
-            margin-bottom: 1rem;
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
         }
 
         .feature-item {
-            font-size: 0.8rem;
-            margin-bottom: 0.5rem;
+            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
+            margin-bottom: clamp(0.4rem, 1vw, 0.5rem);
             display: flex;
             align-items: flex-start;
-            gap: 0.5rem;
+            gap: clamp(0.3rem, 0.8vw, 0.5rem);
+            line-height: 1.4;
         }
 
         .feature-item i {
             color: #4ade80;
-            font-size: 0.8rem;
+            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
             margin-top: 0.2rem;
+            flex-shrink: 0;
         }
 
         .tech-stack {
             background: rgba(0, 0, 0, 0.3);
-            border-radius: 8px;
-            padding: 0.8rem;
-            margin-bottom: 1rem;
+            border-radius: clamp(6px, 1.6vw, 8px);
+            padding: clamp(0.6rem, 1.6vw, 0.8rem);
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
             border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .tech-title {
             color: #4a90e2;
-            font-size: 0.75rem;
-            margin-bottom: 0.5rem;
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+            margin-bottom: clamp(0.4rem, 1vw, 0.5rem);
             font-weight: 500;
         }
 
         .tech-badges {
             display: flex;
             flex-wrap: wrap;
-            gap: 0.3rem;
+            gap: clamp(0.2rem, 0.6vw, 0.3rem);
         }
 
         .tech-badge {
             background: rgba(255, 255, 255, 0.1);
             color: rgba(255, 255, 255, 0.8);
-            padding: 0.2rem 0.4rem;
+            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 0.8vw, 0.4rem);
             border-radius: 4px;
-            font-size: 0.65rem;
+            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
             border: 1px solid rgba(255, 255, 255, 0.2);
+            white-space: nowrap;
         }
 
         .footer-text {
             margin-top: auto;
             text-align: center;
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             opacity: 0.8;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.3rem;
+            gap: clamp(0.2rem, 0.6vw, 0.3rem);
         }
 
         .footer-text i {
@@ -271,7 +276,7 @@
         .login-section {
             background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(20px);
-            padding: 1.5rem;
+            padding: clamp(1rem, 3vw, 1.5rem);
             display: flex;
             flex-direction: column;
             justify-content: center;
@@ -279,58 +284,61 @@
 
         .login-header {
             text-align: center;
-            margin-bottom: 1.2rem;
+            margin-bottom: clamp(1rem, 2.4vw, 1.2rem);
         }
 
         .welcome-title {
-            font-size: 1.3rem;
+            font-size: clamp(1.1rem, 2.6vw, 1.3rem);
             font-weight: 700;
             color: #1f2937;
-            margin-bottom: 0.3rem;
+            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
         }
 
         .welcome-subtitle {
             color: #6b7280;
-            font-size: 0.8rem;
-            margin-bottom: 0.6rem;
+            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
+            margin-bottom: clamp(0.4rem, 1.2vw, 0.6rem);
         }
 
         .security-badge {
             display: inline-flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: clamp(0.2rem, 0.6vw, 0.3rem);
             background: rgba(74, 144, 226, 0.1);
             color: #4a90e2;
-            padding: 0.3rem 0.6rem;
+            padding: clamp(0.2rem, 0.6vw, 0.3rem) clamp(0.4rem, 1.2vw, 0.6rem);
             border-radius: 5px;
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             font-weight: 500;
         }
 
         /* Token Mode Toggle */
         .token-mode-toggle {
             text-align: center;
-            margin-bottom: 1rem;
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
         }
 
         .mode-selector {
             display: inline-flex;
             background: rgba(74, 144, 226, 0.1);
-            border-radius: 8px;
+            border-radius: clamp(6px, 1.6vw, 8px);
             padding: 4px;
-            margin-bottom: 0.5rem;
+            margin-bottom: clamp(0.3rem, 1vw, 0.5rem);
+            width: 100%;
+            max-width: 280px;
         }
 
         .mode-btn {
-            padding: 8px 16px;
+            padding: clamp(6px, 1.6vw, 8px) clamp(12px, 3.2vw, 16px);
             border: none;
             background: transparent;
             color: #4a90e2;
-            font-size: 0.75rem;
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
             font-weight: 600;
-            border-radius: 6px;
+            border-radius: clamp(4px, 1.2vw, 6px);
             cursor: pointer;
             transition: all 0.3s ease;
+            flex: 1;
         }
 
         .mode-btn.active {
@@ -340,24 +348,26 @@
         }
 
         .mode-description {
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             color: #6b7280;
-            margin-bottom: 0.5rem;
+            margin-bottom: clamp(0.3rem, 1vw, 0.5rem);
+            line-height: 1.4;
+            padding: 0 1rem;
         }
 
         /* Google Button */
         .google-section {
-            margin-bottom: 1rem;
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
         }
 
         .btn-google {
             width: 100%;
-            padding: 10px 14px;
+            padding: clamp(8px, 2vw, 10px) clamp(12px, 2.8vw, 14px);
             border: 2px solid #e5e7eb;
-            border-radius: 8px;
+            border-radius: clamp(6px, 1.6vw, 8px);
             background: white;
             color: #374151;
-            font-size: 0.85rem;
+            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -365,7 +375,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: clamp(6px, 1.6vw, 8px);
         }
 
         .btn-google:hover {
@@ -381,9 +391,9 @@
         .divider {
             text-align: center;
             position: relative;
-            margin: 1rem 0;
+            margin: clamp(0.8rem, 2vw, 1rem) 0;
             color: #9ca3af;
-            font-size: 0.75rem;
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
         }
 
         .divider::before {
@@ -398,30 +408,30 @@
 
         .divider span {
             background: rgba(255, 255, 255, 0.95);
-            padding: 0 0.6rem;
+            padding: 0 clamp(0.4rem, 1.2vw, 0.6rem);
             position: relative;
         }
 
         /* Form */
         .form-group {
-            margin-bottom: 1rem;
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
         }
 
         .form-label {
             display: block;
             color: #374151;
-            font-size: 0.8rem;
+            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
             font-weight: 500;
-            margin-bottom: 0.3rem;
+            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
         }
 
         .form-control-custom {
             width: 100%;
-            padding: 10px 12px;
+            padding: clamp(8px, 2vw, 10px) clamp(10px, 2.4vw, 12px);
             border: 2px solid #e5e7eb;
-            border-radius: 8px;
+            border-radius: clamp(6px, 1.6vw, 8px);
             background: #f9fafb;
-            font-size: 0.85rem;
+            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             color: #111827;
             transition: all 0.3s ease;
             outline: none;
@@ -442,20 +452,23 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 1.2rem;
-            font-size: 0.75rem;
+            margin-bottom: clamp(1rem, 2.4vw, 1.2rem);
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+            gap: clamp(0.5rem, 2vw, 1rem);
+            flex-wrap: wrap;
         }
 
         .remember-me {
             display: flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: clamp(0.2rem, 0.6vw, 0.3rem);
             color: #6b7280;
+            flex-shrink: 0;
         }
 
         .remember-me input[type="checkbox"] {
-            width: 12px;
-            height: 12px;
+            width: clamp(10px, 2.4vw, 12px);
+            height: clamp(10px, 2.4vw, 12px);
             accent-color: #4a90e2;
         }
 
@@ -472,19 +485,19 @@
         /* Login Button */
         .btn-login {
             width: 100%;
-            padding: 10px;
+            padding: clamp(8px, 2vw, 10px);
             border: none;
-            border-radius: 8px;
+            border-radius: clamp(6px, 1.6vw, 8px);
             background: linear-gradient(135deg, #4a90e2, #7b68ee);
             color: white;
-            font-size: 0.85rem;
+            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 0.3rem;
+            gap: clamp(0.2rem, 0.6vw, 0.3rem);
         }
 
         .btn-login:hover {
@@ -497,13 +510,14 @@
             background: rgba(239, 68, 68, 0.1);
             border: 1px solid rgba(239, 68, 68, 0.2);
             color: #dc2626;
-            padding: 0.5rem 0.7rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            margin-bottom: 1rem;
+            padding: clamp(0.4rem, 1vw, 0.5rem) clamp(0.5rem, 1.4vw, 0.7rem);
+            border-radius: clamp(4px, 1.2vw, 6px);
+            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
             display: flex;
             align-items: center;
-            gap: 0.3rem;
+            gap: clamp(0.2rem, 0.6vw, 0.3rem);
+            line-height: 1.4;
         }
 
         .alert-success-custom {
@@ -512,15 +526,17 @@
             color: #059669;
         }
 
-        /* Sección de tokens - NUEVA */
+        /* Sección de tokens - MEJORADA RESPONSIVE */
         .tokens-section {
             background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(20px);
-            padding: 1.5rem;
+            padding: clamp(1rem, 3vw, 1.5rem);
             display: none;
             flex-direction: column;
-            justify-content: center;
+            justify-content: flex-start;
             border-left: 1px solid rgba(255, 255, 255, 0.2);
+            max-height: 100%;
+            overflow-y: auto;
         }
 
         .tokens-section.show {
@@ -529,27 +545,33 @@
 
         .tokens-header {
             text-align: center;
-            margin-bottom: 1.5rem;
+            margin-bottom: clamp(1rem, 3vw, 1.5rem);
+            position: sticky;
+            top: 0;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding-bottom: clamp(0.5rem, 1.2vw, 0.8rem);
+            z-index: 10;
         }
 
         .tokens-title {
-            font-size: 1.2rem;
+            font-size: clamp(1rem, 2.4vw, 1.2rem);
             font-weight: 700;
             color: #1f2937;
-            margin-bottom: 0.3rem;
+            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
         }
 
         .tokens-subtitle {
             color: #6b7280;
-            font-size: 0.8rem;
+            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
         }
 
         .token-card {
             background: rgba(255, 255, 255, 0.9);
             border: 2px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 1rem;
-            margin-bottom: 1rem;
+            border-radius: clamp(8px, 2vw, 10px);
+            padding: clamp(0.8rem, 2vw, 1rem);
+            margin-bottom: clamp(0.8rem, 2vw, 1rem);
             transition: all 0.3s ease;
             cursor: pointer;
         }
@@ -574,15 +596,17 @@
         .token-card-header {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 0.5rem;
+            gap: clamp(0.3rem, 1vw, 0.5rem);
+            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
+            flex-wrap: wrap;
         }
 
         .token-type-badge {
-            padding: 0.2rem 0.5rem;
+            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 1vw, 0.5rem);
             border-radius: 4px;
-            font-size: 0.65rem;
+            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
             font-weight: 600;
+            flex-shrink: 0;
         }
 
         .token-type-badge.user {
@@ -598,50 +622,54 @@
         .recommended-badge {
             background: rgba(251, 191, 36, 0.1);
             color: #f59e0b;
-            padding: 0.2rem 0.4rem;
+            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 0.8vw, 0.4rem);
             border-radius: 4px;
-            font-size: 0.6rem;
+            font-size: clamp(0.5rem, 1.2vw, 0.6rem);
             font-weight: 600;
+            flex-shrink: 0;
         }
 
         .token-name {
-            font-size: 0.9rem;
+            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
             font-weight: 600;
             color: #1f2937;
-            margin-bottom: 0.3rem;
+            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
+            line-height: 1.3;
         }
 
         .token-description {
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             color: #6b7280;
-            margin-bottom: 0.5rem;
+            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
+            line-height: 1.4;
         }
 
         .token-display {
             background: #f3f4f6;
             border: 1px solid #d1d5db;
-            border-radius: 4px;
-            padding: 0.4rem 0.6rem;
+            border-radius: clamp(3px, 0.8vw, 4px);
+            padding: clamp(0.3rem, 0.8vw, 0.4rem) clamp(0.4rem, 1.2vw, 0.6rem);
             font-family: 'Courier New', monospace;
-            font-size: 0.6rem;
+            font-size: clamp(0.5rem, 1.2vw, 0.6rem);
             color: #374151;
             word-break: break-all;
-            margin-bottom: 0.5rem;
+            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
+            line-height: 1.3;
         }
 
         .token-actions {
             display: flex;
-            gap: 0.5rem;
+            gap: clamp(0.3rem, 1vw, 0.5rem);
         }
 
         .btn-use-token {
             flex: 1;
-            padding: 6px 12px;
+            padding: clamp(5px, 1.4vw, 6px) clamp(8px, 2.4vw, 12px);
             border: none;
-            border-radius: 6px;
+            border-radius: clamp(4px, 1.2vw, 6px);
             background: linear-gradient(135deg, #4a90e2, #7b68ee);
             color: white;
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -653,14 +681,15 @@
         }
 
         .btn-copy-token {
-            padding: 6px 8px;
+            padding: clamp(5px, 1.4vw, 6px) clamp(6px, 1.6vw, 8px);
             border: 1px solid #d1d5db;
-            border-radius: 6px;
+            border-radius: clamp(4px, 1.2vw, 6px);
             background: white;
             color: #6b7280;
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             cursor: pointer;
             transition: all 0.3s ease;
+            flex-shrink: 0;
         }
 
         .btn-copy-token:hover {
@@ -672,9 +701,9 @@
         .token-info-display {
             background: rgba(74, 144, 226, 0.05);
             border: 1px solid rgba(74, 144, 226, 0.2);
-            border-radius: 8px;
-            padding: 1rem;
-            margin-top: 1rem;
+            border-radius: clamp(6px, 1.6vw, 8px);
+            padding: clamp(0.8rem, 2vw, 1rem);
+            margin-top: clamp(0.8rem, 2vw, 1rem);
             display: none;
         }
 
@@ -683,38 +712,40 @@
         }
 
         .current-token-label {
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             color: #4a90e2;
             font-weight: 600;
-            margin-bottom: 0.5rem;
+            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
         }
 
         .current-token-display {
             background: white;
             border: 1px solid #d1d5db;
-            border-radius: 6px;
-            padding: 0.5rem;
+            border-radius: clamp(4px, 1.2vw, 6px);
+            padding: clamp(0.4rem, 1.2vw, 0.5rem);
             font-family: 'Courier New', monospace;
-            font-size: 0.65rem;
+            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
             color: #374151;
             word-break: break-all;
-            margin-bottom: 0.5rem;
+            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
+            line-height: 1.3;
         }
 
         .token-usage-info {
-            font-size: 0.65rem;
+            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
             color: #6b7280;
-            margin-bottom: 0.5rem;
+            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
+            line-height: 1.3;
         }
 
         .btn-test-token {
             width: 100%;
-            padding: 8px;
+            padding: clamp(6px, 1.6vw, 8px);
             border: 1px solid #4a90e2;
-            border-radius: 6px;
+            border-radius: clamp(4px, 1.2vw, 6px);
             background: white;
             color: #4a90e2;
-            font-size: 0.7rem;
+            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -725,70 +756,396 @@
             color: white;
         }
 
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .main-container.tokens-mode {
-                grid-template-columns: 1fr;
-                max-width: 600px;
+        /* BREAKPOINTS RESPONSIVOS MEJORADOS */
+
+        /* Pantallas muy grandes (1400px+) */
+        @media (min-width: 1400px) {
+            .main-container {
+                max-width: 1000px;
             }
             
-            .info-section {
-                display: none;
+            .main-container.tokens-mode {
+                max-width: 1300px;
             }
         }
 
+        /* Laptops grandes (1200px - 1399px) */
+        @media (max-width: 1399px) and (min-width: 1200px) {
+            .main-container.tokens-mode {
+                max-width: 1100px;
+            }
+        }
+
+        /* Laptops medianos (992px - 1199px) */
+        @media (max-width: 1199px) and (min-width: 992px) {
+            .main-container.tokens-mode {
+                max-width: 950px;
+            }
+            
+            .feature-item {
+                font-size: 0.75rem;
+            }
+            
+            .tech-badge {
+                font-size: 0.6rem;
+                padding: 0.15rem 0.35rem;
+            }
+        }
+
+        /* Tablets grandes y laptops pequeñas (769px - 1023px) */
+        @media (max-width: 1023px) and (min-width: 769px) {
+            .main-container.tokens-mode {
+                grid-template-columns: 1fr 1fr;
+                max-width: 700px;
+            }
+            
+            .info-section {
+                grid-row: span 2;
+                padding: 1.2rem;
+            }
+            
+            .tokens-section {
+                grid-column: 2;
+                grid-row: 2;
+                max-height: 60vh;
+            }
+            
+            .login-section {
+                grid-column: 2;
+                grid-row: 1;
+            }
+            
+            .logo-text {
+                font-size: 1.4rem;
+            }
+            
+            .description {
+                font-size: 0.8rem;
+            }
+        }
+
+        /* Tablets (481px - 768px) */
         @media (max-width: 768px) {
             .main-container {
-                grid-template-columns: 1fr;
-                max-width: 400px;
+                grid-template-columns: 0.8fr 1fr;
+                max-width: 650px;
                 min-height: auto;
             }
             
-            .info-section {
-                display: none;
+            .main-container.tokens-mode {
+                grid-template-columns: 0.8fr 1fr;
+                max-width: 650px;
             }
             
-            .login-section, .tokens-section {
-                padding: 1.5rem;
+            .info-section {
+                padding: clamp(0.8rem, 2.5vw, 1rem);
+                font-size: clamp(0.65rem, 1.8vw, 0.75rem);
+            }
+            
+            .logo-text {
+                font-size: clamp(1rem, 3vw, 1.2rem);
+            }
+            
+            .description {
+                font-size: clamp(0.65rem, 1.6vw, 0.75rem);
+                margin-bottom: 0.8rem;
+            }
+            
+            .features-title {
+                font-size: clamp(0.7rem, 1.8vw, 0.8rem);
+                margin-bottom: 0.6rem;
+            }
+            
+            .feature-item {
+                font-size: clamp(0.6rem, 1.5vw, 0.7rem);
+                margin-bottom: 0.3rem;
+            }
+            
+            .tech-title {
+                font-size: clamp(0.6rem, 1.4vw, 0.65rem);
+            }
+            
+            .tech-badge {
+                font-size: clamp(0.5rem, 1.2vw, 0.55rem);
+                padding: 0.1rem 0.3rem;
+            }
+            
+            .footer-text {
+                font-size: clamp(0.55rem, 1.3vw, 0.6rem);
+                margin-top: 0.5rem;
+            }
+            
+            .login-section, 
+            .tokens-section {
+                padding: clamp(1.2rem, 4vw, 1.8rem);
+            }
+            
+            .tokens-section {
+                max-height: 70vh;
+            }
+            
+            .mode-selector {
+                max-width: none;
+                width: 100%;
+            }
+            
+            .form-options {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 0.8rem;
+            }
+            
+            .remember-me {
+                justify-content: center;
+            }
+            
+            .forgot-link {
+                text-align: center;
+            }
+            
+            .token-actions {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .btn-copy-token {
+                align-self: center;
+                min-width: 100px;
             }
         }
 
+        /* Móviles grandes (376px - 480px) */
         @media (max-width: 480px) {
             body {
-                padding: 0.5rem;
+                padding: clamp(0.3rem, 2vw, 0.5rem);
             }
             
-            .login-section, .tokens-section {
-                padding: 1.2rem;
-            }
-
             .main-container {
-                max-width: 350px;
+                max-width: 380px;
+                border-radius: clamp(8px, 4vw, 12px);
+                min-height: auto;
+            }
+            
+            .login-section, 
+            .tokens-section {
+                padding: clamp(1rem, 5vw, 1.5rem);
             }
 
-            .welcome-title, .tokens-title {
-                font-size: 1.2rem;
+            .welcome-title, 
+            .tokens-title {
+                font-size: clamp(1.1rem, 6vw, 1.3rem);
             }
 
             .btn-google,
             .btn-login,
             .btn-use-token {
-                padding: 9px;
-                font-size: 0.8rem;
+                padding: clamp(9px, 4vw, 12px);
+                font-size: clamp(0.75rem, 4vw, 0.85rem);
             }
 
             .form-control-custom {
-                padding: 9px 11px;
-                font-size: 0.8rem;
+                padding: clamp(9px, 4vw, 12px) clamp(11px, 5vw, 14px);
+                font-size: clamp(0.75rem, 4vw, 0.85rem);
+            }
+            
+            .token-card {
+                padding: clamp(0.8rem, 4vw, 1rem);
+                margin-bottom: 1rem;
+            }
+            
+            .token-display {
+                font-size: 0.55rem;
+                padding: 0.3rem 0.4rem;
+            }
+            
+            .current-token-display {
+                font-size: 0.6rem;
+            }
+            
+            .mode-btn {
+                padding: 8px 12px;
+                font-size: 0.7rem;
             }
         }
 
-        /* Loading state */
+        /* Móviles pequeños (321px - 375px) */
+        @media (max-width: 375px) {
+            .main-container {
+                max-width: 340px;
+            }
+            
+            .welcome-title, 
+            .tokens-title {
+                font-size: clamp(1rem, 7vw, 1.2rem);
+            }
+            
+            .token-display,
+            .current-token-display {
+                font-size: clamp(0.5rem, 3vw, 0.6rem);
+                padding: clamp(0.25rem, 2.5vw, 0.35rem);
+            }
+            
+            .btn-google,
+            .btn-login,
+            .btn-use-token {
+                font-size: clamp(0.7rem, 4.5vw, 0.8rem);
+            }
+        }
+
+        /* Móviles muy pequeños (hasta 320px) */
+        @media (max-width: 320px) {
+            .main-container {
+                max-width: 300px;
+            }
+            
+            .login-section,
+            .tokens-section {
+                padding: clamp(0.8rem, 6vw, 1.2rem);
+            }
+            
+            .welcome-title,
+            .tokens-title {
+                font-size: clamp(0.95rem, 8vw, 1.1rem);
+            }
+            
+            .security-badge {
+                font-size: 0.6rem;
+                padding: 0.2rem 0.4rem;
+            }
+            
+            .mode-btn {
+                padding: 6px 10px;
+                font-size: 0.65rem;
+            }
+            
+            .token-type-badge {
+                font-size: 0.55rem;
+                padding: 0.1rem 0.3rem;
+            }
+            
+            .recommended-badge {
+                font-size: 0.5rem;
+                padding: 0.1rem 0.25rem;
+            }
+        }
+
+        /* Orientación landscape en móviles */
+        @media (max-height: 500px) and (orientation: landscape) {
+            body {
+                padding: clamp(0.2rem, 1vh, 0.5rem);
+            }
+            
+            .main-container {
+                min-height: auto;
+                max-height: 90vh;
+                grid-template-rows: auto;
+            }
+            
+            .login-section,
+            .tokens-section {
+                padding: clamp(0.8rem, 3vh, 1.2rem);
+                overflow-y: auto;
+            }
+            
+            .tokens-section {
+                max-height: 85vh;
+            }
+            
+            .login-header {
+                margin-bottom: 0.8rem;
+            }
+            
+            .welcome-title,
+            .tokens-title {
+                font-size: 1.1rem;
+            }
+            
+            .form-group {
+                margin-bottom: 0.7rem;
+            }
+            
+            .google-section,
+            .divider {
+                margin-bottom: 0.7rem;
+            }
+            
+            .form-options {
+                margin-bottom: 0.8rem;
+            }
+        }
+
+        /* Estados de loading mejorados */
         .loading .btn-login,
         .loading .btn-google,
-        .loading .btn-use-token {
+        .loading .btn-use-token,
+        .loading .btn-test-token {
             pointer-events: none;
             opacity: 0.8;
+            cursor: not-allowed;
+        }
+
+        /* Mejoras para pantallas táctiles */
+        @media (hover: none) and (pointer: coarse) {
+            .btn-google:hover,
+            .btn-login:hover,
+            .btn-use-token:hover,
+            .btn-copy-token:hover,
+            .btn-test-token:hover,
+            .token-card:hover {
+                transform: none;
+                box-shadow: none;
+            }
+            
+            .btn-google:active,
+            .btn-login:active,
+            .btn-use-token:active,
+            .btn-copy-token:active,
+            .btn-test-token:active {
+                transform: scale(0.98);
+            }
+            
+            .token-card:active {
+                transform: scale(0.99);
+            }
+        }
+
+        /* Mejoras para accesibilidad - motion reducido */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+            
+            .star {
+                animation: none;
+            }
+            
+            .btn-google:hover,
+            .btn-login:hover,
+            .btn-use-token:hover,
+            .token-card:hover {
+                transform: none;
+            }
+        }
+
+        /* Mejoras para contraste alto */
+        @media (prefers-contrast: high) {
+            .form-control-custom {
+                border-width: 3px;
+            }
+            
+            .btn-google,
+            .btn-login,
+            .btn-use-token {
+                border-width: 2px;
+                border-style: solid;
+                border-color: currentColor;
+            }
+            
+            .token-card {
+                border-width: 3px;
+            }
         }
     </style>
 </head>

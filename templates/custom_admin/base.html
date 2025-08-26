@@ -33,6 +33,7 @@
     <style>
         :root {
             --sidebar-width: 260px;
+            --sidebar-collapsed-width: 60px;
             --header-height: 60px;
             --primary-color: #2c3e50;
             --secondary-color: #34495e;
@@ -43,12 +44,19 @@
             --info-color: #00bcd4;
         }
         
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             background-color: #f5f7fa;
+            overflow-x: hidden;
         }
         
-        /* Sidebar */
+        /* =======================================
+           SIDEBAR RESPONSIVE MEJORADO
+        ======================================= */
         .admin-sidebar {
             position: fixed;
             top: 0;
@@ -58,15 +66,25 @@
             background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
             color: white;
             z-index: 1040;
-            transition: transform 0.3s ease;
+            transition: transform 0.3s ease, width 0.3s ease;
             overflow-y: auto;
             box-shadow: 2px 0 10px rgba(0,0,0,0.1);
         }
         
+        /* Estados del sidebar */
         .admin-sidebar.collapsed {
+            width: var(--sidebar-collapsed-width);
+        }
+        
+        .admin-sidebar.mobile-hidden {
             transform: translateX(-100%);
         }
         
+        .admin-sidebar.mobile-active {
+            transform: translateX(0);
+        }
+        
+        /* Sidebar Header Responsivo */
         .sidebar-header {
             padding: 25px 15px;
             text-align: center;
@@ -74,7 +92,13 @@
             background: rgba(0,0,0,0.1);
             display: flex;           
             align-items: center;     
-            justify-content: center; 
+            justify-content: center;
+            transition: all 0.3s ease;
+            min-height: var(--header-height);
+        }
+        
+        .admin-sidebar.collapsed .sidebar-header {
+            padding: 15px 10px;
         }
         
         .sidebar-logo {
@@ -84,19 +108,27 @@
             text-decoration: none;
             display: block;
         }
-        .sidebar-logo img {
-    height: 50px !important;
-    width: auto !important;
-    max-width: 230px;
-    transition: all 0.3s ease;
-    filter: brightness(1.05);
-}
-
-.sidebar-logo:hover img {
-    transform: scale(1.02);
-    opacity: 0.95;
-}
         
+        .sidebar-logo img {
+            height: 50px !important;
+            width: auto !important;
+            max-width: 230px;
+            transition: all 0.3s ease;
+            filter: brightness(1.05);
+        }
+
+        .sidebar-logo:hover img {
+            transform: scale(1.02);
+            opacity: 0.95;
+        }
+        
+        /* Logo adaptativo para sidebar colapsado */
+        .admin-sidebar.collapsed .sidebar-logo img {
+            height: 32px !important;
+            max-width: 32px;
+        }
+        
+        /* Menú responsivo mejorado */
         .sidebar-menu {
             padding: 20px 0;
         }
@@ -112,6 +144,12 @@
             text-transform: uppercase;
             letter-spacing: 1px;
             color: rgba(255,255,255,0.6);
+            transition: all 0.3s ease;
+        }
+        
+        /* Ocultar títulos en sidebar colapsado */
+        .admin-sidebar.collapsed .menu-section-title {
+            display: none;
         }
         
         .menu-item {
@@ -125,6 +163,7 @@
             color: rgba(255,255,255,0.9);
             text-decoration: none;
             transition: all 0.3s ease;
+            white-space: nowrap;
         }
         
         .menu-link:hover {
@@ -155,6 +194,24 @@
             text-align: center;
         }
         
+        /* Menu links en sidebar colapsado */
+        .admin-sidebar.collapsed .menu-link {
+            padding: 12px 20px;
+            justify-content: center;
+        }
+        
+        .admin-sidebar.collapsed .menu-link:hover {
+            padding-left: 20px;
+        }
+        
+        .admin-sidebar.collapsed .menu-link span:not(.menu-badge) {
+            display: none;
+        }
+        
+        .admin-sidebar.collapsed .menu-icon {
+            margin-right: 0;
+        }
+        
         .menu-badge {
             margin-left: auto;
             background: var(--danger-color);
@@ -163,9 +220,23 @@
             border-radius: 12px;
             font-size: 0.75rem;
             font-weight: bold;
+            min-width: 18px;
+            text-align: center;
         }
         
-        /* Main Content */
+        /* Badge en sidebar colapsado */
+        .admin-sidebar.collapsed .menu-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            margin-left: 0;
+            padding: 2px 6px;
+            font-size: 0.65rem;
+        }
+        
+        /* =======================================
+           MAIN CONTENT RESPONSIVO
+        ======================================= */
         .admin-main {
             margin-left: var(--sidebar-width);
             min-height: 100vh;
@@ -176,7 +247,11 @@
             margin-left: 0;
         }
         
-        /* Header */
+        .admin-main.sidebar-collapsed {
+            margin-left: var(--sidebar-collapsed-width);
+        }
+        
+        /* Header Responsivo */
         .admin-header {
             background: white;
             height: var(--header-height);
@@ -197,6 +272,13 @@
             color: var(--primary-color);
             cursor: pointer;
             margin-right: 20px;
+            padding: 8px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        
+        .header-toggle:hover {
+            background: rgba(52, 152, 219, 0.1);
         }
         
         .header-title {
@@ -213,6 +295,7 @@
             gap: 15px;
         }
         
+        /* Search Responsivo */
         .header-search {
             position: relative;
         }
@@ -248,7 +331,9 @@
             padding: 20px;
         }
         
-        /* Cards */
+        /* =======================================
+           CARDS RESPONSIVOS
+        ======================================= */
         .admin-card {
             background: white;
             border-radius: 10px;
@@ -269,6 +354,8 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         
         .card-title {
@@ -281,9 +368,10 @@
         .card-actions {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
         
-        /* Stats Cards */
+        /* Stats Cards Responsivos */
         .stat-card {
             background: white;
             border-radius: 10px;
@@ -292,6 +380,7 @@
             position: relative;
             overflow: hidden;
             transition: all 0.3s ease;
+            text-align: center;
         }
         
         .stat-card:hover {
@@ -342,9 +431,12 @@
         .stat-change.positive { color: var(--success-color); }
         .stat-change.negative { color: var(--danger-color); }
         
-        /* Tables */
+        /* =======================================
+           TABLES RESPONSIVOS
+        ======================================= */
         .table-container {
             padding: 20px;
+            overflow-x: auto;
         }
         
         .table-actions {
@@ -362,7 +454,9 @@
             flex-wrap: wrap;
         }
         
-        /* Buttons */
+        /* =======================================
+           BUTTONS RESPONSIVOS
+        ======================================= */
         .btn-admin {
             padding: 8px 20px;
             border-radius: 6px;
@@ -401,7 +495,16 @@
             color: white;
         }
         
-        /* Modals */
+        /* Button groups responsivos */
+        .btn-group-responsive {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        
+        /* =======================================
+           MODALS RESPONSIVOS
+        ======================================= */
         .modal-header {
             background: #f8f9fa;
             border-bottom: 1px solid #e9ecef;
@@ -412,7 +515,9 @@
             font-weight: 600;
         }
         
-        /* Forms */
+        /* =======================================
+           FORMS RESPONSIVOS
+        ======================================= */
         .form-label {
             font-weight: 500;
             color: #495057;
@@ -438,30 +543,17 @@
             margin-top: 5px;
         }
         
-        /* Responsive */
-        @media (max-width: 768px) {
-            .admin-sidebar {
-                transform: translateX(-100%);
-            }
-            
-            .admin-sidebar.active {
-                transform: translateX(0);
-            }
-            
-            .admin-main {
-                margin-left: 0;
-            }
-            
-            .header-toggle {
-                display: block;
-            }
-            
-            .header-search input {
-                width: 200px;
-            }
+        /* Form rows responsivos */
+        .form-row-responsive {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
         }
         
-        /* Loading Overlay */
+        /* =======================================
+           LOADING Y NOTIFICATIONS
+        ======================================= */
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -489,12 +581,12 @@
             100% { transform: rotate(360deg); }
         }
         
-        /* Toast Notifications */
         .toast-container {
             position: fixed;
             top: 80px;
             right: 20px;
             z-index: 1050;
+            max-width: 350px;
         }
         
         /* Status Badges */
@@ -509,6 +601,331 @@
         .badge-inactive { background: #f8d7da; color: #721c24; }
         .badge-pending { background: #fff3cd; color: #856404; }
         .badge-authorized { background: #d1ecf1; color: #0c5460; }
+        
+        /* =======================================
+           UTILITY CLASSES RESPONSIVE
+        ======================================= */
+        .hide-mobile {
+            display: block;
+        }
+        
+        .show-mobile {
+            display: none;
+        }
+        
+        .text-responsive {
+            font-size: 1rem;
+        }
+        
+        /* =======================================
+           MEDIA QUERIES RESPONSIVOS
+        ======================================= */
+        
+        /* Large Desktop (1200px+) */
+        @media (min-width: 1200px) {
+            .admin-content {
+                padding: 30px;
+            }
+            
+            .header-search input {
+                width: 350px;
+            }
+        }
+        
+        /* Desktop (992px - 1199px) */
+        @media (max-width: 1199px) {
+            :root {
+                --sidebar-width: 220px;
+                --sidebar-collapsed-width: 55px;
+            }
+            
+            .sidebar-logo img {
+                height: 45px !important;
+                max-width: 200px;
+            }
+            
+            .header-search input {
+                width: 250px;
+            }
+        }
+        
+        /* Tablet (768px - 991px) */
+        @media (max-width: 991px) {
+            /* Sidebar siempre oculto en tablet y móvil */
+            .admin-sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .admin-sidebar.mobile-active {
+                transform: translateX(0);
+                z-index: 1050;
+            }
+            
+            .admin-main {
+                margin-left: 0;
+            }
+            
+            .header-toggle {
+                display: block;
+            }
+            
+            .header-search {
+                display: none;
+            }
+            
+            .header-title {
+                font-size: 1.1rem;
+            }
+            
+            .admin-content {
+                padding: 15px;
+            }
+            
+            /* Cards más compactas */
+            .card-header {
+                padding: 12px 15px;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .card-actions {
+                width: 100%;
+                margin-top: 10px;
+            }
+            
+            /* Table actions en columna */
+            .table-actions {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .table-filters {
+                width: 100%;
+            }
+            
+            /* Stats cards más pequeñas */
+            .stat-card {
+                padding: 15px;
+            }
+            
+            .stat-value {
+                font-size: 1.6rem;
+            }
+            
+            .stat-icon {
+                font-size: 2.5rem;
+                right: 15px;
+                top: 15px;
+            }
+            
+            /* Button groups en tablet */
+            .btn-group-responsive .btn-admin {
+                flex: 1;
+                justify-content: center;
+                min-width: 0;
+            }
+        }
+        
+        /* Mobile Large (576px - 767px) */
+        @media (max-width: 767px) {
+            .header-title {
+                font-size: 1rem;
+            }
+            
+            .admin-content {
+                padding: 10px;
+            }
+            
+            .admin-card {
+                margin-bottom: 15px;
+            }
+            
+            .card-header {
+                padding: 10px 15px;
+            }
+            
+            .card-title {
+                font-size: 1rem;
+            }
+            
+            .table-container {
+                padding: 10px;
+            }
+            
+            /* Buttons más pequeños */
+            .btn-admin {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+                gap: 4px;
+            }
+            
+            /* Stats cards en móvil */
+            .stat-card {
+                padding: 12px;
+            }
+            
+            .stat-value {
+                font-size: 1.4rem;
+            }
+            
+            .stat-icon {
+                font-size: 2rem;
+                right: 12px;
+                top: 12px;
+            }
+            
+            .stat-label {
+                font-size: 0.8rem;
+            }
+            
+            /* Forms en móvil */
+            .form-row-responsive {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .form-control, .form-select {
+                font-size: 16px; /* Evita zoom en iOS */
+            }
+            
+            /* Utility classes móvil */
+            .hide-mobile {
+                display: none !important;
+            }
+            
+            .show-mobile {
+                display: block !important;
+            }
+            
+            .show-mobile.d-flex {
+                display: flex !important;
+            }
+            
+            .text-responsive {
+                font-size: 0.9rem;
+            }
+            
+            /* Toast container en móvil */
+            .toast-container {
+                top: 70px;
+                right: 10px;
+                left: 10px;
+                max-width: none;
+            }
+        }
+        
+        /* Mobile Small (hasta 575px) */
+        @media (max-width: 575px) {
+            .admin-header {
+                padding: 0 10px;
+                height: 50px;
+            }
+            
+            :root {
+                --header-height: 50px;
+            }
+            
+            .header-toggle {
+                font-size: 1.3rem;
+                margin-right: 10px;
+                padding: 6px;
+            }
+            
+            .header-title {
+                font-size: 0.9rem;
+            }
+            
+            .header-actions {
+                gap: 8px;
+            }
+            
+            .admin-content {
+                padding: 8px;
+            }
+            
+            .card-header {
+                padding: 8px 12px;
+            }
+            
+            .card-title {
+                font-size: 0.95rem;
+            }
+            
+            .table-container {
+                padding: 5px;
+            }
+            
+            /* Modals en móvil pequeño */
+            .modal-dialog {
+                margin: 10px;
+            }
+            
+            .modal-header, .modal-footer {
+                padding: 10px 15px;
+            }
+            
+            .modal-body {
+                padding: 15px;
+            }
+            
+            /* Loading spinner más pequeño */
+            .loading-spinner {
+                width: 35px;
+                height: 35px;
+                border-width: 2px;
+            }
+            
+            /* Stats cards muy compactas */
+            .stat-card {
+                padding: 10px;
+            }
+            
+            .stat-value {
+                font-size: 1.2rem;
+            }
+            
+            .stat-icon {
+                font-size: 1.5rem;
+                right: 10px;
+                top: 10px;
+            }
+            
+            .stat-label {
+                font-size: 0.75rem;
+            }
+            
+            .text-responsive {
+                font-size: 0.85rem;
+            }
+        }
+        
+        /* =======================================
+           SIDEBAR OVERLAY PARA MÓVIL
+        ======================================= */
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1035;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        
+        .sidebar-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        
+        @media (min-width: 992px) {
+            .sidebar-overlay {
+                display: none !important;
+            }
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -522,19 +939,18 @@
     <!-- Toast Container -->
     <div class="toast-container"></div>
     
+    <!-- Sidebar Overlay para móvil -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    
     <!-- Sidebar -->
     <nav class="admin-sidebar" id="adminSidebar">
-<div class="sidebar-header">
-    <a href="{% url 'custom_admin:dashboard' %}" class="sidebar-logo">
-        <!-- Desktop: Logo completo si hay espacio -->
-        <img src="{% static 'images/frontera-logo-full.png' %}" alt="FronteraTech" 
-             class="sidebar-logo-full d-none d-xl-block" style="height: 36px; width: auto;">
-        
-        <!-- Sidebar normal: Logo compacto -->
-        <img src="{% static 'images/frontera-logo-compact.png' %}" alt="FronteraTech" 
-             class="sidebar-logo-compact d-block d-xl-none" style="height: 32px; width: auto;">
-    </a>
-</div>
+        <div class="sidebar-header">
+            <a href="{% url 'custom_admin:dashboard' %}" class="sidebar-logo">
+                <!-- Logo adaptativo -->
+                <img src="{% static 'images/frontera-logo-full.png' %}" alt="FronteraTech" 
+                     class="logo-full">
+            </a>
+        </div>
         
         <div class="sidebar-menu">
             <!-- Dashboard -->
@@ -575,34 +991,36 @@
                     </a>
                 </div>
             </div>
+            
             <!-- Billing Menu -->
-<div class="menu-section">
-    <div class="menu-section-title">Planes y Facturación</div>
-    
-    <div class="menu-item">
-        <a href="{% url 'custom_admin:billing_plans' %}" class="menu-link {% if 'billing_plan' in request.resolver_match.url_name %}active{% endif %}">
-            <i class="fas fa-tags menu-icon"></i>
-            <span>Planes</span>
-        </a>
-    </div>
-    
-    <div class="menu-item">
-        <a href="{% url 'custom_admin:billing_purchases' %}" class="menu-link {% if 'billing_purchase' in request.resolver_match.url_name %}active{% endif %}">
-            <i class="fas fa-shopping-cart menu-icon"></i>
-            <span>Compras</span>
-            {% if pending_purchases_count > 0 %}
-                <span class="menu-badge">{{ pending_purchases_count }}</span>
-            {% endif %}
-        </a>
-    </div>
-    
-    <div class="menu-item">
-        <a href="{% url 'custom_admin:billing_profiles' %}" class="menu-link {% if 'billing_profile' in request.resolver_match.url_name %}active{% endif %}">
-            <i class="fas fa-credit-card menu-icon"></i>
-            <span>Perfiles de Facturación</span>
-        </a>
-    </div>
-</div>
+            <div class="menu-section">
+                <div class="menu-section-title">Planes y Facturación</div>
+                
+                <div class="menu-item">
+                    <a href="{% url 'custom_admin:billing_plans' %}" class="menu-link {% if 'billing_plan' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-tags menu-icon"></i>
+                        <span>Planes</span>
+                    </a>
+                </div>
+                
+                <div class="menu-item">
+                    <a href="{% url 'custom_admin:billing_purchases' %}" class="menu-link {% if 'billing_purchase' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-shopping-cart menu-icon"></i>
+                        <span>Compras</span>
+                        {% if pending_purchases_count > 0 %}
+                            <span class="menu-badge">{{ pending_purchases_count }}</span>
+                        {% endif %}
+                    </a>
+                </div>
+                
+                <div class="menu-item">
+                    <a href="{% url 'custom_admin:billing_profiles' %}" class="menu-link {% if 'billing_profile' in request.resolver_match.url_name %}active{% endif %}">
+                        <i class="fas fa-credit-card menu-icon"></i>
+                        <span>Perfiles de Facturación</span>
+                    </a>
+                </div>
+            </div>
+            
             <!-- SRI Menu -->
             <div class="menu-section">
                 <div class="menu-section-title">Facturación SRI</div>
@@ -652,8 +1070,8 @@
             </div>
             
             <!-- User Section -->
-            <div class="menu-section" style="margin-top: auto; padding-bottom: 20px;">
-                <div class="menu-section-title">{{ user.email }}</div>
+            <div class="menu-section">
+                <div class="menu-section-title hide-mobile">{{ user.email|truncatechars:15 }}</div>
                 
                 <div class="menu-item">
                     <a href="{% url 'custom_admin:profile' %}" class="menu-link">
@@ -683,7 +1101,7 @@
             <h1 class="header-title">{% block header_title %}Panel de Administración{% endblock %}</h1>
             
             <div class="header-actions">
-                <div class="header-search">
+                <div class="header-search hide-mobile">
                     <input type="text" placeholder="Buscar..." id="globalSearch">
                     <button type="button">
                         <i class="fas fa-search"></i>
@@ -692,12 +1110,13 @@
                 
                 <button class="btn btn-sm btn-light" id="refreshBtn" title="Actualizar">
                     <i class="fas fa-sync-alt"></i>
+                    <span class="hide-mobile ms-1">Actualizar</span>
                 </button>
                 
                 <div class="dropdown">
                     <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
                         <i class="fas fa-user-circle me-1"></i>
-                        {{ user.get_display_name }}
+                        <span class="hide-mobile">{{ user.get_display_name|default:user.email|truncatechars:12 }}</span>
                     </button>
                     <ul class="dropdown-menu dropdown-menu-end">
                         <li><a class="dropdown-item" href="{% url 'custom_admin:profile' %}">
@@ -747,9 +1166,9 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.32/dist/sweetalert2.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     
-    <!-- Base Admin JS -->
+    <!-- Enhanced Responsive Admin JS -->
     <script>
-        // Admin namespace
+        // Enhanced Admin namespace with full responsive features
         window.VendoAdmin = {
             // Configuration
             config: {
@@ -757,81 +1176,270 @@
                 apiBaseUrl: '/api/v1/',
                 dateFormat: 'DD/MM/YYYY',
                 timeFormat: 'HH:mm',
-                language: 'es'
+                language: 'es',
+                breakpoints: {
+                    xs: 575,
+                    sm: 767,
+                    md: 991,
+                    lg: 1199,
+                    xl: 1200
+                }
+            },
+            
+            // State management
+            state: {
+                sidebarCollapsed: false,
+                isMobile: false,
+                currentBreakpoint: 'xl',
+                sidebarVisible: false
             },
             
             // Initialize
             init: function() {
+                this.detectDevice();
                 this.setupSidebar();
+                this.setupResponsive();
                 this.setupTooltips();
                 this.setupDataTables();
                 this.setupForms();
                 this.setupModals();
                 this.setupNotifications();
+                this.bindEvents();
             },
             
-            // Sidebar toggle
+            // Device detection
+            detectDevice: function() {
+                const width = window.innerWidth;
+                this.state.isMobile = width <= this.config.breakpoints.md;
+                
+                if (width <= this.config.breakpoints.xs) {
+                    this.state.currentBreakpoint = 'xs';
+                } else if (width <= this.config.breakpoints.sm) {
+                    this.state.currentBreakpoint = 'sm';
+                } else if (width <= this.config.breakpoints.md) {
+                    this.state.currentBreakpoint = 'md';
+                } else if (width <= this.config.breakpoints.lg) {
+                    this.state.currentBreakpoint = 'lg';
+                } else {
+                    this.state.currentBreakpoint = 'xl';
+                }
+            },
+            
+            // Enhanced sidebar with full responsive behavior
             setupSidebar: function() {
                 const sidebar = document.getElementById('adminSidebar');
                 const main = document.getElementById('adminMain');
                 const toggle = document.getElementById('sidebarToggle');
+                const overlay = document.getElementById('sidebarOverlay');
                 
-                toggle?.addEventListener('click', function() {
-                    sidebar.classList.toggle('collapsed');
-                    sidebar.classList.toggle('active');
-                    main.classList.toggle('expanded');
-                });
+                if (!toggle || !sidebar || !main) return;
                 
-                // Close sidebar on mobile when clicking outside
-                document.addEventListener('click', function(e) {
-                    if (window.innerWidth <= 768) {
-                        if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
-                            sidebar.classList.remove('active');
-                        }
+                // Toggle functionality
+                toggle.addEventListener('click', () => {
+                    if (this.state.isMobile) {
+                        // Mobile: show/hide with overlay
+                        this.toggleMobileSidebar();
+                    } else {
+                        // Desktop: collapse/expand
+                        this.toggleDesktopSidebar();
                     }
                 });
+                
+                // Overlay click to close mobile sidebar
+                overlay?.addEventListener('click', () => {
+                    this.closeMobileSidebar();
+                });
+                
+                // Escape key to close mobile sidebar
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.state.isMobile && this.state.sidebarVisible) {
+                        this.closeMobileSidebar();
+                    }
+                });
+                
+                // Initialize sidebar state
+                this.initializeSidebarState();
+            },
+            
+            // Toggle mobile sidebar
+            toggleMobileSidebar: function() {
+                const sidebar = document.getElementById('adminSidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                
+                if (this.state.sidebarVisible) {
+                    this.closeMobileSidebar();
+                } else {
+                    sidebar.classList.add('mobile-active');
+                    overlay.classList.add('active');
+                    this.state.sidebarVisible = true;
+                    document.body.style.overflow = 'hidden'; // Prevent scroll
+                }
+            },
+            
+            // Close mobile sidebar
+            closeMobileSidebar: function() {
+                const sidebar = document.getElementById('adminSidebar');
+                const overlay = document.getElementById('sidebarOverlay');
+                
+                sidebar.classList.remove('mobile-active');
+                overlay.classList.remove('active');
+                this.state.sidebarVisible = false;
+                document.body.style.overflow = ''; // Restore scroll
+            },
+            
+            // Toggle desktop sidebar
+            toggleDesktopSidebar: function() {
+                const sidebar = document.getElementById('adminSidebar');
+                const main = document.getElementById('adminMain');
+                
+                if (this.state.sidebarCollapsed) {
+                    sidebar.classList.remove('collapsed');
+                    main.classList.remove('sidebar-collapsed');
+                    this.state.sidebarCollapsed = false;
+                } else {
+                    sidebar.classList.add('collapsed');
+                    main.classList.add('sidebar-collapsed');
+                    this.state.sidebarCollapsed = true;
+                }
+                
+                // Save state
+                localStorage.setItem('sidebarCollapsed', this.state.sidebarCollapsed);
+            },
+            
+            // Initialize sidebar state
+            initializeSidebarState: function() {
+                if (!this.state.isMobile) {
+                    const savedState = localStorage.getItem('sidebarCollapsed') === 'true';
+                    if (savedState) {
+                        const sidebar = document.getElementById('adminSidebar');
+                        const main = document.getElementById('adminMain');
+                        sidebar.classList.add('collapsed');
+                        main.classList.add('sidebar-collapsed');
+                        this.state.sidebarCollapsed = true;
+                    }
+                }
+            },
+            
+            // Responsive behavior setup
+            setupResponsive: function() {
+                let resizeTimer;
+                
+                window.addEventListener('resize', () => {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(() => {
+                        const wasDesktop = !this.state.isMobile;
+                        this.detectDevice();
+                        
+                        // If switched from mobile to desktop or vice versa
+                        if (wasDesktop !== !this.state.isMobile) {
+                            this.handleBreakpointChange();
+                        }
+                        
+                        // Update DataTables
+                        if ($.fn.DataTable) {
+                            $.fn.DataTable.tables({ visible: true, api: true }).columns.adjust().responsive.recalc();
+                        }
+                    }, 250);
+                });
+            },
+            
+            // Handle breakpoint changes
+            handleBreakpointChange: function() {
+                const sidebar = document.getElementById('adminSidebar');
+                const main = document.getElementById('adminMain');
+                const overlay = document.getElementById('sidebarOverlay');
+                
+                if (this.state.isMobile) {
+                    // Switch to mobile
+                    this.closeMobileSidebar();
+                    sidebar.classList.remove('collapsed');
+                    main.classList.remove('sidebar-collapsed');
+                } else {
+                    // Switch to desktop
+                    sidebar.classList.remove('mobile-active');
+                    overlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                    this.state.sidebarVisible = false;
+                    
+                    // Restore desktop sidebar state
+                    const savedState = localStorage.getItem('sidebarCollapsed') === 'true';
+                    if (savedState) {
+                        sidebar.classList.add('collapsed');
+                        main.classList.add('sidebar-collapsed');
+                        this.state.sidebarCollapsed = true;
+                    }
+                }
             },
             
             // Initialize tooltips
             setupTooltips: function() {
+                const tooltipOptions = {
+                    placement: this.state.isMobile ? 'top' : 'auto',
+                    trigger: this.state.isMobile ? 'click' : 'hover'
+                };
+                
                 const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
                 tooltipTriggerList.map(function (tooltipTriggerEl) {
-                    return new bootstrap.Tooltip(tooltipTriggerEl);
+                    return new bootstrap.Tooltip(tooltipTriggerEl, tooltipOptions);
                 });
             },
             
-            // Default DataTable configuration
+            // Enhanced DataTable configuration
             setupDataTables: function() {
+                const responsiveConfig = {
+                    details: {
+                        type: this.state.isMobile ? 'column' : 'inline',
+                        display: $.fn.dataTable.Responsive.display.childRowImmediate,
+                        renderer: function (api, rowIdx, columns) {
+                            let data = $.map(columns, function (col, i) {
+                                return col.hidden ?
+                                    '<div class="row mb-2">' +
+                                        '<div class="col-4"><strong>' + col.title + ':</strong></div>' +
+                                        '<div class="col-8">' + col.data + '</div>' +
+                                    '</div>' : '';
+                            }).join('');
+                            
+                            return data ? $('<div class="container-fluid">').append(data) : false;
+                        }
+                    }
+                };
+                
                 $.extend(true, $.fn.dataTable.defaults, {
                     language: {
                         url: '//cdn.datatables.net/plug-ins/1.13.7/i18n/es-ES.json'
                     },
-                    responsive: true,
+                    responsive: responsiveConfig,
                     processing: true,
-                    pageLength: 25,
-                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Todos"]],
-                    dom: "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
-                         "<'row'<'col-sm-12'tr>>" +
-                         "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+                    pageLength: this.state.isMobile ? 10 : 25,
+                    lengthMenu: this.state.isMobile ? 
+                        [[5, 10, 25, -1], [5, 10, 25, "Todos"]] :
+                        [[10, 25, 50, 100, -1], [10, 25, 50, 100, "Todos"]],
+                    dom: this.state.isMobile ? 
+                        "<'row'<'col-12'f>>" +
+                        "<'row'<'col-12'tr>>" +
+                        "<'row'<'col-6'i><'col-6'p>>" :
+                        "<'row'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                        "<'row'<'col-sm-12'tr>>" +
+                        "<'row'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
                     buttons: [
                         {
                             extend: 'copy',
-                            text: '<i class="fas fa-copy"></i> Copiar',
+                            text: this.state.isMobile ? '<i class="fas fa-copy"></i>' : '<i class="fas fa-copy"></i> Copiar',
                             className: 'btn btn-sm btn-secondary'
                         },
                         {
                             extend: 'excel',
-                            text: '<i class="fas fa-file-excel"></i> Excel',
+                            text: this.state.isMobile ? '<i class="fas fa-file-excel"></i>' : '<i class="fas fa-file-excel"></i> Excel',
                             className: 'btn btn-sm btn-success'
                         },
                         {
                             extend: 'pdf',
-                            text: '<i class="fas fa-file-pdf"></i> PDF',
+                            text: this.state.isMobile ? '<i class="fas fa-file-pdf"></i>' : '<i class="fas fa-file-pdf"></i> PDF',
                             className: 'btn btn-sm btn-danger'
                         },
                         {
                             extend: 'print',
-                            text: '<i class="fas fa-print"></i> Imprimir',
+                            text: this.state.isMobile ? '<i class="fas fa-print"></i>' : '<i class="fas fa-print"></i> Imprimir',
                             className: 'btn btn-sm btn-info'
                         }
                     ]
@@ -844,7 +1452,8 @@
                 $('.select2').select2({
                     theme: 'bootstrap-5',
                     width: '100%',
-                    language: 'es'
+                    language: 'es',
+                    dropdownAutoWidth: true
                 });
                 
                 // Form validation
@@ -858,22 +1467,67 @@
                         form.classList.add('was-validated');
                     }, false);
                 });
+                
+                // Mobile form improvements
+                if (this.state.isMobile) {
+                    // Prevent zoom on input focus for iOS
+                    const inputs = document.querySelectorAll('input, select, textarea');
+                    inputs.forEach(input => {
+                        if (input.style.fontSize === '' || parseFloat(input.style.fontSize) < 16) {
+                            input.style.fontSize = '16px';
+                        }
+                    });
+                }
             },
             
             // Setup modals
             setupModals: function() {
                 // Auto-focus first input in modal
                 $(document).on('shown.bs.modal', '.modal', function() {
-                    $(this).find('input:first').focus();
+                    $(this).find('input:visible:first').focus();
                 });
+                
+                // Mobile modal adjustments
+                if (this.state.isMobile) {
+                    $(document).on('show.bs.modal', '.modal', function() {
+                        $(this).find('.modal-dialog').addClass('modal-fullscreen-sm-down');
+                    });
+                }
             },
             
             // Notifications
             setupNotifications: function() {
                 // Refresh button
-                document.getElementById('refreshBtn')?.addEventListener('click', function() {
-                    location.reload();
+                document.getElementById('refreshBtn')?.addEventListener('click', () => {
+                    this.showLoading();
+                    setTimeout(() => location.reload(), 500);
                 });
+                
+                // Adjust toast container for mobile
+                if (this.state.isMobile) {
+                    const container = document.querySelector('.toast-container');
+                    if (container) {
+                        container.style.left = '10px';
+                        container.style.right = '10px';
+                        container.style.maxWidth = 'none';
+                    }
+                }
+            },
+            
+            // Bind events
+            bindEvents: function() {
+                // Global search functionality
+                const globalSearch = document.getElementById('globalSearch');
+                if (globalSearch) {
+                    let searchTimeout;
+                    globalSearch.addEventListener('input', (e) => {
+                        clearTimeout(searchTimeout);
+                        searchTimeout = setTimeout(() => {
+                            // Implement search logic
+                            console.log('Search:', e.target.value);
+                        }, 500);
+                    });
+                }
             },
             
             // Show loading
@@ -886,8 +1540,15 @@
                 document.getElementById('loadingOverlay').style.display = 'none';
             },
             
-            // Show toast notification
-            showToast: function(message, type = 'info') {
+            // Enhanced toast notifications
+            showToast: function(message, type = 'info', options = {}) {
+                const defaultOptions = {
+                    autohide: true,
+                    delay: type === 'error' ? 7000 : 5000
+                };
+                
+                const settings = Object.assign({}, defaultOptions, options);
+                
                 const toastHtml = `
                     <div class="toast align-items-center text-white bg-${type} border-0" role="alert">
                         <div class="d-flex">
@@ -898,23 +1559,33 @@
                 `;
                 
                 const toastContainer = document.querySelector('.toast-container');
-                toastContainer.insertAdjacentHTML('beforeend', toastHtml);
-                
-                const toastElement = toastContainer.lastElementChild;
-                const toast = new bootstrap.Toast(toastElement, {
-                    autohide: true,
-                    delay: 5000
-                });
-                
-                toast.show();
-                
-                toastElement.addEventListener('hidden.bs.toast', function() {
-                    toastElement.remove();
-                });
+                if (toastContainer) {
+                    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+                    
+                    const toastElement = toastContainer.lastElementChild;
+                    const toast = new bootstrap.Toast(toastElement, {
+                        autohide: settings.autohide,
+                        delay: settings.delay
+                    });
+                    
+                    toast.show();
+                    
+                    toastElement.addEventListener('hidden.bs.toast', function() {
+                        toastElement.remove();
+                    });
+                }
             },
             
             // Confirm dialog
-            confirm: function(title, message, callback) {
+            confirm: function(title, message, callback, options = {}) {
+                const defaultOptions = {
+                    confirmButtonText: 'Sí, continuar',
+                    cancelButtonText: 'Cancelar',
+                    width: this.state.isMobile ? '95%' : undefined
+                };
+                
+                const settings = Object.assign({}, defaultOptions, options);
+                
                 Swal.fire({
                     title: title,
                     text: message,
@@ -922,8 +1593,9 @@
                     showCancelButton: true,
                     confirmButtonColor: '#3498db',
                     cancelButtonColor: '#e74c3c',
-                    confirmButtonText: 'Sí, continuar',
-                    cancelButtonText: 'Cancelar'
+                    confirmButtonText: settings.confirmButtonText,
+                    cancelButtonText: settings.cancelButtonText,
+                    width: settings.width
                 }).then((result) => {
                     if (result.isConfirmed && callback) {
                         callback();
@@ -946,19 +1618,32 @@
                     headers: {
                         'X-CSRFToken': this.config.csrfToken,
                         'Content-Type': 'application/json'
-                    }
+                    },
+                    showLoading: true
                 };
                 
                 options = Object.assign({}, defaults, options);
                 
+                if (options.showLoading) {
+                    this.showLoading();
+                }
+                
                 return fetch(options.url, options)
                     .then(response => {
+                        if (options.showLoading) {
+                            this.hideLoading();
+                        }
+                        
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
                         return response.json();
                     })
                     .catch(error => {
+                        if (options.showLoading) {
+                            this.hideLoading();
+                        }
+                        
                         console.error('AJAX Error:', error);
                         this.showToast('Error en la solicitud: ' + error.message, 'danger');
                         throw error;
@@ -978,6 +1663,15 @@
                     style: 'currency',
                     currency: 'USD'
                 }).format(amount);
+            },
+            
+            // Utility functions
+            isMobile: function() {
+                return this.state.isMobile;
+            },
+            
+            isBreakpoint: function(breakpoint) {
+                return this.state.currentBreakpoint === breakpoint;
             }
         };
         
@@ -989,4 +1683,4 @@
     
     {% block extra_js %}{% endblock %}
 </body>
-</html>
+</html> 
