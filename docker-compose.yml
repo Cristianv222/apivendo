@@ -1,7 +1,7 @@
 services:
   db:
-    image: postgres:15
-    container_name: pg13-sitemadefacturacion
+    image: postgres:14
+    container_name: pg14-sitemadefacturacion
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
