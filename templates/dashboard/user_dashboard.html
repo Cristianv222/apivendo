@@ -2220,7 +2220,7 @@ function activarTabPlanes() {
     }
 }
 // ==========================================
-// FUNCIONES PARA DESCARGA DE DOCUMENTOS
+// FUNCIONES PARA DESCARGA DE DOCUMENTOS - MEJORADAS
 // ==========================================
 
 function downloadDocumentFile(documentId, fileType) {
@@ -2229,8 +2229,8 @@ function downloadDocumentFile(documentId, fileType) {
     // Mostrar indicador de carga
     showLoadingToast(`Descargando ${fileType.toUpperCase()}...`);
     
-    // Construir URL de descarga
-    const downloadUrl = `/sri/documents/${documentId}/download/${fileType}/`;
+    // Construir URL de descarga - CORREGIDA para usuarios normales
+    const downloadUrl = `/dashboard/sri/documents/${documentId}/download/${fileType}/`;
     
     // Crear enlace temporal para descarga
     const link = document.createElement('a');
@@ -2250,7 +2250,7 @@ function downloadDocumentFile(documentId, fileType) {
 }
 
 function checkDownloadStatus(documentId, fileType) {
-    fetch(`/sri/documents/${documentId}/files/check/`, {
+    fetch(`/dashboard/sri/documents/${documentId}/files/check/`, {
         method: 'GET',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
@@ -2259,7 +2259,7 @@ function checkDownloadStatus(documentId, fileType) {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.files && data.files[fileType] && data.files[fileType].downloadable) {
+        if (data.success && data.files && data.files[fileType] && data.files[fileType].downloadable) {
             showNotification(`${fileType.toUpperCase()} descargado exitosamente`, 'success');
         } else {
             showNotification(`Error: ${fileType.toUpperCase()} no disponible`, 'error');
@@ -2274,7 +2274,7 @@ function checkDownloadStatus(documentId, fileType) {
 function checkDocumentFiles(documentId) {
     showLoadingToast('Verificando archivos disponibles...');
     
-    fetch(`/sri/documents/${documentId}/files/check/`, {
+    fetch(`/dashboard/sri/documents/${documentId}/files/check/`, {
         method: 'GET',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
@@ -2284,7 +2284,7 @@ function checkDocumentFiles(documentId) {
     .then(response => response.json())
     .then(data => {
         if (data.error) {
-            showNotification(`Error: ${data.message}`, 'error');
+            showNotification(`Error: ${data.error}`, 'error');
             return;
         }
         
@@ -2296,6 +2296,8 @@ function checkDocumentFiles(documentId) {
         showNotification('Error verificando archivos del documento', 'error');
     });
 }
+
+// El resto de las funciones JavaScript permanecen iguales...
 
 function showFileStatusModal(fileData) {
     const modalHtml = `

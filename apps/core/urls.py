@@ -55,7 +55,20 @@ urlpatterns = [
     
     # Vista para ver y gestionar tokens de empresas
     path('tokens/', views.company_tokens_view, name='company_tokens'),
+
+    # ==========================================
+    # 📄 NUEVAS URLs SRI PARA USUARIOS - DESCARGA DE DOCUMENTOS
+    # ==========================================
     
+    # 🔒 DESCARGA SEGURA de documentos SRI para usuarios normales
+    path('sri/documents/<int:document_id>/download/<str:file_type>/', views.sri_document_download, name='sri_document_download'),
+    
+    # 🔒 VERIFICACIÓN de archivos disponibles
+    path('sri/documents/<int:document_id>/files/check/', views.sri_document_files_check, name='sri_document_files_check'),
+    
+    # 🔒 VISTA de detalle de documento SRI
+    path('sri/documents/<int:document_id>/view/', views.sri_document_view, name='sri_document_view'),
+ 
     # ==========================================
     # APIs LEGACY CON IDs (MANTENIDAS PARA COMPATIBILIDAD)
     # ==========================================

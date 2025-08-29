@@ -2012,3 +2012,249 @@ def public_landing_view(request):
         }
     
     return render(request, 'landing/index.html', context)
+# ========== FUNCIONES DE DESCARGA SRI PARA USUARIOS NORMALES ==========
+
+@login_required
+@audit_html_action('DOWNLOAD_SRI_DOCUMENT')
+def sri_document_download(request, document_id, file_type):
+    """
+    🔒 DESCARGA SEGURA de documentos SRI para usuarios normales
+    Replica la funcionalidad del admin pero con validaciones de usuario
+    """
+    from apps.sri_integration.models import ElectronicDocument
+    from django.http import FileResponse, Http404
+    import os
+    
+    try:
+        # VALIDACIÓN CRÍTICA: Solo documentos de empresas del usuario
+        user_companies = get_user_companies_secure(request.user)
+        
+        document = ElectronicDocument.objects.select_related('company').get(
+            id=document_id,
+            company__in=user_companies
+        )
+        
+        logger.info(f"✅ User {request.user.username} downloading {file_type} for document {document_id}")
+        
+        # Determinar qué archivo descargar según el tipo
+        file_field = None
+        filename_prefix = document.document_number or f"document_{document.id}"
+        
+        if file_type == 'pdf':
+            file_field = document.pdf_file
+            filename = f"{filename_prefix}.pdf"
+            content_type = 'application/pdf'
+        elif file_type == 'xml':
+            # Priorizar XML firmado sobre XML normal
+            if document.signed_xml_file:
+                file_field = document.signed_xml_file
+            else:
+                file_field = document.xml_file
+            filename = f"{filename_prefix}.xml"
+            content_type = 'application/xml'
+        else:
+            logger.warning(f"🚫 Invalid file type requested: {file_type}")
+            messages.error(request, f'Tipo de archivo no válido: {file_type}')
+            return redirect('core:dashboard')
+        
+        # Verificar que el archivo existe
+        if not file_field or not file_field.name:
+            logger.warning(f"🚫 No {file_type} file available for document {document_id}")
+            messages.error(request, f'Archivo {file_type.upper()} no disponible para este documento')
+            return redirect('core:dashboard')
+        
+        # Verificar que el archivo físico existe
+        if not os.path.exists(file_field.path):
+            logger.warning(f"🚫 Physical {file_type} file missing for document {document_id}: {file_field.path}")
+            messages.error(request, f'Archivo {file_type.upper()} no encontrado en el servidor')
+            return redirect('core:dashboard')
+        
+        # Servir el archivo
+        try:
+            response = FileResponse(
+                open(file_field.path, 'rb'),
+                as_attachment=True,
+                filename=filename,
+                content_type=content_type
+            )
+            
+            # Log exitoso
+            logger.info(f"✅ SUCCESS: User {request.user.username} downloaded {file_type} for document {document_id}")
+            
+            return response
+            
+        except Exception as file_error:
+            logger.error(f"❌ Error serving file: {file_error}")
+            messages.error(request, f'Error al descargar el archivo: {str(file_error)}')
+            return redirect('core:dashboard')
+        
+    except ElectronicDocument.DoesNotExist:
+        logger.warning(f"🚫 User {request.user.username} denied access to document {document_id}")
+        messages.error(request, 'Documento no encontrado o sin permisos de acceso')
+        return redirect('core:dashboard')
+        
+    except Exception as e:
+        logger.error(f"❌ Error in sri_document_download: {e}")
+        messages.error(request, f'Error al procesar la descarga: {str(e)}')
+        return redirect('core:dashboard')
+
+
+@login_required
+@audit_html_action('CHECK_SRI_DOCUMENT_FILES')
+def sri_document_files_check(request, document_id):
+    """
+    🔒 API para verificar qué archivos están disponibles para descarga
+    """
+    from apps.sri_integration.models import ElectronicDocument
+    import os
+    
+    try:
+        # VALIDACIÓN CRÍTICA: Solo documentos de empresas del usuario
+        user_companies = get_user_companies_secure(request.user)
+        
+        document = ElectronicDocument.objects.select_related('company').get(
+            id=document_id,
+            company__in=user_companies
+        )
+        
+        # Verificar disponibilidad de archivos
+        files_status = {
+            'pdf': {
+                'available': bool(document.pdf_file and document.pdf_file.name),
+                'exists': False,
+                'downloadable': False,
+                'size': 0
+            },
+            'xml': {
+                'available': bool(document.xml_file and document.xml_file.name) or bool(document.signed_xml_file and document.signed_xml_file.name),
+                'exists': False,
+                'downloadable': False,
+                'signed': bool(document.signed_xml_file and document.signed_xml_file.name),
+                'size': 0
+            }
+        }
+        
+        # Verificar PDF
+        if files_status['pdf']['available']:
+            try:
+                if os.path.exists(document.pdf_file.path):
+                    files_status['pdf']['exists'] = True
+                    files_status['pdf']['size'] = os.path.getsize(document.pdf_file.path)
+                    files_status['pdf']['downloadable'] = True
+            except:
+                pass
+        
+        # Verificar XML
+        if files_status['xml']['available']:
+            xml_file = document.signed_xml_file if document.signed_xml_file else document.xml_file
+            try:
+                if xml_file and os.path.exists(xml_file.path):
+                    files_status['xml']['exists'] = True
+                    files_status['xml']['size'] = os.path.getsize(xml_file.path)
+                    files_status['xml']['downloadable'] = True
+            except:
+                pass
+        
+        return JsonResponse({
+            'success': True,
+            'document_id': document.id,
+            'document_number': document.document_number,
+            'document_type': document.get_document_type_display(),
+            'status': document.status,
+            'files': files_status
+        })
+        
+    except ElectronicDocument.DoesNotExist:
+        logger.warning(f"🚫 User {request.user.username} denied access to document {document_id} for file check")
+        return JsonResponse({
+            'success': False,
+            'error': 'Documento no encontrado o sin permisos'
+        }, status=404)
+        
+    except Exception as e:
+        logger.error(f"❌ Error checking document files: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@audit_html_action('VIEW_SRI_DOCUMENT_DETAIL')
+def sri_document_view(request, document_id):
+    """
+    🔒 Vista de detalle de documento SRI para usuarios normales
+    """
+    from apps.sri_integration.models import ElectronicDocument
+    
+    try:
+        # VALIDACIÓN CRÍTICA: Solo documentos de empresas del usuario
+        user_companies = get_user_companies_secure(request.user)
+        
+        document = ElectronicDocument.objects.select_related('company').get(
+            id=document_id,
+            company__in=user_companies
+        )
+        
+        # Mapear tipo de documento
+        type_names = {
+            'INVOICE': 'Factura',
+            'CREDIT_NOTE': 'Nota de Crédito',
+            'DEBIT_NOTE': 'Nota de Débito',
+            'RETENTION': 'Retención',
+            'PURCHASE_SETTLEMENT': 'Liquidación de Compra'
+        }
+        
+        # Mapear estado
+        status_names = {
+            'DRAFT': 'Borrador',
+            'GENERATED': 'Generado',
+            'SIGNED': 'Firmado',
+            'SENT': 'Enviado',
+            'AUTHORIZED': 'Autorizado',
+            'REJECTED': 'Rechazado',
+            'ERROR': 'Error',
+            'CANCELLED': 'Anulado'
+        }
+        
+        context = {
+            'document': document,
+            'document_type_name': type_names.get(document.document_type, 'Documento'),
+            'status_name': status_names.get(document.status, document.status),
+            'page_title': f'Documento {document.document_number}',
+            'company': document.company,
+        }
+        
+        # Si es una petición AJAX, devolver JSON
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': True,
+                'html': render(request, 'dashboard/sri_document_detail_modal.html', context).content.decode('utf-8')
+            })
+        
+        # Si es petición normal, renderizar template completo
+        return render(request, 'dashboard/sri_document_detail.html', context)
+        
+    except ElectronicDocument.DoesNotExist:
+        logger.warning(f"🚫 User {request.user.username} denied access to document {document_id} view")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': False,
+                'error': 'Documento no encontrado o sin permisos'
+            }, status=404)
+        
+        messages.error(request, 'Documento no encontrado o sin permisos de acceso')
+        return redirect('core:dashboard')
+        
+    except Exception as e:
+        logger.error(f"❌ Error in sri_document_view: {e}")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+        
+        messages.error(request, f'Error al cargar el documento: {str(e)}')
+        return redirect('core:dashboard')
