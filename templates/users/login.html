@@ -115,7 +115,7 @@
             100% { opacity: 1; transform: scale(1.2); }
         }
 
-        /* Container principal - MEJORADO RESPONSIVO */
+        /* Container principal - MANTENIENDO TAMAÑOS ORIGINALES */
         .main-container {
             position: relative;
             z-index: 10;
@@ -526,7 +526,7 @@
             color: #059669;
         }
 
-        /* Sección de tokens - MEJORADA RESPONSIVE */
+        /* Sección de tokens */
         .tokens-section {
             background: rgba(255, 255, 255, 0.98);
             backdrop-filter: blur(20px);
@@ -756,143 +756,65 @@
             color: white;
         }
 
-        /* BREAKPOINTS RESPONSIVOS MEJORADOS */
+        /* BREAKPOINTS RESPONSIVOS CONSERVADORES */
 
-        /* Pantallas muy grandes (1400px+) */
-        @media (min-width: 1400px) {
+        /* Desktop Grande (1200px+) */
+        @media (min-width: 1200px) {
             .main-container {
+                max-width: 900px;
+            }
+            
+            .main-container.tokens-mode {
+                max-width: 1200px;
+            }
+        }
+
+        /* Tablets y Laptops pequeñas (769px - 1199px) */
+        @media (min-width: 769px) and (max-width: 1199px) {
+            .main-container {
+                max-width: 800px;
+            }
+            
+            .main-container.tokens-mode {
                 max-width: 1000px;
-            }
-            
-            .main-container.tokens-mode {
-                max-width: 1300px;
-            }
-        }
-
-        /* Laptops grandes (1200px - 1399px) */
-        @media (max-width: 1399px) and (min-width: 1200px) {
-            .main-container.tokens-mode {
-                max-width: 1100px;
-            }
-        }
-
-        /* Laptops medianos (992px - 1199px) */
-        @media (max-width: 1199px) and (min-width: 992px) {
-            .main-container.tokens-mode {
-                max-width: 950px;
-            }
-            
-            .feature-item {
-                font-size: 0.75rem;
-            }
-            
-            .tech-badge {
-                font-size: 0.6rem;
-                padding: 0.15rem 0.35rem;
-            }
-        }
-
-        /* Tablets grandes y laptops pequeñas (769px - 1023px) */
-        @media (max-width: 1023px) and (min-width: 769px) {
-            .main-container.tokens-mode {
-                grid-template-columns: 1fr 1fr;
-                max-width: 700px;
-            }
-            
-            .info-section {
-                grid-row: span 2;
-                padding: 1.2rem;
-            }
-            
-            .tokens-section {
-                grid-column: 2;
-                grid-row: 2;
-                max-height: 60vh;
-            }
-            
-            .login-section {
-                grid-column: 2;
-                grid-row: 1;
-            }
-            
-            .logo-text {
-                font-size: 1.4rem;
-            }
-            
-            .description {
-                font-size: 0.8rem;
             }
         }
 
         /* Tablets (481px - 768px) */
         @media (max-width: 768px) {
             .main-container {
-                grid-template-columns: 0.8fr 1fr;
-                max-width: 650px;
+                grid-template-columns: 1fr;
+                max-width: 500px;
                 min-height: auto;
             }
             
             .main-container.tokens-mode {
-                grid-template-columns: 0.8fr 1fr;
-                max-width: 650px;
+                grid-template-columns: 1fr;
+                max-width: 500px;
             }
             
             .info-section {
-                padding: clamp(0.8rem, 2.5vw, 1rem);
-                font-size: clamp(0.65rem, 1.8vw, 0.75rem);
-            }
-            
-            .logo-text {
-                font-size: clamp(1rem, 3vw, 1.2rem);
-            }
-            
-            .description {
-                font-size: clamp(0.65rem, 1.6vw, 0.75rem);
-                margin-bottom: 0.8rem;
-            }
-            
-            .features-title {
-                font-size: clamp(0.7rem, 1.8vw, 0.8rem);
-                margin-bottom: 0.6rem;
-            }
-            
-            .feature-item {
-                font-size: clamp(0.6rem, 1.5vw, 0.7rem);
-                margin-bottom: 0.3rem;
-            }
-            
-            .tech-title {
-                font-size: clamp(0.6rem, 1.4vw, 0.65rem);
-            }
-            
-            .tech-badge {
-                font-size: clamp(0.5rem, 1.2vw, 0.55rem);
-                padding: 0.1rem 0.3rem;
-            }
-            
-            .footer-text {
-                font-size: clamp(0.55rem, 1.3vw, 0.6rem);
-                margin-top: 0.5rem;
+                display: none;
             }
             
             .login-section, 
             .tokens-section {
-                padding: clamp(1.2rem, 4vw, 1.8rem);
+                padding: clamp(1.5rem, 4vw, 2rem);
             }
             
             .tokens-section {
-                max-height: 70vh;
+                border-left: none;
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
             }
             
             .mode-selector {
-                max-width: none;
-                width: 100%;
+                max-width: 100%;
             }
             
             .form-options {
                 flex-direction: column;
                 align-items: stretch;
-                gap: 0.8rem;
+                gap: 1rem;
             }
             
             .remember-me {
@@ -902,6 +824,43 @@
             .forgot-link {
                 text-align: center;
             }
+        }
+
+        /* Móviles (320px - 480px) */
+        @media (max-width: 480px) {
+            body {
+                padding: 1rem;
+            }
+            
+            .main-container {
+                max-width: 400px;
+                border-radius: 12px;
+            }
+            
+            .login-section, 
+            .tokens-section {
+                padding: 1.5rem;
+            }
+
+            .welcome-title, 
+            .tokens-title {
+                font-size: 1.25rem;
+            }
+            
+            .form-control-custom {
+                font-size: 16px; /* Prevenir zoom en iOS */
+                padding: 12px 14px;
+            }
+            
+            .btn-google,
+            .btn-login {
+                padding: 12px 16px;
+                font-size: 0.9rem;
+            }
+            
+            .token-card {
+                padding: 1rem;
+            }
             
             .token-actions {
                 flex-direction: column;
@@ -909,150 +868,24 @@
             }
             
             .btn-copy-token {
-                align-self: center;
-                min-width: 100px;
-            }
-        }
-
-        /* Móviles grandes (376px - 480px) */
-        @media (max-width: 480px) {
-            body {
-                padding: clamp(0.3rem, 2vw, 0.5rem);
-            }
-            
-            .main-container {
-                max-width: 380px;
-                border-radius: clamp(8px, 4vw, 12px);
-                min-height: auto;
-            }
-            
-            .login-section, 
-            .tokens-section {
-                padding: clamp(1rem, 5vw, 1.5rem);
-            }
-
-            .welcome-title, 
-            .tokens-title {
-                font-size: clamp(1.1rem, 6vw, 1.3rem);
-            }
-
-            .btn-google,
-            .btn-login,
-            .btn-use-token {
-                padding: clamp(9px, 4vw, 12px);
-                font-size: clamp(0.75rem, 4vw, 0.85rem);
-            }
-
-            .form-control-custom {
-                padding: clamp(9px, 4vw, 12px) clamp(11px, 5vw, 14px);
-                font-size: clamp(0.75rem, 4vw, 0.85rem);
-            }
-            
-            .token-card {
-                padding: clamp(0.8rem, 4vw, 1rem);
-                margin-bottom: 1rem;
-            }
-            
-            .token-display {
-                font-size: 0.55rem;
-                padding: 0.3rem 0.4rem;
-            }
-            
-            .current-token-display {
-                font-size: 0.6rem;
-            }
-            
-            .mode-btn {
-                padding: 8px 12px;
-                font-size: 0.7rem;
-            }
-        }
-
-        /* Móviles pequeños (321px - 375px) */
-        @media (max-width: 375px) {
-            .main-container {
-                max-width: 340px;
-            }
-            
-            .welcome-title, 
-            .tokens-title {
-                font-size: clamp(1rem, 7vw, 1.2rem);
-            }
-            
-            .token-display,
-            .current-token-display {
-                font-size: clamp(0.5rem, 3vw, 0.6rem);
-                padding: clamp(0.25rem, 2.5vw, 0.35rem);
-            }
-            
-            .btn-google,
-            .btn-login,
-            .btn-use-token {
-                font-size: clamp(0.7rem, 4.5vw, 0.8rem);
+                width: 100%;
             }
         }
 
         /* Móviles muy pequeños (hasta 320px) */
         @media (max-width: 320px) {
-            .main-container {
-                max-width: 300px;
-            }
-            
-            .login-section,
-            .tokens-section {
-                padding: clamp(0.8rem, 6vw, 1.2rem);
-            }
-            
-            .welcome-title,
-            .tokens-title {
-                font-size: clamp(0.95rem, 8vw, 1.1rem);
-            }
-            
-            .security-badge {
-                font-size: 0.6rem;
-                padding: 0.2rem 0.4rem;
-            }
-            
-            .mode-btn {
-                padding: 6px 10px;
-                font-size: 0.65rem;
-            }
-            
-            .token-type-badge {
-                font-size: 0.55rem;
-                padding: 0.1rem 0.3rem;
-            }
-            
-            .recommended-badge {
-                font-size: 0.5rem;
-                padding: 0.1rem 0.25rem;
-            }
-        }
-
-        /* Orientación landscape en móviles */
-        @media (max-height: 500px) and (orientation: landscape) {
             body {
-                padding: clamp(0.2rem, 1vh, 0.5rem);
+                padding: 0.5rem;
             }
             
             .main-container {
-                min-height: auto;
-                max-height: 90vh;
-                grid-template-rows: auto;
+                max-width: 100%;
+                border-radius: 8px;
             }
             
             .login-section,
             .tokens-section {
-                padding: clamp(0.8rem, 3vh, 1.2rem);
-                overflow-y: auto;
-            }
-            
-            .tokens-section {
-                max-height: 85vh;
-            }
-            
-            .login-header {
-                margin-bottom: 0.8rem;
+                padding: 1rem;
             }
             
             .welcome-title,
@@ -1060,21 +893,41 @@
                 font-size: 1.1rem;
             }
             
-            .form-group {
-                margin-bottom: 0.7rem;
-            }
-            
-            .google-section,
-            .divider {
-                margin-bottom: 0.7rem;
-            }
-            
-            .form-options {
-                margin-bottom: 0.8rem;
+            .mode-btn {
+                padding: 8px 10px;
+                font-size: 0.7rem;
             }
         }
 
-        /* Estados de loading mejorados */
+        /* Orientación landscape en móviles */
+        @media (max-height: 500px) and (orientation: landscape) {
+            body {
+                padding: 0.5rem;
+            }
+            
+            .main-container {
+                min-height: auto;
+                max-height: 90vh;
+            }
+            
+            .login-section,
+            .tokens-section {
+                padding: 1rem;
+                overflow-y: auto;
+                max-height: 85vh;
+            }
+            
+            .login-header,
+            .tokens-header {
+                margin-bottom: 0.8rem;
+            }
+            
+            .form-group {
+                margin-bottom: 0.7rem;
+            }
+        }
+
+        /* Estados de loading */
         .loading .btn-login,
         .loading .btn-google,
         .loading .btn-use-token,
@@ -1109,7 +962,7 @@
             }
         }
 
-        /* Mejoras para accesibilidad - motion reducido */
+        /* Mejoras para accesibilidad */
         @media (prefers-reduced-motion: reduce) {
             * {
                 animation-duration: 0.01ms !important;
@@ -1120,32 +973,11 @@
             .star {
                 animation: none;
             }
-            
-            .btn-google:hover,
-            .btn-login:hover,
-            .btn-use-token:hover,
-            .token-card:hover {
-                transform: none;
-            }
         }
 
-        /* Mejoras para contraste alto */
-        @media (prefers-contrast: high) {
-            .form-control-custom {
-                border-width: 3px;
-            }
-            
-            .btn-google,
-            .btn-login,
-            .btn-use-token {
-                border-width: 2px;
-                border-style: solid;
-                border-color: currentColor;
-            }
-            
-            .token-card {
-                border-width: 3px;
-            }
+        /* Utilidades */
+        .d-none {
+            display: none !important;
         }
     </style>
 </head>
@@ -1354,7 +1186,7 @@
             </div>
         </div>
 
-        <!-- Sección de tokens - NUEVA -->
+        <!-- Sección de tokens -->
         <div class="tokens-section" id="tokensSection">
             <div class="tokens-header">
                 <h3 class="tokens-title">🎯 Selecciona tu Token</h3>
@@ -1406,13 +1238,13 @@
                 });
             }
             
-            // Form submission - CÓDIGO CORREGIDO
+            // Form submission
             const loginForm = document.getElementById('loginForm');
             const submitBtn = document.getElementById('loginSubmitBtn');
             
             if (loginForm && submitBtn) {
                 loginForm.addEventListener('submit', function(e) {
-                    e.preventDefault(); // Siempre prevenir envío por defecto
+                    e.preventDefault();
                     
                     const email = this.querySelector('input[type="email"]').value.trim();
                     const password = this.querySelector('input[type="password"]').value;
@@ -1791,6 +1623,19 @@
                 alert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             }, 100);
         }
+
+        /* Animación del spinner */
+        const style = document.createElement('style');
+        style.innerHTML = `
+            @keyframes spin {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+            .fa-spinner {
+                animation: spin 1s linear infinite;
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>
