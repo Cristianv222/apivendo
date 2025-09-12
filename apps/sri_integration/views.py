@@ -815,7 +815,7 @@ def calculate_elapsed_time(started_at_str):
 @require_GET
 def download_document_pdf(request, document_id):
     """
-    Descarga el PDF de cualquier tipo de documento autorizado
+    Descarga el PDF de cualquier tipo de documento
     URL: /sri/documents/<id>/download/pdf/
     """
     try:
@@ -829,19 +829,48 @@ def download_document_pdf(request, document_id):
         # Obtener archivos del documento
         files = get_document_files(document, doc_type)
         
-        # Verificar que el documento esté autorizado
-        if files['status'] != 'AUTHORIZED':
+        # CAMBIO: Permitir descarga de PDF en más estados
+        valid_states_for_pdf = ['AUTHORIZED', 'SENT', 'SIGNED', 'GENERATED']
+        
+        if files['status'] not in valid_states_for_pdf:
             return JsonResponse({
-                'error': 'DOCUMENT_NOT_AUTHORIZED',
-                'message': f'El documento debe estar autorizado para descargar el PDF. Estado actual: {files["status"]}'
+                'error': 'DOCUMENT_STATUS_INVALID',
+                'message': f'El documento debe estar en uno de estos estados para descargar el PDF: {", ".join(valid_states_for_pdf)}. Estado actual: {files["status"]}'
             }, status=400)
         
         # Verificar que existe el archivo PDF
         if not files['pdf_file']:
-            return JsonResponse({
-                'error': 'PDF_NOT_FOUND',
-                'message': 'El archivo PDF no está disponible para este documento'
-            }, status=404)
+            # Si no existe el PDF, intentar generarlo
+            from apps.sri_integration.services.pdf_generator import PDFGenerator
+            
+            try:
+                pdf_generator = PDFGenerator()
+                
+                # Generar PDF según el tipo de documento
+                if doc_type == 'credit_note':
+                    success, pdf_path = pdf_generator.generate_credit_note_pdf(document)
+                elif doc_type == 'electronic_document':
+                    success, pdf_path = pdf_generator.generate_invoice_pdf(document)
+                else:
+                    success, pdf_path = pdf_generator.generate_invoice_pdf(document)
+                
+                if success:
+                    # Actualizar el documento con el PDF generado
+                    document.pdf_file = pdf_path
+                    document.save()
+                    files = get_document_files(document, doc_type)
+                else:
+                    return JsonResponse({
+                        'error': 'PDF_GENERATION_FAILED',
+                        'message': 'No se pudo generar el PDF del documento'
+                    }, status=500)
+                    
+            except Exception as e:
+                logger.error(f"Error generando PDF: {str(e)}")
+                return JsonResponse({
+                    'error': 'PDF_GENERATION_ERROR',
+                    'message': f'Error al generar PDF: {str(e)}'
+                }, status=500)
         
         # Verificar que el archivo existe físicamente
         try:
@@ -867,7 +896,7 @@ def download_document_pdf(request, document_id):
         }
         
         type_name = doc_type_names.get(doc_type, 'documento')
-        filename = f"{files['document_number']}_{type_name}_autorizado.pdf"
+        filename = f"{files['document_number']}_{type_name}_{files['status'].lower()}.pdf"
         
         # Servir archivo
         response = FileResponse(
@@ -877,7 +906,7 @@ def download_document_pdf(request, document_id):
             content_type='application/pdf'
         )
         
-        logger.info(f"Usuario {request.user.username} descargó PDF del {type_name} {document_id}")
+        logger.info(f"Usuario {request.user.username} descargó PDF del {type_name} {document_id} en estado {files['status']}")
         return response
         
     except Exception as e:
@@ -886,7 +915,6 @@ def download_document_pdf(request, document_id):
             'error': 'DOWNLOAD_ERROR',
             'message': f'Error interno al descargar el archivo: {str(e)}'
         }, status=500)
-
 
 @login_required
 @require_GET
@@ -996,6 +1024,10 @@ def check_document_files(request, document_id):
         # Obtener archivos del documento
         files = get_document_files(document, doc_type)
         
+        # MODIFICACIÓN: Estados válidos para descarga de PDF
+        pdf_valid_states = ['AUTHORIZED', 'SENT', 'SIGNED', 'GENERATED']
+        xml_valid_states = ['SIGNED', 'SENT', 'AUTHORIZED']
+        
         # Verificar disponibilidad de archivos
         file_status = {
             'document_id': document_id,
@@ -1025,7 +1057,8 @@ def check_document_files(request, document_id):
                 if os.path.exists(files['pdf_file'].path):
                     file_status['files']['pdf']['exists'] = True
                     file_status['files']['pdf']['size'] = os.path.getsize(files['pdf_file'].path)
-                    file_status['files']['pdf']['downloadable'] = files['status'] == 'AUTHORIZED'
+                    # CAMBIO: Permitir descarga en más estados
+                    file_status['files']['pdf']['downloadable'] = files['status'] in pdf_valid_states
             except (AttributeError, ValueError, OSError):
                 pass
         
@@ -1036,7 +1069,7 @@ def check_document_files(request, document_id):
                 if os.path.exists(xml_to_check.path):
                     file_status['files']['xml']['exists'] = True
                     file_status['files']['xml']['size'] = os.path.getsize(xml_to_check.path)
-                    file_status['files']['xml']['downloadable'] = files['status'] in ['SIGNED', 'SENT', 'AUTHORIZED']
+                    file_status['files']['xml']['downloadable'] = files['status'] in xml_valid_states
             except (AttributeError, ValueError, OSError):
                 pass
         
@@ -1048,7 +1081,6 @@ def check_document_files(request, document_id):
             'error': 'CHECK_ERROR',
             'message': f'Error interno al verificar archivos: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
