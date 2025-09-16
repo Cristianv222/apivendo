@@ -976,34 +976,34 @@ class DocumentProcessor:
             logger.error(f"❌ [PDF_GEN] Error generating PDF for document {document.id}: {str(e)}")
             return False, f"PDF_GENERATION_ERROR: {str(e)}"
     
-    def _send_email(self, document):
-        """Envía el documento por email al cliente"""
-        try:
-            logger.info(f"📧 [EMAIL] Enviando email para documento {document.id}")
-            
-            if not document.customer_email:
-                return False, "EMAIL_ERROR: Customer email not provided"
-            
-            if not self.sri_config.email_enabled:
-                return False, "EMAIL_ERROR: Email sending is disabled"
-            
-            email_service = EmailService(self.company)
-            success, message = email_service.send_document_email(document)
-            
-            if success:
-                document.email_sent = True
-                document.email_sent_date = django_timezone.now()
-                document.save()
-                logger.info(f"✅ [EMAIL] Email enviado para documento {document.id}")
-            else:
-                logger.warning(f"⚠️ [EMAIL] Error enviando email para documento {document.id}: {message}")
-            
-            return success, message
-            
-        except Exception as e:
-            logger.error(f"❌ [EMAIL] Error sending email for document {document.id}: {str(e)}")
-            return False, f"EMAIL_EXCEPTION: {str(e)}"
-    
+def _send_email(self, document):
+    """Envía el documento por email al cliente"""
+    try:
+        logger.info(f"📧 [EMAIL] Enviando email para documento {document.id}")
+        
+        if not document.customer_email:
+            return False, "EMAIL_ERROR: Customer email not provided"
+        
+        if not self.sri_config.email_enabled:
+            return False, "EMAIL_ERROR: Email sending is disabled"
+        
+        # Este ya usa EmailService que ahora usa SendGrid
+        email_service = EmailService(self.company)
+        success, message = email_service.send_document_email(document)
+        
+        if success:
+            document.email_sent = True
+            document.email_sent_date = django_timezone.now()
+            document.save()
+            logger.info(f"✅ [EMAIL] Email enviado para documento {document.id}")
+        else:
+            logger.warning(f"⚠️ [EMAIL] Error enviando email para documento {document.id}: {message}")
+        
+        return success, message
+        
+    except Exception as e:
+        logger.error(f"❌ [EMAIL] Error sending email for document {document.id}: {str(e)}")
+        return False, f"EMAIL_EXCEPTION: {str(e)}"  
     def get_document_status(self, document):
         """Obtiene el estado detallado de un documento"""
         status_info = {
