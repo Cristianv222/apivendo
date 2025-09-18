@@ -95,13 +95,14 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=["post"])
     def create_invoice(self, request):
-        """Crear factura completa con items"""
+        """Crear factura completa con envío automático al SRI"""
         serializer = CreateInvoiceSerializer(data=request.data)
         if serializer.is_valid():
             try:
                 from django.utils import timezone
                 from decimal import Decimal, ROUND_HALF_UP
                 from apps.companies.models import Company
+                from django.conf import settings
                 
                 # Obtener datos validados
                 validated_data = serializer.validated_data
@@ -200,9 +201,208 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
                 document.status = "GENERATED"
                 document.save()
                 
-                # Serializar respuesta
-                response_serializer = ElectronicDocumentSerializer(document)
-                return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+                # ===============================================
+                # NUEVA FUNCIONALIDAD: ENVÍO AUTOMÁTICO AL SRI
+                # ===============================================
+                
+                # Verificar si el auto-envío está habilitado
+                auto_send_enabled = getattr(settings, 'SRI_AUTO_SEND', True)
+                auto_send_after_generation = getattr(settings, 'SRI_AUTO_SEND_AFTER_GENERATION', True)
+                use_async_processing = getattr(settings, 'SRI_USE_ASYNC_PROCESSING', True)
+                circuit_breaker_enabled = getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True)
+                
+                logger.info(f"Auto-envío SRI configurado: {auto_send_enabled} para documento {document.id}")
+                logger.info(f"Procesamiento asíncrono: {use_async_processing}")
+                
+                if auto_send_enabled and auto_send_after_generation:
+                    try:
+                        # Verificar circuit breaker si está habilitado
+                        if circuit_breaker_enabled:
+                            circuit_key = f"sri_circuit_breaker_{company.id}"
+                            circuit_failures = cache.get(circuit_key, 0)
+                            circuit_threshold = getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5)
+                            
+                            if circuit_failures >= circuit_threshold:
+                                logger.warning(f"Circuit breaker abierto para empresa {company.id} - {circuit_failures} fallas")
+                                response_serializer = ElectronicDocumentSerializer(document)
+                                response_data = response_serializer.data
+                                response_data.update({
+                                    'auto_processed': False,
+                                    'circuit_breaker_open': True,
+                                    'processing_status': 'CIRCUIT_BREAKER_OPEN',
+                                    'suggestion': 'SRI processing temporarily disabled due to multiple failures. Try again later or process manually.'
+                                })
+                                return Response(response_data, status=status.HTTP_201_CREATED)
+                        
+                        # Decidir entre procesamiento asíncrono o síncrono
+                        if use_async_processing:
+                            # ===============================================
+                            # PROCESAMIENTO ASÍNCRONO CON CELERY
+                            # ===============================================
+                            logger.info(f"Iniciando procesamiento asíncrono para documento {document.id}")
+                            
+                            try:
+                                from .tasks import process_document_async
+                                
+                                # Disparar tarea asíncrona
+                                task = process_document_async.apply_async(
+                                    args=[document.id],
+                                    queue='sri_processing'
+                                )
+                                
+                                # Guardar información de tracking
+                                cache_key = f"document_tasks_{document.id}"
+                                cached_tasks = cache.get(cache_key, [])
+                                cached_tasks.append(task.id)
+                                cache.set(cache_key, cached_tasks[-5:], timeout=3600)
+                                
+                                task_cache_key = f"task_info_{task.id}"
+                                cache.set(task_cache_key, {
+                                    'document_id': document.id,
+                                    'operation': 'auto_process_after_generation',
+                                    'started_at': timezone.now().isoformat(),
+                                    'user_id': request.user.id,
+                                    'auto_triggered': True
+                                }, timeout=3600)
+                                
+                                logger.info(f"✅ Procesamiento asíncrono iniciado para documento {document.id} (task: {task.id})")
+                                
+                                # Respuesta con información de monitoreo
+                                response_serializer = ElectronicDocumentSerializer(document)
+                                response_data = response_serializer.data
+                                response_data.update({
+                                    'auto_processed': True,
+                                    'async_processing': True,
+                                    'task_id': task.id,
+                                    'processing_status': 'ASYNC_STARTED',
+                                    'auto_send_enabled': True,
+                                    'monitoring': {
+                                        'polling_url': f'/api/sri/documents/{document.id}/task-status/',
+                                        'polling_interval': 3000,
+                                        'estimated_completion': '2-10 minutes'
+                                    },
+                                    'processing_timestamp': timezone.now().isoformat()
+                                })
+                                return Response(response_data, status=status.HTTP_201_CREATED)
+                                
+                            except ImportError:
+                                logger.warning("Celery tasks not available, falling back to synchronous processing")
+                                use_async_processing = False
+                            except Exception as e:
+                                logger.error(f"Error iniciando procesamiento asíncrono: {str(e)}")
+                                use_async_processing = False
+                        
+                        if not use_async_processing:
+                            # ===============================================
+                            # PROCESAMIENTO SÍNCRONO
+                            # ===============================================
+                            logger.info(f"Iniciando procesamiento síncrono para documento {document.id}")
+                            
+                            try:
+                                from .services.document_processor import DocumentProcessor
+                                
+                                processor = DocumentProcessor(document.company)
+                                success, message = processor.process_document(document, send_email=True)
+                                
+                                if success:
+                                    logger.info(f"✅ Documento {document.id} procesado automáticamente - Status: {document.status}")
+                                    
+                                    # Actualizar circuit breaker en caso de éxito
+                                    if circuit_breaker_enabled:
+                                        circuit_key = f"sri_circuit_breaker_{company.id}"
+                                        cache.delete(circuit_key)
+                                    
+                                    # Serializar respuesta con información del procesamiento
+                                    response_serializer = ElectronicDocumentSerializer(document)
+                                    response_data = response_serializer.data
+                                    response_data.update({
+                                        'auto_processed': True,
+                                        'sync_processing': True,
+                                        'sri_status': document.status,
+                                        'processing_message': message,
+                                        'auto_send_enabled': True,
+                                        'sri_authorization_code': getattr(document, 'sri_authorization_code', None),
+                                        'processing_timestamp': timezone.now().isoformat(),
+                                        'processing_status': 'SYNC_COMPLETED'
+                                    })
+                                    return Response(response_data, status=status.HTTP_201_CREATED)
+                                else:
+                                    logger.warning(f"⚠️ Auto-envío síncrono falló para documento {document.id}: {message}")
+                                    
+                                    # Incrementar circuit breaker si está habilitado
+                                    if circuit_breaker_enabled:
+                                        circuit_key = f"sri_circuit_breaker_{company.id}"
+                                        circuit_failures = cache.get(circuit_key, 0) + 1
+                                        recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                                        cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+                                    
+                                    # Intentar reintento automático si está habilitado
+                                    auto_retry = getattr(settings, 'SRI_AUTO_RETRY_FAILED', True)
+                                    if auto_retry:
+                                        logger.info(f"Intentando reintento automático para documento {document.id}")
+                                        try:
+                                            from .tasks import retry_failed_document_async
+                                            retry_delay = getattr(settings, 'SRI_RETRY_DELAY_SECONDS', 60)
+                                            
+                                            retry_task = retry_failed_document_async.apply_async(
+                                                args=[document.id],
+                                                countdown=retry_delay,
+                                                queue='sri_processing'
+                                            )
+                                            
+                                            logger.info(f"Reintento programado para documento {document.id} en {retry_delay} segundos")
+                                        except:
+                                            logger.warning("No se pudo programar reintento automático")
+                                    
+                                    # Devolver la factura creada pero con error de envío
+                                    response_serializer = ElectronicDocumentSerializer(document)
+                                    response_data = response_serializer.data
+                                    response_data.update({
+                                        'auto_processed': False,
+                                        'processing_error': message,
+                                        'auto_send_enabled': True,
+                                        'processing_status': 'SYNC_FAILED',
+                                        'retry_scheduled': auto_retry,
+                                        'suggestion': 'Document created successfully but SRI processing failed. Check SRI configuration and try manual processing.'
+                                    })
+                                    return Response(response_data, status=status.HTTP_201_CREATED)
+                            except ImportError:
+                                logger.error("DocumentProcessor service not available")
+                                raise
+                                        
+                    except Exception as e:
+                        logger.error(f"❌ Error en auto-procesamiento de documento {document.id}: {str(e)}")
+                        
+                        # Incrementar circuit breaker
+                        if circuit_breaker_enabled:
+                            circuit_key = f"sri_circuit_breaker_{company.id}"
+                            circuit_failures = cache.get(circuit_key, 0) + 1
+                            recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                            cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+                        
+                        # Devolver la factura creada pero con error de envío
+                        response_serializer = ElectronicDocumentSerializer(document)
+                        response_data = response_serializer.data
+                        response_data.update({
+                            'auto_processed': False,
+                            'processing_error': str(e),
+                            'auto_send_enabled': True,
+                            'processing_status': 'ERROR',
+                            'suggestion': 'Document created successfully but auto-processing failed. Check your SRI configuration and certificate, then try manual processing.'
+                        })
+                        return Response(response_data, status=status.HTTP_201_CREATED)
+                else:
+                    # Si auto-envío está deshabilitado, respuesta normal
+                    logger.info(f"Auto-envío deshabilitado para documento {document.id}")
+                    response_serializer = ElectronicDocumentSerializer(document)
+                    response_data = response_serializer.data
+                    response_data.update({
+                        'auto_processed': False,
+                        'auto_send_disabled': True,
+                        'processing_status': 'MANUAL_REQUIRED',
+                        'suggestion': 'Enable SRI_AUTO_SEND in settings or use manual processing endpoints'
+                    })
+                    return Response(response_data, status=status.HTTP_201_CREATED)
                 
             except Exception as e:
                 logger.error(f"Error creating invoice: {str(e)}")
@@ -702,6 +902,244 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
             return Response({
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def auto_send_status(self, request):
+        """Verificar estado del auto-envío SRI"""
+        from django.conf import settings
+        
+        # Verificar disponibilidad de servicios
+        try:
+            from .services.document_processor import DocumentProcessor
+            document_processor_available = True
+        except ImportError:
+            document_processor_available = False
+        
+        try:
+            from .services.soap_client import SRISOAPClient
+            soap_client_available = True
+        except ImportError:
+            soap_client_available = False
+        
+        # Verificar estado de Celery
+        celery_available = False
+        try:
+            from celery.app.control import Control
+            from celery import current_app
+            control = Control(current_app)
+            workers = control.inspect().ping()
+            celery_available = bool(workers)
+        except:
+            pass
+        
+        # Verificar circuit breaker si está disponible
+        circuit_breaker_status = {}
+        if hasattr(request.user, 'company') or request.user.is_authenticated:
+            try:
+                user_companies = get_user_companies_secure(request.user)
+                for company in user_companies:
+                    circuit_key = f"sri_circuit_breaker_{company.id}"
+                    circuit_failures = cache.get(circuit_key, 0)
+                    circuit_threshold = getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5)
+                    circuit_breaker_status[f"company_{company.id}"] = {
+                        'failures': circuit_failures,
+                        'threshold': circuit_threshold,
+                        'is_open': circuit_failures >= circuit_threshold
+                    }
+            except:
+                pass
+        
+        return Response({
+            "auto_send_configuration": {
+                "auto_send_enabled": getattr(settings, 'SRI_AUTO_SEND', False),
+                "auto_send_after_generation": getattr(settings, 'SRI_AUTO_SEND_AFTER_GENERATION', False),
+                "auto_authorize_check": getattr(settings, 'SRI_AUTO_AUTHORIZE_CHECK', False),
+                "use_async_processing": getattr(settings, 'SRI_USE_ASYNC_PROCESSING', True),
+                "auto_retry_failed": getattr(settings, 'SRI_AUTO_RETRY_FAILED', True),
+                "max_retry_attempts": getattr(settings, 'SRI_MAX_RETRY_ATTEMPTS', 3),
+                "retry_delay_seconds": getattr(settings, 'SRI_RETRY_DELAY_SECONDS', 60),
+                "async_timeout": getattr(settings, 'SRI_ASYNC_TIMEOUT', 300),
+                "circuit_breaker_enabled": getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True),
+                "circuit_breaker_failure_threshold": getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5),
+                "circuit_breaker_recovery_timeout": getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+            },
+            "service_availability": {
+                "soap_client_available": soap_client_available,
+                "document_processor_available": document_processor_available,
+                "celery_available": celery_available,
+                "cache_available": True
+            },
+            "circuit_breaker_status": circuit_breaker_status,
+            "notifications": {
+                "notify_on_success": getattr(settings, 'SRI_NOTIFY_ON_SUCCESS', True),
+                "notify_on_error": getattr(settings, 'SRI_NOTIFY_ON_ERROR', True),
+                "notify_on_retry": getattr(settings, 'SRI_NOTIFY_ON_RETRY', False)
+            },
+            "queue_processing": {
+                "queue_processing_enabled": getattr(settings, 'SRI_QUEUE_PROCESSING', True),
+                "batch_size": getattr(settings, 'SRI_BATCH_SIZE', 10),
+                "queue_max_size": getattr(settings, 'SRI_QUEUE_MAX_SIZE', 1000),
+                "queue_batch_timeout": getattr(settings, 'SRI_QUEUE_BATCH_TIMEOUT', 300)
+            },
+            "validation": {
+                "pre_validation": getattr(settings, 'SRI_PRE_VALIDATION', True),
+                "validate_xml_schema": getattr(settings, 'SRI_VALIDATE_XML_SCHEMA', True),
+                "validate_business_rules": getattr(settings, 'SRI_VALIDATE_BUSINESS_RULES', True)
+            },
+            "backup_and_cleanup": {
+                "auto_backup_documents": getattr(settings, 'SRI_AUTO_BACKUP_DOCUMENTS', True),
+                "backup_retention_days": getattr(settings, 'SRI_BACKUP_RETENTION_DAYS', 365),
+                "auto_cleanup_old_logs": getattr(settings, 'SRI_AUTO_CLEANUP_OLD_LOGS', True),
+                "cleanup_days_threshold": getattr(settings, 'SRI_CLEANUP_DAYS_THRESHOLD', 90)
+            },
+            "webhook": {
+                "webhook_enabled": getattr(settings, 'SRI_WEBHOOK_ENABLED', False),
+                "webhook_url": getattr(settings, 'SRI_WEBHOOK_URL', ''),
+                "webhook_timeout": getattr(settings, 'SRI_WEBHOOK_TIMEOUT', 30)
+            },
+            "timestamp": timezone.now().isoformat(),
+            "message": "Complete auto-send configuration status and service availability"
+        })
+    
+    @action(detail=True, methods=['post'])
+    def process_to_sri_manual(self, request, pk=None):
+        """Procesar documento existente y enviarlo al SRI manualmente"""
+        try:
+            document = self.get_object()
+            
+            if document.status in ['AUTHORIZED', 'SENT']:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Document already processed", 
+                        "current_status": document.status,
+                        "document_number": document.document_number,
+                        "processing_method": "manual",
+                        "suggestion": "Document is already in a final state. No further processing needed."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Verificar si el procesamiento está temporalmente deshabilitado
+            from django.conf import settings
+            circuit_breaker_enabled = getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True)
+            
+            if circuit_breaker_enabled:
+                circuit_key = f"sri_circuit_breaker_{document.company.id}"
+                circuit_failures = cache.get(circuit_key, 0)
+                circuit_threshold = getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5)
+                
+                if circuit_failures >= circuit_threshold:
+                    logger.warning(f"Manual processing blocked by circuit breaker for company {document.company.id}")
+                    return Response({
+                        "success": False,
+                        "message": "Manual processing temporarily disabled due to multiple recent failures",
+                        "current_status": document.status,
+                        "document_number": document.document_number,
+                        "processing_method": "manual",
+                        "circuit_breaker_open": True,
+                        "failures_count": circuit_failures,
+                        "suggestion": "Wait a few minutes and try again, or contact support if the issue persists."
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            # Intentar procesamiento manual
+            try:
+                from .services.document_processor import DocumentProcessor
+                
+                logger.info(f"Manual processing requested for document {document.id} by user {request.user.username}")
+                processor = DocumentProcessor(document.company)
+                
+                # Obtener parámetros opcionales
+                send_email = request.data.get('send_email', True)
+                force_reprocess = request.data.get('force_reprocess', False)
+                
+                success, message = processor.process_document(
+                    document, 
+                    send_email=send_email,
+                    force_reprocess=force_reprocess
+                )
+                
+                if success:
+                    # Limpiar circuit breaker en caso de éxito
+                    if circuit_breaker_enabled:
+                        circuit_key = f"sri_circuit_breaker_{document.company.id}"
+                        cache.delete(circuit_key)
+                    
+                    logger.info(f"✅ Manual processing successful for document {document.id}")
+                    
+                    return Response({
+                        "success": True,
+                        "message": "Document processed and sent to SRI successfully",
+                        "document_number": document.document_number,
+                        "status": document.status,
+                        "sri_authorization_code": getattr(document, 'sri_authorization_code', None),
+                        "sri_authorization_date": getattr(document, 'sri_authorization_date', None),
+                        "processing_details": message,
+                        "processing_method": "manual",
+                        "email_sent": send_email,
+                        "files_generated": {
+                            "xml": bool(getattr(document, 'xml_file', None)),
+                            "signed_xml": bool(getattr(document, 'signed_xml_file', None)),
+                            "pdf": bool(getattr(document, 'pdf_file', None))
+                        },
+                        "processing_timestamp": timezone.now().isoformat()
+                    })
+                else:
+                    # Incrementar circuit breaker en caso de falla
+                    if circuit_breaker_enabled:
+                        circuit_key = f"sri_circuit_breaker_{document.company.id}"
+                        circuit_failures = cache.get(circuit_key, 0) + 1
+                        recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                        cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+                    
+                    logger.error(f"❌ Manual processing failed for document {document.id}: {message}")
+                    
+                    return Response({
+                        "success": False,
+                        "message": f"Processing failed: {message}",
+                        "document_number": document.document_number,
+                        "current_status": document.status,
+                        "processing_method": "manual",
+                        "processing_details": message,
+                        "suggestion": "Check SRI configuration, certificate validity, and document data. Try again or contact support."
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    
+            except ImportError:
+                logger.error(f"DocumentProcessor service not available for manual processing")
+                return Response({
+                    "success": False,
+                    "message": "Document processor service is not available",
+                    "document_number": document.document_number,
+                    "current_status": document.status,
+                    "processing_method": "manual",
+                    "suggestion": "Contact system administrator to verify service configuration."
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                
+        except Exception as e:
+            logger.error(f"Error in manual processing for document {pk}: {str(e)}")
+            
+            # Incrementar circuit breaker incluso para errores inesperados
+            try:
+                if hasattr(self, 'get_object'):
+                    doc = self.get_object()
+                    circuit_breaker_enabled = getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True)
+                    if circuit_breaker_enabled:
+                        circuit_key = f"sri_circuit_breaker_{doc.company.id}"
+                        circuit_failures = cache.get(circuit_key, 0) + 1
+                        recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                        cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+            except:
+                pass
+            
+            return Response(
+                {
+                    "success": False,
+                    "error": f"Processing error: {str(e)}",
+                    "processing_method": "manual",
+                    "suggestion": "Check system logs and contact support if the issue persists."
+                }, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class DocumentItemViewSet(viewsets.ModelViewSet):

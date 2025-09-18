@@ -1,0 +1,13 @@
+{
+  "access_key": "1509202501100326984000110010010000011091234567817",
+  "http_status": 200,
+  "exists": true,
+  "authorized": true,
+  "authorization_number": null,
+  "authorization_date": "2025-09-15T17:27:57-05:00",
+  "status": "authorized",
+  "messages": [
+    "FIRMA INVALIDA"
+  ],
+  "response_size": 9677
+}
