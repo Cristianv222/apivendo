@@ -68,3 +68,4 @@ python-magic
 
 # Rate limiting (opcional)
 # django-ratelimit
+whitenoise
