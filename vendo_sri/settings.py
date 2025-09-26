@@ -852,8 +852,13 @@ directories_to_create = [
 
 for directory in directories_to_create:
     dir_path = BASE_DIR / directory
+try:
     os.makedirs(dir_path, exist_ok=True)
-    
+except PermissionsError:
+    import tempfile
+    dir_path = os.path.join(tempfile.gettempdir(), 'vendo_sri_logs')
+    os.makedirs(dir_path. exist_ok=True)
+
     # Configurar permisos seguros para certificados y backups
     if 'certificates' in directory or 'backup' in directory:
         os.chmod(dir_path, 0o700)
