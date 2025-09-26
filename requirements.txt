@@ -68,4 +68,9 @@ python-magic
 
 # Rate limiting (opcional)
 # django-ratelimit
+
 whitenoise
+
+sendgrid==6.11.0
+flower==1.2.0
+

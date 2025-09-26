@@ -713,8 +713,6 @@ def user_dashboard(request):
     }
     
     return render(request, 'dashboard/user_dashboard.html', context)
-
-
 @login_required
 @audit_html_action('UPDATE_COMPANY')
 @require_POST
@@ -755,42 +753,14 @@ def company_update(request, company_id):
                     'errors': errors
                 }, status=400)
             
-            # Actualizar campos básicos con validación
-            business_name = request.POST.get('business_name', '').strip()
-            if len(business_name) < 3:
-                errors['business_name'] = ['La razón social debe tener al menos 3 caracteres']
-            
-            email = request.POST.get('email', '').strip().lower()
-            if not email or '@' not in email:
-                errors['email'] = ['Ingrese un email válido']
-            
-            address = request.POST.get('address', '').strip()
-            if len(address) < 10:
-                errors['address'] = ['La dirección debe tener al menos 10 caracteres']
-            
-            # Validar códigos SRI
-            codigo_establecimiento = request.POST.get('codigo_establecimiento', '').strip()
-            if not codigo_establecimiento.isdigit() or len(codigo_establecimiento) != 3:
-                errors['codigo_establecimiento'] = ['Debe ser exactamente 3 dígitos']
-            
-            codigo_punto_emision = request.POST.get('codigo_punto_emision', '').strip()
-            if not codigo_punto_emision.isdigit() or len(codigo_punto_emision) != 3:
-                errors['codigo_punto_emision'] = ['Debe ser exactamente 3 dígitos']
-            
-            if errors:
-                return JsonResponse({
-                    'success': False,
-                    'errors': errors
-                }, status=400)
-            
-            # Actualizar campos validados
-            company.business_name = business_name
+            # Actualizar campos básicos
+            company.business_name = request.POST.get('business_name', '').strip()
             company.trade_name = request.POST.get('trade_name', '').strip()
-            company.email = email
+            company.email = request.POST.get('email', '').strip().lower()
             company.phone = request.POST.get('phone', '').strip()
-            company.address = address
+            company.address = request.POST.get('address', '').strip()
             
-            # Campos geográficos - IMPORTANTE: estos estaban fallando
+            # Campos geográficos
             company.ciudad = request.POST.get('ciudad', '').strip().title()
             company.provincia = request.POST.get('provincia', '').strip().title()
             company.codigo_postal = request.POST.get('codigo_postal', '').strip()
@@ -800,30 +770,26 @@ def company_update(request, company_id):
             company.tipo_contribuyente = request.POST.get('tipo_contribuyente', company.tipo_contribuyente)
             company.obligado_contabilidad = request.POST.get('obligado_contabilidad', company.obligado_contabilidad)
             
-            # Contribuyente especial - puede estar vacío
             contribuyente_especial = request.POST.get('contribuyente_especial', '').strip()
             company.contribuyente_especial = contribuyente_especial if contribuyente_especial else None
             
-            company.codigo_establecimiento = codigo_establecimiento
-            company.codigo_punto_emision = codigo_punto_emision
+            company.codigo_establecimiento = request.POST.get('codigo_establecimiento', '001').strip()
+            company.codigo_punto_emision = request.POST.get('codigo_punto_emision', '001').strip()
             company.ambiente_sri = request.POST.get('ambiente_sri', company.ambiente_sri)
             company.tipo_emision = request.POST.get('tipo_emision', company.tipo_emision)
             
             # Manejar logo si se subió
             if 'logo' in request.FILES:
                 logo_file = request.FILES['logo']
-                
-                # Validar tipo de archivo
                 valid_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
                 file_extension = logo_file.name.lower()[logo_file.name.rfind('.'):]
                 
                 if file_extension not in valid_extensions:
                     return JsonResponse({
                         'success': False,
-                        'errors': {'logo': ['Solo se permiten archivos de imagen (JPG, PNG, GIF, BMP, WebP)']}
+                        'errors': {'logo': ['Solo se permiten archivos de imagen']}
                     }, status=400)
                 
-                # Validar tamaño (máximo 5MB)
                 if logo_file.size > 5 * 1024 * 1024:
                     return JsonResponse({
                         'success': False,
@@ -832,13 +798,55 @@ def company_update(request, company_id):
                 
                 company.logo = logo_file
             
-            # Validar y guardar
+            # Guardar Company primero
             company.full_clean()
             company.save()
             
-            # Log de éxito
-            logger.info(f"✅ Company {company.business_name} updated by {request.user.username}")
-            logger.info(f"✅ Campos actualizados: ciudad={company.ciudad}, provincia={company.provincia}")
+            logger.info(f"✅ Company {company.business_name} saved successfully")
+            
+            # SINCRONIZACIÓN CON SRICONFIGURATION
+            sri_config_message = ""
+            try:
+                from apps.sri_integration.models import SRIConfiguration
+                
+                # Buscar o crear SRIConfiguration
+                sri_config, created = SRIConfiguration.objects.get_or_create(
+                    company=company,
+                    defaults={
+                        'is_active': True,
+                    }
+                )
+                
+                # Actualizar TODOS los campos de SRIConfiguration
+                sri_config.environment = 'TEST' if company.ambiente_sri == '1' else 'PRODUCTION'
+                sri_config.establishment_code = company.codigo_establecimiento
+                sri_config.emission_point = company.codigo_punto_emision
+                sri_config.accounting_required = (company.obligado_contabilidad == 'SI')
+                
+                # Manejar contribuyente especial
+                if company.contribuyente_especial:
+                    sri_config.special_taxpayer = True
+                    sri_config.special_taxpayer_number = company.contribuyente_especial
+                else:
+                    sri_config.special_taxpayer = False
+                    sri_config.special_taxpayer_number = ''
+                
+                # Guardar SRIConfiguration
+                sri_config.save()
+                
+                sri_config_message = " (SRI Config sincronizada)"
+                logger.info(f"✅ SRIConfiguration {'created' if created else 'updated'} for {company.business_name}")
+                logger.info(f"   - Environment: {sri_config.environment}")
+                logger.info(f"   - Establishment: {sri_config.establishment_code}")
+                logger.info(f"   - Emission Point: {sri_config.emission_point}")
+                logger.info(f"   - Accounting Required: {sri_config.accounting_required}")
+                logger.info(f"   - Special Taxpayer: {sri_config.special_taxpayer}")
+                
+            except ImportError:
+                logger.warning("SRIConfiguration model not available")
+            except Exception as e:
+                logger.error(f"Error updating SRIConfiguration: {e}")
+                # No fallar toda la operación por esto
             
             # Manejar certificado si se subió
             certificate_message = ""
@@ -854,12 +862,11 @@ def company_update(request, company_id):
                     certificate_message = " y certificado actualizado"
                 except Exception as cert_error:
                     logger.error(f"Error actualizando certificado: {cert_error}")
-                    # No fallar toda la operación por el certificado
                     certificate_message = " (error al actualizar certificado)"
             
             return JsonResponse({
                 'success': True,
-                'message': f'Información actualizada correctamente{certificate_message}',
+                'message': f'Información actualizada correctamente{sri_config_message}{certificate_message}',
                 'data': {
                     'business_name': company.business_name,
                     'trade_name': company.trade_name,
@@ -886,12 +893,14 @@ def company_update(request, company_id):
         
     except Exception as e:
         logger.error(f"Error updating company {company_id}: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        
         return JsonResponse({
             'success': False,
             'errors': {'general': f'Error interno: {str(e)}'}
         }, status=500)
-
-
+    
 @login_required
 @audit_html_action('UPLOAD_CERTIFICATE')
 def certificate_upload(request, company_id):

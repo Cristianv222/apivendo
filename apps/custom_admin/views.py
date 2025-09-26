@@ -45,7 +45,132 @@ def staff_required(view_func):
         return view_func(request, *args, **kwargs)
     return wrapper
 
+# Agregar estas funciones ANTES de tu función dashboard() existente en apps/custom_admin/views.py
 
+def get_users_chart_data():
+    """
+    Genera datos para la gráfica de usuarios de los últimos 30 días
+    """
+    from django.db.models import Count
+    from django.db.models.functions import TruncDate
+    import json
+    
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=30)
+    
+    # Obtener registros por día
+    users_by_day = (
+        User.objects.filter(
+            date_joined__gte=start_date,
+            date_joined__lte=end_date
+        )
+        .annotate(date=TruncDate('date_joined'))
+        .values('date')
+        .annotate(count=Count('id'))
+        .order_by('date')
+    )
+    
+    # Crear diccionario con todos los días (incluyendo días con 0 registros)
+    date_dict = {}
+    current_date = start_date.date()
+    while current_date <= end_date.date():
+        date_dict[current_date] = 0
+        current_date += timedelta(days=1)
+    
+    # Llenar con datos reales
+    for item in users_by_day:
+        if item['date']:
+            date_dict[item['date']] = item['count']
+    
+    # Preparar datos para Chart.js
+    labels = []
+    data = []
+    for date, count in sorted(date_dict.items()):
+        labels.append(date.strftime('%d %b'))  # Formato: "15 Ene"
+        data.append(count)
+    
+    return json.dumps({
+        'labels': labels,
+        'data': data
+    })
+
+def get_activity_chart_data():
+    """
+    Genera datos para la gráfica de actividad de los últimos 7 días
+    """
+    from django.db.models import Count, Q
+    from django.db.models.functions import TruncDate
+    import json
+    
+    end_date = timezone.now()
+    start_date = end_date - timedelta(days=7)
+    
+    # Obtener actividad por tipo y día
+    activity_data = (
+        AuditLog.objects.filter(
+            created_at__gte=start_date,
+            created_at__lte=end_date
+        )
+        .annotate(date=TruncDate('created_at'))
+        .values('date', 'action')
+        .annotate(count=Count('id'))
+        .order_by('date', 'action')
+    )
+    
+    # Crear estructura de datos para cada tipo de acción
+    date_range = []
+    current = start_date.date()
+    while current <= end_date.date():
+        date_range.append(current)
+        current += timedelta(days=1)
+    
+    # Inicializar contadores
+    activity_dict = {
+        'login': {date: 0 for date in date_range},
+        'create': {date: 0 for date in date_range},
+        'update': {date: 0 for date in date_range},
+        'delete': {date: 0 for date in date_range}
+    }
+    
+    # Mapear acciones a categorías
+    action_mapping = {
+        'LOGIN': 'login',
+        'LOGOUT': 'login',
+        'CREATE': 'create',
+        'UPDATE': 'update',
+        'DELETE': 'delete',
+        'AUTHORIZE': 'update',
+        'REJECT': 'update',
+        'APPROVE': 'update',
+        'STATUS_CHANGE': 'update'
+    }
+    
+    # Llenar con datos reales
+    for item in activity_data:
+        if item['date'] and item['action'] in action_mapping:
+            action_type = action_mapping[item['action']]
+            if item['date'] in activity_dict[action_type]:
+                activity_dict[action_type][item['date']] = item['count']
+    
+    # Preparar datos para Chart.js
+    labels = [date.strftime('%a') for date in date_range]  # Lun, Mar, Mié...
+    
+    return json.dumps({
+        'labels': labels,
+        'datasets': {
+            'login': [activity_dict['login'][date] for date in date_range],
+            'create': [activity_dict['create'][date] for date in date_range],
+            'update': [activity_dict['update'][date] for date in date_range],
+            'delete': [activity_dict['delete'][date] for date in date_range]
+        }
+    })
+
+# Tu función dashboard existente ya está bien, solo asegúrate de que tiene estas importaciones:
+# from datetime import datetime, timedelta
+# from django.utils import timezone
+# from django.db.models import Count, Q
+# from django.db.models.functions import TruncDate
+# import json
 @login_required
 @staff_required
 def dashboard(request):

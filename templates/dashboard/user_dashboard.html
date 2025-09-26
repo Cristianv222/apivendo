@@ -1,4 +1,4 @@
-    {% load static %}
+{% load static %}
     <!DOCTYPE html>
     <html lang="es">
     <head>
@@ -1418,19 +1418,20 @@ body {
             <!-- Botones de descarga - MEJORADOS -->
             <div class="btn-group" role="group">
                 <!-- Botón PDF - Solo si está autorizado -->
-                {% if document.status == 'AUTHORIZED' %}
-                    <button class="btn btn-sm btn-outline-success" 
-                            onclick="downloadDocumentFile({{ document.id }}, 'pdf')" 
-                            title="Descargar PDF">
-                        <i class="fas fa-file-pdf"></i>
-                    </button>
-                {% else %}
-                    <button class="btn btn-sm btn-outline-secondary" 
-                            disabled 
-                            title="PDF disponible solo para documentos autorizados">
-                        <i class="fas fa-file-pdf"></i>
-                    </button>
-                {% endif %}
+ <!-- Botón PDF - Ahora disponible en más estados -->
+{% if document.status in 'AUTHORIZED,SENT,SIGNED,GENERATED' %}
+    <button class="btn btn-sm btn-outline-success" 
+            onclick="downloadDocumentFile({{ document.id }}, 'pdf')" 
+            title="Descargar PDF">
+        <i class="fas fa-file-pdf"></i>
+    </button>
+{% else %}
+    <button class="btn btn-sm btn-outline-secondary" 
+            disabled 
+            title="PDF no disponible en estado {{ document.status }}">
+        <i class="fas fa-file-pdf"></i>
+    </button>
+{% endif %}
                 
                 <!-- Botón XML - Si está firmado, enviado o autorizado -->
                 {% if document.status == 'SIGNED' or document.status == 'SENT' or document.status == 'AUTHORIZED' %}
@@ -2220,37 +2221,34 @@ function activarTabPlanes() {
     }
 }
 // ==========================================
-// FUNCIONES PARA DESCARGA DE DOCUMENTOS
+// FUNCIONES PARA DESCARGA DE DOCUMENTOS - MEJORADAS
 // ==========================================
 
 function downloadDocumentFile(documentId, fileType) {
     console.log(`Descargando ${fileType} del documento ${documentId}`);
     
-    // Mostrar indicador de carga
     showLoadingToast(`Descargando ${fileType.toUpperCase()}...`);
     
-    // Construir URL de descarga
+    // URL CORREGIDA - usando la ruta de sri_integration directamente
     const downloadUrl = `/sri/documents/${documentId}/download/${fileType}/`;
     
     // Crear enlace temporal para descarga
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = ''; // El servidor definirá el nombre del archivo
+    link.download = '';
     link.style.display = 'none';
     
-    // Agregar al DOM, hacer clic y remover
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     
-    // Verificar si la descarga fue exitosa (setTimeout para dar tiempo)
     setTimeout(() => {
         checkDownloadStatus(documentId, fileType);
     }, 1000);
 }
 
 function checkDownloadStatus(documentId, fileType) {
-    fetch(`/sri/documents/${documentId}/files/check/`, {
+    fetch(`/dashboard/sri/documents/${documentId}/files/check/`, {
         method: 'GET',
         headers: {
             'X-Requested-With': 'XMLHttpRequest',
@@ -2259,7 +2257,7 @@ function checkDownloadStatus(documentId, fileType) {
     })
     .then(response => response.json())
     .then(data => {
-        if (data.files && data.files[fileType] && data.files[fileType].downloadable) {
+        if (data.success && data.files && data.files[fileType] && data.files[fileType].downloadable) {
             showNotification(`${fileType.toUpperCase()} descargado exitosamente`, 'success');
         } else {
             showNotification(`Error: ${fileType.toUpperCase()} no disponible`, 'error');
@@ -2274,6 +2272,7 @@ function checkDownloadStatus(documentId, fileType) {
 function checkDocumentFiles(documentId) {
     showLoadingToast('Verificando archivos disponibles...');
     
+    // URL CORREGIDA
     fetch(`/sri/documents/${documentId}/files/check/`, {
         method: 'GET',
         headers: {
@@ -2284,18 +2283,17 @@ function checkDocumentFiles(documentId) {
     .then(response => response.json())
     .then(data => {
         if (data.error) {
-            showNotification(`Error: ${data.message}`, 'error');
+            showNotification(`Error: ${data.error}`, 'danger');
             return;
         }
-        
-        // Mostrar información detallada en modal
         showFileStatusModal(data);
     })
     .catch(error => {
         console.error('Error verificando archivos:', error);
-        showNotification('Error verificando archivos del documento', 'error');
+        showNotification('Error verificando archivos del documento', 'danger');
     });
 }
+// El resto de las funciones JavaScript permanecen iguales...
 
 function showFileStatusModal(fileData) {
     const modalHtml = `

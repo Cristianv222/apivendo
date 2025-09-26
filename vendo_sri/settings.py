@@ -28,7 +28,7 @@ ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,0.0.0.0,tes
 
 
 
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='https://localhost:8000').split(',')
 
 # ==========================================
 # APPLICATION DEFINITION
@@ -717,6 +717,70 @@ LOGGING = {
 }
 
 # ==========================================
+# SRI AUTO-SEND CONFIGURATION
+# ==========================================
+
+# Envío automático al SRI después de generar XML
+SRI_AUTO_SEND = config('SRI_AUTO_SEND', default=True, cast=bool)
+SRI_AUTO_SEND_AFTER_GENERATION = config('SRI_AUTO_SEND_AFTER_GENERATION', default=True, cast=bool)
+SRI_AUTO_AUTHORIZE_CHECK = config('SRI_AUTO_AUTHORIZE_CHECK', default=True, cast=bool)
+
+# Configuración de reintentos automáticos
+SRI_AUTO_RETRY_FAILED = config('SRI_AUTO_RETRY_FAILED', default=True, cast=bool)
+SRI_MAX_RETRY_ATTEMPTS = config('SRI_MAX_RETRY_ATTEMPTS', default=3, cast=int)
+SRI_RETRY_DELAY_SECONDS = config('SRI_RETRY_DELAY_SECONDS', default=60, cast=int)
+
+# Configuración de procesamiento asíncrono
+SRI_USE_ASYNC_PROCESSING = config('SRI_USE_ASYNC_PROCESSING', default=True, cast=bool)
+SRI_ASYNC_TIMEOUT = config('SRI_ASYNC_TIMEOUT', default=300, cast=int)
+
+# Configuración de estado de documentos SRI
+SRI_AUTO_UPDATE_STATUS = config('SRI_AUTO_UPDATE_STATUS', default=True, cast=bool)
+SRI_STATUS_CHECK_INTERVAL = config('SRI_STATUS_CHECK_INTERVAL', default=30, cast=int)
+SRI_BATCH_SIZE = config('SRI_BATCH_SIZE', default=10, cast=int)
+
+# Configuración de notificaciones automáticas
+SRI_NOTIFY_ON_SUCCESS = config('SRI_NOTIFY_ON_SUCCESS', default=True, cast=bool)
+SRI_NOTIFY_ON_ERROR = config('SRI_NOTIFY_ON_ERROR', default=True, cast=bool)
+SRI_NOTIFY_ON_RETRY = config('SRI_NOTIFY_ON_RETRY', default=False, cast=bool)
+
+# Configuración de limpieza automática
+SRI_AUTO_CLEANUP_OLD_LOGS = config('SRI_AUTO_CLEANUP_OLD_LOGS', default=True, cast=bool)
+SRI_CLEANUP_DAYS_THRESHOLD = config('SRI_CLEANUP_DAYS_THRESHOLD', default=90, cast=int)
+SRI_CLEANUP_BATCH_SIZE = config('SRI_CLEANUP_BATCH_SIZE', default=100, cast=int)
+
+# Configuración de cola y procesamiento en lote
+SRI_QUEUE_PROCESSING = config('SRI_QUEUE_PROCESSING', default=True, cast=bool)
+SRI_QUEUE_MAX_SIZE = config('SRI_QUEUE_MAX_SIZE', default=1000, cast=int)
+SRI_QUEUE_BATCH_TIMEOUT = config('SRI_QUEUE_BATCH_TIMEOUT', default=300, cast=int)  # 5 minutos
+
+# Configuración de validación previa al envío
+SRI_PRE_VALIDATION = config('SRI_PRE_VALIDATION', default=True, cast=bool)
+SRI_VALIDATE_XML_SCHEMA = config('SRI_VALIDATE_XML_SCHEMA', default=True, cast=bool)
+SRI_VALIDATE_BUSINESS_RULES = config('SRI_VALIDATE_BUSINESS_RULES', default=True, cast=bool)
+
+# Configuración de monitoreo y métricas
+SRI_METRICS_ENABLED = config('SRI_METRICS_ENABLED', default=True, cast=bool)
+SRI_PERFORMANCE_LOGGING = config('SRI_PERFORMANCE_LOGGING', default=True, cast=bool)
+SRI_ERROR_TRACKING = config('SRI_ERROR_TRACKING', default=True, cast=bool)
+
+# Configuración de archivos y almacenamiento
+SRI_AUTO_BACKUP_DOCUMENTS = config('SRI_AUTO_BACKUP_DOCUMENTS', default=True, cast=bool)
+SRI_BACKUP_RETENTION_DAYS = config('SRI_BACKUP_RETENTION_DAYS', default=365, cast=int)
+SRI_COMPRESS_BACKUP_FILES = config('SRI_COMPRESS_BACKUP_FILES', default=True, cast=bool)
+
+# Configuración de integración con webhook
+SRI_WEBHOOK_ENABLED = config('SRI_WEBHOOK_ENABLED', default=False, cast=bool)
+SRI_WEBHOOK_URL = config('SRI_WEBHOOK_URL', default='')
+SRI_WEBHOOK_SECRET = config('SRI_WEBHOOK_SECRET', default='')
+SRI_WEBHOOK_TIMEOUT = config('SRI_WEBHOOK_TIMEOUT', default=30, cast=int)
+
+# Configuración de circuit breaker
+SRI_CIRCUIT_BREAKER_ENABLED = config('SRI_CIRCUIT_BREAKER_ENABLED', default=True, cast=bool)
+SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD = config('SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', default=5, cast=int)
+SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT = config('SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', default=60, cast=int)
+
+# ==========================================
 # DEVELOPMENT SETTINGS
 # ==========================================
 
@@ -732,6 +796,10 @@ if DEBUG:
     CERTIFICATE_CACHE_TIMEOUT = 1800  # 30 minutos
     MAX_CERTIFICATES_CACHE = 100
     CERTIFICATE_AUTO_PRELOAD_DELAY = 1
+    
+    # SRI más permisivo en desarrollo
+    SRI_AUTO_RETRY_FAILED = False  # Evitar reintentos automáticos en desarrollo
+    SRI_CIRCUIT_BREAKER_ENABLED = False  # Deshabilitar circuit breaker en desarrollo
     
     # Debug toolbar si está disponible
     try:
@@ -756,6 +824,12 @@ if not DEBUG:
     CELERY_WORKER_PREFETCH_MULTIPLIER = 4
     CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
     
+    # SRI optimizado para producción
+    SRI_BATCH_SIZE = 20
+    SRI_QUEUE_MAX_SIZE = 5000
+    SRI_AUTO_BACKUP_DOCUMENTS = True
+    SRI_COMPRESS_BACKUP_FILES = True
+    
     # Logging menos verboso en producción
     LOGGING['loggers']['apps.sri_integration']['level'] = 'INFO'
     LOGGING['loggers']['apps.certificates']['level'] = 'INFO'
@@ -772,14 +846,16 @@ directories_to_create = [
     'storage/invoices',
     'storage/invoices/xml',
     'storage/invoices/pdf',
+    'storage/backup',
+    'storage/backup/sri',
 ]
 
 for directory in directories_to_create:
     dir_path = BASE_DIR / directory
     os.makedirs(dir_path, exist_ok=True)
     
-    # Configurar permisos seguros para certificados
-    if 'certificates' in directory:
+    # Configurar permisos seguros para certificados y backups
+    if 'certificates' in directory or 'backup' in directory:
         os.chmod(dir_path, 0o700)
 
 # ==========================================
@@ -789,6 +865,7 @@ for directory in directories_to_create:
 # Configuración de inicialización automática
 CERTIFICATE_AUTO_STARTUP = config('CERTIFICATE_AUTO_STARTUP', default=True, cast=bool)
 CELERY_AUTO_STARTUP = config('CELERY_AUTO_STARTUP', default=True, cast=bool)
+SRI_AUTO_STARTUP_VALIDATION = config('SRI_AUTO_STARTUP_VALIDATION', default=True, cast=bool)
 
 # ==========================================
 # MENSAJES DE CONFIGURACIÓN - ✅ ACTUALIZADOS
@@ -806,15 +883,20 @@ def print_config_status():
     print(f"📧 Email backend: {EMAIL_BACKEND}")
     print(f"🌐 CORS origins: {len(CORS_ALLOWED_ORIGINS)} configurados")
     print(f"🔍 Log level: {LOG_LEVEL}")
+    print(f"🚀 SRI Auto-send: {'Activado' if SRI_AUTO_SEND else 'Desactivado'}")
+    print(f"🔄 SRI Reintentos: {SRI_MAX_RETRY_ATTEMPTS} máximo")
+    print(f"📊 SRI Lote: {SRI_BATCH_SIZE} documentos")
     
     if DEBUG:
         print("🛠️  Configuración de desarrollo activa")
         print(f"   - Celery eager: {config('CELERY_TASK_ALWAYS_EAGER', default=False)}")
         print(f"   - CORS allow all: {config('CORS_ALLOW_ALL_ORIGINS', default=True)}")
+        print(f"   - SRI Circuit breaker: {'Desactivado' if not SRI_CIRCUIT_BREAKER_ENABLED else 'Activado'}")
     else:
         print("🏭 Configuración de producción activa")
         print(f"   - SSL redirect: {SECURE_SSL_REDIRECT}")
         print(f"   - HSTS seconds: {SECURE_HSTS_SECONDS}")
+        print(f"   - SRI Backup: {'Activado' if SRI_AUTO_BACKUP_DOCUMENTS else 'Desactivado'}")
 
 # Ejecutar solo si no estamos en testing
 if 'test' not in sys.argv and os.environ.get('DJANGO_SETTINGS_MODULE'):
@@ -845,5 +927,9 @@ if DEBUG and not EMAIL_HOST_USER:
 
 if not config('GOOGLE_CLIENT_ID', default=''):
     print("⚠️ WARNING: OAuth con Google no configurado")
+
+print("🚀 Configuración validada exitosamente - Sistema listo para usar")
+if SRI_WEBHOOK_ENABLED and not SRI_WEBHOOK_URL:
+    print("⚠️ WARNING: SRI Webhook habilitado pero URL no configurada")
 
 print("🚀 Configuración validada exitosamente - Sistema listo para usar")

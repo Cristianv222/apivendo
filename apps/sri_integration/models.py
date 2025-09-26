@@ -6,6 +6,7 @@ Modelos para integración con el SRI
 ✅ URLs AUTOMÁTICAS SEGÚN AMBIENTE
 ✅ COMPATIBLE CON SRISOAPClient
 ✅ LISTO PARA FRONTEND
+✅ ENHANCED CON AUTO-SEND CONFIGURATION
 """
 
 import uuid
@@ -20,7 +21,7 @@ from apps.companies.models import Company
 class SRIConfiguration(BaseModel):
     """
     Configuración del SRI por empresa
-    ✅ VERSIÓN FINAL CORREGIDA - URLs AUTOMÁTICAS
+    ✅ VERSIÓN FINAL CORREGIDA - URLs AUTOMÁTICAS + AUTO-SEND CONFIG
     """
     
     ENVIRONMENT_CHOICES = [
@@ -139,6 +140,208 @@ class SRIConfiguration(BaseModel):
         help_text=_('Required to keep accounting')
     )
     
+    # ===============================================
+    # CONFIGURACIÓN DE ENVÍO AUTOMÁTICO AL SRI
+    # ===============================================
+    
+    auto_send = models.BooleanField(
+        _('auto send'),
+        default=True,
+        help_text=_('Send automatically to SRI after generation')
+    )
+    
+    auto_retry = models.BooleanField(
+        _('auto retry'),
+        default=True,
+        help_text=_('Retry automatically if sending fails')
+    )
+    
+    max_retry_attempts = models.IntegerField(
+        _('max retry attempts'),
+        default=3,
+        help_text=_('Maximum number of retry attempts')
+    )
+    
+    retry_delay_minutes = models.IntegerField(
+        _('retry delay minutes'),
+        default=5,
+        help_text=_('Minutes to wait between retry attempts')
+    )
+    
+    auto_send_after_generation = models.BooleanField(
+        _('auto send after generation'),
+        default=True,
+        help_text=_('Automatically send to SRI immediately after XML generation')
+    )
+    
+    use_async_processing = models.BooleanField(
+        _('use async processing'),
+        default=True,
+        help_text=_('Use background processing for SRI operations')
+    )
+    
+    circuit_breaker_enabled = models.BooleanField(
+        _('circuit breaker enabled'),
+        default=True,
+        help_text=_('Enable circuit breaker to prevent repeated failures')
+    )
+    
+    circuit_breaker_threshold = models.IntegerField(
+        _('circuit breaker threshold'),
+        default=5,
+        help_text=_('Number of failures before circuit breaker opens')
+    )
+    
+    circuit_breaker_recovery_minutes = models.IntegerField(
+        _('circuit breaker recovery minutes'),
+        default=60,
+        help_text=_('Minutes before circuit breaker resets after opening')
+    )
+    
+    pre_validation_enabled = models.BooleanField(
+        _('pre validation enabled'),
+        default=True,
+        help_text=_('Validate documents before sending to SRI')
+    )
+    
+    validate_xml_schema = models.BooleanField(
+        _('validate XML schema'),
+        default=True,
+        help_text=_('Validate XML against SRI schema before sending')
+    )
+    
+    validate_business_rules = models.BooleanField(
+        _('validate business rules'),
+        default=True,
+        help_text=_('Validate business rules before sending to SRI')
+    )
+    
+    # Configuración de notificaciones
+    notify_on_success = models.BooleanField(
+        _('notify on success'),
+        default=True,
+        help_text=_('Send notification when document is successfully authorized')
+    )
+    
+    notify_on_error = models.BooleanField(
+        _('notify on error'),
+        default=True,
+        help_text=_('Send notification when document processing fails')
+    )
+    
+    notify_on_retry = models.BooleanField(
+        _('notify on retry'),
+        default=False,
+        help_text=_('Send notification when retrying failed document')
+    )
+    
+    # Configuración de procesamiento en lote
+    queue_processing_enabled = models.BooleanField(
+        _('queue processing enabled'),
+        default=True,
+        help_text=_('Enable queue-based batch processing')
+    )
+    
+    batch_size = models.IntegerField(
+        _('batch size'),
+        default=10,
+        help_text=_('Number of documents to process in each batch')
+    )
+    
+    queue_max_size = models.IntegerField(
+        _('queue max size'),
+        default=1000,
+        help_text=_('Maximum number of documents in processing queue')
+    )
+    
+    queue_batch_timeout_minutes = models.IntegerField(
+        _('queue batch timeout minutes'),
+        default=5,
+        help_text=_('Minutes to wait before processing incomplete batch')
+    )
+    
+    # Configuración de backup y limpieza
+    auto_backup_documents = models.BooleanField(
+        _('auto backup documents'),
+        default=True,
+        help_text=_('Automatically backup processed documents')
+    )
+    
+    backup_retention_days = models.IntegerField(
+        _('backup retention days'),
+        default=365,
+        help_text=_('Days to retain document backups')
+    )
+    
+    compress_backup_files = models.BooleanField(
+        _('compress backup files'),
+        default=True,
+        help_text=_('Compress backup files to save storage space')
+    )
+    
+    auto_cleanup_old_logs = models.BooleanField(
+        _('auto cleanup old logs'),
+        default=True,
+        help_text=_('Automatically cleanup old processing logs')
+    )
+    
+    cleanup_days_threshold = models.IntegerField(
+        _('cleanup days threshold'),
+        default=90,
+        help_text=_('Days after which logs are eligible for cleanup')
+    )
+    
+    cleanup_batch_size = models.IntegerField(
+        _('cleanup batch size'),
+        default=100,
+        help_text=_('Number of log entries to cleanup in each batch')
+    )
+    
+    # Configuración de webhook
+    webhook_enabled = models.BooleanField(
+        _('webhook enabled'),
+        default=False,
+        help_text=_('Enable webhook notifications for SRI events')
+    )
+    
+    webhook_url = models.URLField(
+        _('webhook URL'),
+        blank=True,
+        help_text=_('URL to receive webhook notifications')
+    )
+    
+    webhook_secret = models.CharField(
+        _('webhook secret'),
+        max_length=255,
+        blank=True,
+        help_text=_('Secret key for webhook authentication')
+    )
+    
+    webhook_timeout_seconds = models.IntegerField(
+        _('webhook timeout seconds'),
+        default=30,
+        help_text=_('Timeout for webhook HTTP requests')
+    )
+    
+    # Configuración de métricas y monitoreo
+    metrics_enabled = models.BooleanField(
+        _('metrics enabled'),
+        default=True,
+        help_text=_('Enable metrics collection for SRI operations')
+    )
+    
+    performance_logging = models.BooleanField(
+        _('performance logging'),
+        default=True,
+        help_text=_('Log performance metrics for SRI operations')
+    )
+    
+    error_tracking = models.BooleanField(
+        _('error tracking'),
+        default=True,
+        help_text=_('Track and analyze error patterns')
+    )
+    
     is_active = models.BooleanField(
         _('is active'),
         default=True,
@@ -168,6 +371,113 @@ class SRIConfiguration(BaseModel):
             return "https://celcer.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl"
         else:  # PRODUCTION
             return "https://cel.sri.gob.ec/comprobantes-electronicos-ws/AutorizacionComprobantesOffline?wsdl"
+    
+    # ===============================================
+    # MÉTODOS PARA AUTO-SEND CONFIGURATION
+    # ===============================================
+    
+    def is_auto_send_enabled(self):
+        """Verificar si el auto-envío está habilitado"""
+        return self.auto_send and self.is_active
+    
+    def should_auto_send_after_generation(self):
+        """Verificar si debe enviar automáticamente después de generar XML"""
+        return self.is_auto_send_enabled() and self.auto_send_after_generation
+    
+    def should_use_async_processing(self):
+        """Verificar si debe usar procesamiento asíncrono"""
+        return self.is_auto_send_enabled() and self.use_async_processing
+    
+    def is_circuit_breaker_enabled(self):
+        """Verificar si el circuit breaker está habilitado"""
+        return self.circuit_breaker_enabled and self.is_active
+    
+    def should_retry_failures(self):
+        """Verificar si debe reintentar fallas automáticamente"""
+        return self.is_auto_send_enabled() and self.auto_retry
+    
+    def get_retry_delay_seconds(self):
+        """Obtener delay de reintento en segundos"""
+        return self.retry_delay_minutes * 60
+    
+    def get_circuit_breaker_recovery_seconds(self):
+        """Obtener tiempo de recuperación del circuit breaker en segundos"""
+        return self.circuit_breaker_recovery_minutes * 60
+    
+    def get_queue_batch_timeout_seconds(self):
+        """Obtener timeout de lote en segundos"""
+        return self.queue_batch_timeout_minutes * 60
+    
+    def should_validate_before_sending(self):
+        """Verificar si debe validar antes de enviar"""
+        return self.pre_validation_enabled
+    
+    def get_notification_settings(self):
+        """Obtener configuración de notificaciones"""
+        return {
+            'notify_on_success': self.notify_on_success,
+            'notify_on_error': self.notify_on_error,
+            'notify_on_retry': self.notify_on_retry
+        }
+    
+    def get_webhook_config(self):
+        """Obtener configuración de webhook"""
+        if not self.webhook_enabled or not self.webhook_url:
+            return None
+        
+        return {
+            'url': self.webhook_url,
+            'secret': self.webhook_secret,
+            'timeout': self.webhook_timeout_seconds
+        }
+    
+    def get_backup_config(self):
+        """Obtener configuración de backup"""
+        return {
+            'enabled': self.auto_backup_documents,
+            'retention_days': self.backup_retention_days,
+            'compress': self.compress_backup_files
+        }
+    
+    def get_cleanup_config(self):
+        """Obtener configuración de limpieza"""
+        return {
+            'enabled': self.auto_cleanup_old_logs,
+            'days_threshold': self.cleanup_days_threshold,
+            'batch_size': self.cleanup_batch_size
+        }
+    
+    def get_processing_config(self):
+        """Obtener configuración completa de procesamiento"""
+        return {
+            'auto_send': self.is_auto_send_enabled(),
+            'auto_send_after_generation': self.should_auto_send_after_generation(),
+            'use_async': self.should_use_async_processing(),
+            'circuit_breaker': self.is_circuit_breaker_enabled(),
+            'auto_retry': self.should_retry_failures(),
+            'max_retry_attempts': self.max_retry_attempts,
+            'retry_delay_seconds': self.get_retry_delay_seconds(),
+            'circuit_breaker_threshold': self.circuit_breaker_threshold,
+            'circuit_breaker_recovery_seconds': self.get_circuit_breaker_recovery_seconds(),
+            'validate_before_sending': self.should_validate_before_sending(),
+            'validate_xml_schema': self.validate_xml_schema,
+            'validate_business_rules': self.validate_business_rules,
+            'notifications': self.get_notification_settings(),
+            'webhook': self.get_webhook_config(),
+            'backup': self.get_backup_config(),
+            'cleanup': self.get_cleanup_config(),
+            'queue_processing': {
+                'enabled': self.queue_processing_enabled,
+                'batch_size': self.batch_size,
+                'max_size': self.queue_max_size,
+                'timeout_seconds': self.get_queue_batch_timeout_seconds()
+            },
+            'metrics': {
+                'enabled': self.metrics_enabled,
+                'performance_logging': self.performance_logging,
+                'error_tracking': self.error_tracking
+            }
+        }
     
     def get_next_sequence(self, document_type):
         """Obtiene el siguiente secuencial para un tipo de documento"""

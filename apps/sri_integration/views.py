@@ -1,18 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-Views for sri_integration app - VERSIÓN DEFINITIVAMENTE CORREGIDA
-SOLUCIÓN ABSOLUTA PARA PERSISTENCIA DE CREDIT NOTES
+Views for sri_integration app - VERSIÓN COMPLETA CON MONITOREO CELERY
+SOLUCIÓN ABSOLUTA PARA PERSISTENCIA DE CREDIT NOTES + APIS CELERY
 """
 
 from rest_framework import viewsets, filters, status, permissions
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.db import transaction, connection
+from django.http import HttpResponse, Http404, FileResponse, JsonResponse
+from django.shortcuts import get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.views.decorators.http import require_GET
+from django.core.cache import cache
+from celery.result import AsyncResult
+from celery.app.control import Control
+from celery import current_app
 import os
-from django.conf import settings
+import mimetypes
+import json
 import logging
+from datetime import datetime, timedelta
+from dateutil import parser
 
 from .models import (
     DebitNote, PurchaseSettlement, Retention, SRIConfiguration, ElectronicDocument, DocumentItem,
@@ -26,6 +38,16 @@ from .serializers import (
 
 # Configurar logging
 logger = logging.getLogger(__name__)
+
+# Importar función de permisos del core
+try:
+    from apps.core.views import get_user_companies_secure
+except ImportError:
+    def get_user_companies_secure(user):
+        from apps.companies.models import Company
+        if user.is_staff or user.is_superuser:
+            return Company.objects.filter(is_active=True)
+        return Company.objects.filter(is_active=True)[:1]  # Fallback
 
 
 class SRIConfigurationViewSet(viewsets.ModelViewSet):
@@ -73,13 +95,14 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=["post"])
     def create_invoice(self, request):
-        """Crear factura completa con items"""
+        """Crear factura completa con envío automático al SRI"""
         serializer = CreateInvoiceSerializer(data=request.data)
         if serializer.is_valid():
             try:
                 from django.utils import timezone
                 from decimal import Decimal, ROUND_HALF_UP
                 from apps.companies.models import Company
+                from django.conf import settings
                 
                 # Obtener datos validados
                 validated_data = serializer.validated_data
@@ -178,9 +201,208 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
                 document.status = "GENERATED"
                 document.save()
                 
-                # Serializar respuesta
-                response_serializer = ElectronicDocumentSerializer(document)
-                return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+                # ===============================================
+                # NUEVA FUNCIONALIDAD: ENVÍO AUTOMÁTICO AL SRI
+                # ===============================================
+                
+                # Verificar si el auto-envío está habilitado
+                auto_send_enabled = getattr(settings, 'SRI_AUTO_SEND', True)
+                auto_send_after_generation = getattr(settings, 'SRI_AUTO_SEND_AFTER_GENERATION', True)
+                use_async_processing = getattr(settings, 'SRI_USE_ASYNC_PROCESSING', True)
+                circuit_breaker_enabled = getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True)
+                
+                logger.info(f"Auto-envío SRI configurado: {auto_send_enabled} para documento {document.id}")
+                logger.info(f"Procesamiento asíncrono: {use_async_processing}")
+                
+                if auto_send_enabled and auto_send_after_generation:
+                    try:
+                        # Verificar circuit breaker si está habilitado
+                        if circuit_breaker_enabled:
+                            circuit_key = f"sri_circuit_breaker_{company.id}"
+                            circuit_failures = cache.get(circuit_key, 0)
+                            circuit_threshold = getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5)
+                            
+                            if circuit_failures >= circuit_threshold:
+                                logger.warning(f"Circuit breaker abierto para empresa {company.id} - {circuit_failures} fallas")
+                                response_serializer = ElectronicDocumentSerializer(document)
+                                response_data = response_serializer.data
+                                response_data.update({
+                                    'auto_processed': False,
+                                    'circuit_breaker_open': True,
+                                    'processing_status': 'CIRCUIT_BREAKER_OPEN',
+                                    'suggestion': 'SRI processing temporarily disabled due to multiple failures. Try again later or process manually.'
+                                })
+                                return Response(response_data, status=status.HTTP_201_CREATED)
+                        
+                        # Decidir entre procesamiento asíncrono o síncrono
+                        if use_async_processing:
+                            # ===============================================
+                            # PROCESAMIENTO ASÍNCRONO CON CELERY
+                            # ===============================================
+                            logger.info(f"Iniciando procesamiento asíncrono para documento {document.id}")
+                            
+                            try:
+                                from .tasks import process_document_async
+                                
+                                # Disparar tarea asíncrona
+                                task = process_document_async.apply_async(
+                                    args=[document.id],
+                                    queue='sri_processing'
+                                )
+                                
+                                # Guardar información de tracking
+                                cache_key = f"document_tasks_{document.id}"
+                                cached_tasks = cache.get(cache_key, [])
+                                cached_tasks.append(task.id)
+                                cache.set(cache_key, cached_tasks[-5:], timeout=3600)
+                                
+                                task_cache_key = f"task_info_{task.id}"
+                                cache.set(task_cache_key, {
+                                    'document_id': document.id,
+                                    'operation': 'auto_process_after_generation',
+                                    'started_at': timezone.now().isoformat(),
+                                    'user_id': request.user.id,
+                                    'auto_triggered': True
+                                }, timeout=3600)
+                                
+                                logger.info(f"✅ Procesamiento asíncrono iniciado para documento {document.id} (task: {task.id})")
+                                
+                                # Respuesta con información de monitoreo
+                                response_serializer = ElectronicDocumentSerializer(document)
+                                response_data = response_serializer.data
+                                response_data.update({
+                                    'auto_processed': True,
+                                    'async_processing': True,
+                                    'task_id': task.id,
+                                    'processing_status': 'ASYNC_STARTED',
+                                    'auto_send_enabled': True,
+                                    'monitoring': {
+                                        'polling_url': f'/api/sri/documents/{document.id}/task-status/',
+                                        'polling_interval': 3000,
+                                        'estimated_completion': '2-10 minutes'
+                                    },
+                                    'processing_timestamp': timezone.now().isoformat()
+                                })
+                                return Response(response_data, status=status.HTTP_201_CREATED)
+                                
+                            except ImportError:
+                                logger.warning("Celery tasks not available, falling back to synchronous processing")
+                                use_async_processing = False
+                            except Exception as e:
+                                logger.error(f"Error iniciando procesamiento asíncrono: {str(e)}")
+                                use_async_processing = False
+                        
+                        if not use_async_processing:
+                            # ===============================================
+                            # PROCESAMIENTO SÍNCRONO
+                            # ===============================================
+                            logger.info(f"Iniciando procesamiento síncrono para documento {document.id}")
+                            
+                            try:
+                                from .services.document_processor import DocumentProcessor
+                                
+                                processor = DocumentProcessor(document.company)
+                                success, message = processor.process_document(document, send_email=True)
+                                
+                                if success:
+                                    logger.info(f"✅ Documento {document.id} procesado automáticamente - Status: {document.status}")
+                                    
+                                    # Actualizar circuit breaker en caso de éxito
+                                    if circuit_breaker_enabled:
+                                        circuit_key = f"sri_circuit_breaker_{company.id}"
+                                        cache.delete(circuit_key)
+                                    
+                                    # Serializar respuesta con información del procesamiento
+                                    response_serializer = ElectronicDocumentSerializer(document)
+                                    response_data = response_serializer.data
+                                    response_data.update({
+                                        'auto_processed': True,
+                                        'sync_processing': True,
+                                        'sri_status': document.status,
+                                        'processing_message': message,
+                                        'auto_send_enabled': True,
+                                        'sri_authorization_code': getattr(document, 'sri_authorization_code', None),
+                                        'processing_timestamp': timezone.now().isoformat(),
+                                        'processing_status': 'SYNC_COMPLETED'
+                                    })
+                                    return Response(response_data, status=status.HTTP_201_CREATED)
+                                else:
+                                    logger.warning(f"⚠️ Auto-envío síncrono falló para documento {document.id}: {message}")
+                                    
+                                    # Incrementar circuit breaker si está habilitado
+                                    if circuit_breaker_enabled:
+                                        circuit_key = f"sri_circuit_breaker_{company.id}"
+                                        circuit_failures = cache.get(circuit_key, 0) + 1
+                                        recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                                        cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+                                    
+                                    # Intentar reintento automático si está habilitado
+                                    auto_retry = getattr(settings, 'SRI_AUTO_RETRY_FAILED', True)
+                                    if auto_retry:
+                                        logger.info(f"Intentando reintento automático para documento {document.id}")
+                                        try:
+                                            from .tasks import retry_failed_document_async
+                                            retry_delay = getattr(settings, 'SRI_RETRY_DELAY_SECONDS', 60)
+                                            
+                                            retry_task = retry_failed_document_async.apply_async(
+                                                args=[document.id],
+                                                countdown=retry_delay,
+                                                queue='sri_processing'
+                                            )
+                                            
+                                            logger.info(f"Reintento programado para documento {document.id} en {retry_delay} segundos")
+                                        except:
+                                            logger.warning("No se pudo programar reintento automático")
+                                    
+                                    # Devolver la factura creada pero con error de envío
+                                    response_serializer = ElectronicDocumentSerializer(document)
+                                    response_data = response_serializer.data
+                                    response_data.update({
+                                        'auto_processed': False,
+                                        'processing_error': message,
+                                        'auto_send_enabled': True,
+                                        'processing_status': 'SYNC_FAILED',
+                                        'retry_scheduled': auto_retry,
+                                        'suggestion': 'Document created successfully but SRI processing failed. Check SRI configuration and try manual processing.'
+                                    })
+                                    return Response(response_data, status=status.HTTP_201_CREATED)
+                            except ImportError:
+                                logger.error("DocumentProcessor service not available")
+                                raise
+                                        
+                    except Exception as e:
+                        logger.error(f"❌ Error en auto-procesamiento de documento {document.id}: {str(e)}")
+                        
+                        # Incrementar circuit breaker
+                        if circuit_breaker_enabled:
+                            circuit_key = f"sri_circuit_breaker_{company.id}"
+                            circuit_failures = cache.get(circuit_key, 0) + 1
+                            recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                            cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+                        
+                        # Devolver la factura creada pero con error de envío
+                        response_serializer = ElectronicDocumentSerializer(document)
+                        response_data = response_serializer.data
+                        response_data.update({
+                            'auto_processed': False,
+                            'processing_error': str(e),
+                            'auto_send_enabled': True,
+                            'processing_status': 'ERROR',
+                            'suggestion': 'Document created successfully but auto-processing failed. Check your SRI configuration and certificate, then try manual processing.'
+                        })
+                        return Response(response_data, status=status.HTTP_201_CREATED)
+                else:
+                    # Si auto-envío está deshabilitado, respuesta normal
+                    logger.info(f"Auto-envío deshabilitado para documento {document.id}")
+                    response_serializer = ElectronicDocumentSerializer(document)
+                    response_data = response_serializer.data
+                    response_data.update({
+                        'auto_processed': False,
+                        'auto_send_disabled': True,
+                        'processing_status': 'MANUAL_REQUIRED',
+                        'suggestion': 'Enable SRI_AUTO_SEND in settings or use manual processing endpoints'
+                    })
+                    return Response(response_data, status=status.HTTP_201_CREATED)
                 
             except Exception as e:
                 logger.error(f"Error creating invoice: {str(e)}")
@@ -222,7 +444,7 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
                 status="DRAFT"
             )
             
-            logger.info(f"✅ Nota de crédito creada: ID {credit_note.id}")
+            logger.info(f"Nota de crédito creada: ID {credit_note.id}")
             
             return Response({
                 "id": credit_note.id,
@@ -278,7 +500,7 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
                         status="GENERATED",
                         updated_at=timezone.now()
                     )
-                    logger.info(f"✅ CreditNote {document.id} actualizada: {updated_rows} filas")
+                    logger.info(f"CreditNote {document.id} actualizada: {updated_rows} filas")
                     document.refresh_from_db()
                 else:
                     document.status = "GENERATED"
@@ -303,7 +525,6 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=["post"])
-    @action(detail=True, methods=["post"])
     def sign_document(self, request, pk=None):
         """MÉTODO DE PRUEBA OBVIO - DEBE SER OBVIAMENTE VISIBLE"""
         from rest_framework.response import Response
@@ -314,12 +535,12 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
         import logging
         
         # Logging que NO se puede ignorar
-        print(f"🔥🔥🔥 [OBVIOUS TEST] EJECUTÁNDOSE PARA PK {pk} 🔥🔥🔥")
+        print(f"[OBVIOUS TEST] EJECUTÁNDOSE PARA PK {pk}")
         
         try:
             # Obtener documento
             document = CreditNote.objects.get(id=pk)
-            print(f"🔥🔥🔥 [OBVIOUS TEST] Estado inicial: {document.status} 🔥🔥🔥")
+            print(f"[OBVIOUS TEST] Estado inicial: {document.status}")
             
             # Actualización obvia
             with transaction.atomic():
@@ -327,16 +548,16 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
                     status="OBVIOUS_SIGNED",
                     updated_at=timezone.now()
                 )
-                print(f"🔥🔥🔥 [OBVIOUS TEST] Filas actualizadas: {updated_rows} 🔥🔥🔥")
+                print(f"[OBVIOUS TEST] Filas actualizadas: {updated_rows}")
             
             # Verificar resultado
             final_check = CreditNote.objects.get(id=document.id)
-            print(f"🔥🔥🔥 [OBVIOUS TEST] Estado final: {final_check.status} 🔥🔥🔥")
+            print(f"[OBVIOUS TEST] Estado final: {final_check.status}")
             
             # Respuesta obviamente diferente
             return Response({
                 "success": True,
-                "message": "🔥🔥🔥 OBVIOUS TEST METHOD WORKED - FILE MODIFICATION IS ACTIVE! 🔥🔥🔥",
+                "message": "OBVIOUS TEST METHOD WORKED - FILE MODIFICATION IS ACTIVE!",
                 "data": {
                     "document_number": document.document_number,
                     "status": final_check.status,
@@ -352,7 +573,7 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_200_OK)
             
         except Exception as e:
-            print(f"🔥🔥🔥 [OBVIOUS TEST] ERROR: {e} 🔥🔥🔥")
+            print(f"[OBVIOUS TEST] ERROR: {e}")
             import traceback
             traceback.print_exc()
             return Response({
@@ -360,6 +581,7 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
                 "obvious_test": True,
                 "test_method": "OBVIOUS_REPLACEMENT"
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
     @action(detail=True, methods=["post"])
     def send_to_sri(self, request, pk=None):
         """Enviar documento al SRI - COMPATIBLE CON NOTAS DE CRÉDITO"""
@@ -626,15 +848,15 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
             try:
                 document = CreditNote.objects.get(id=pk)
                 is_credit_note = True
-                logger.info(f"🔍 Debug: CreditNote {pk} encontrada")
+                logger.info(f"Debug: CreditNote {pk} encontrada")
             except CreditNote.DoesNotExist:
                 document = self.get_object()
                 is_credit_note = False
-                logger.info(f"🔍 Debug: ElectronicDocument {pk} encontrado")
+                logger.info(f"Debug: ElectronicDocument {pk} encontrado")
             
             new_status = request.data.get("status", "SIGNED")
-            logger.info(f"🔍 Estado inicial: {document.status}")
-            logger.info(f"🔍 Nuevo status solicitado: {new_status}")
+            logger.info(f"Estado inicial: {document.status}")
+            logger.info(f"Nuevo status solicitado: {new_status}")
             
             # Método 1: Update directo con transacción
             if is_credit_note:
@@ -680,6 +902,244 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
             return Response({
                 "error": str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=False, methods=['get'])
+    def auto_send_status(self, request):
+        """Verificar estado del auto-envío SRI"""
+        from django.conf import settings
+        
+        # Verificar disponibilidad de servicios
+        try:
+            from .services.document_processor import DocumentProcessor
+            document_processor_available = True
+        except ImportError:
+            document_processor_available = False
+        
+        try:
+            from .services.soap_client import SRISOAPClient
+            soap_client_available = True
+        except ImportError:
+            soap_client_available = False
+        
+        # Verificar estado de Celery
+        celery_available = False
+        try:
+            from celery.app.control import Control
+            from celery import current_app
+            control = Control(current_app)
+            workers = control.inspect().ping()
+            celery_available = bool(workers)
+        except:
+            pass
+        
+        # Verificar circuit breaker si está disponible
+        circuit_breaker_status = {}
+        if hasattr(request.user, 'company') or request.user.is_authenticated:
+            try:
+                user_companies = get_user_companies_secure(request.user)
+                for company in user_companies:
+                    circuit_key = f"sri_circuit_breaker_{company.id}"
+                    circuit_failures = cache.get(circuit_key, 0)
+                    circuit_threshold = getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5)
+                    circuit_breaker_status[f"company_{company.id}"] = {
+                        'failures': circuit_failures,
+                        'threshold': circuit_threshold,
+                        'is_open': circuit_failures >= circuit_threshold
+                    }
+            except:
+                pass
+        
+        return Response({
+            "auto_send_configuration": {
+                "auto_send_enabled": getattr(settings, 'SRI_AUTO_SEND', False),
+                "auto_send_after_generation": getattr(settings, 'SRI_AUTO_SEND_AFTER_GENERATION', False),
+                "auto_authorize_check": getattr(settings, 'SRI_AUTO_AUTHORIZE_CHECK', False),
+                "use_async_processing": getattr(settings, 'SRI_USE_ASYNC_PROCESSING', True),
+                "auto_retry_failed": getattr(settings, 'SRI_AUTO_RETRY_FAILED', True),
+                "max_retry_attempts": getattr(settings, 'SRI_MAX_RETRY_ATTEMPTS', 3),
+                "retry_delay_seconds": getattr(settings, 'SRI_RETRY_DELAY_SECONDS', 60),
+                "async_timeout": getattr(settings, 'SRI_ASYNC_TIMEOUT', 300),
+                "circuit_breaker_enabled": getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True),
+                "circuit_breaker_failure_threshold": getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5),
+                "circuit_breaker_recovery_timeout": getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+            },
+            "service_availability": {
+                "soap_client_available": soap_client_available,
+                "document_processor_available": document_processor_available,
+                "celery_available": celery_available,
+                "cache_available": True
+            },
+            "circuit_breaker_status": circuit_breaker_status,
+            "notifications": {
+                "notify_on_success": getattr(settings, 'SRI_NOTIFY_ON_SUCCESS', True),
+                "notify_on_error": getattr(settings, 'SRI_NOTIFY_ON_ERROR', True),
+                "notify_on_retry": getattr(settings, 'SRI_NOTIFY_ON_RETRY', False)
+            },
+            "queue_processing": {
+                "queue_processing_enabled": getattr(settings, 'SRI_QUEUE_PROCESSING', True),
+                "batch_size": getattr(settings, 'SRI_BATCH_SIZE', 10),
+                "queue_max_size": getattr(settings, 'SRI_QUEUE_MAX_SIZE', 1000),
+                "queue_batch_timeout": getattr(settings, 'SRI_QUEUE_BATCH_TIMEOUT', 300)
+            },
+            "validation": {
+                "pre_validation": getattr(settings, 'SRI_PRE_VALIDATION', True),
+                "validate_xml_schema": getattr(settings, 'SRI_VALIDATE_XML_SCHEMA', True),
+                "validate_business_rules": getattr(settings, 'SRI_VALIDATE_BUSINESS_RULES', True)
+            },
+            "backup_and_cleanup": {
+                "auto_backup_documents": getattr(settings, 'SRI_AUTO_BACKUP_DOCUMENTS', True),
+                "backup_retention_days": getattr(settings, 'SRI_BACKUP_RETENTION_DAYS', 365),
+                "auto_cleanup_old_logs": getattr(settings, 'SRI_AUTO_CLEANUP_OLD_LOGS', True),
+                "cleanup_days_threshold": getattr(settings, 'SRI_CLEANUP_DAYS_THRESHOLD', 90)
+            },
+            "webhook": {
+                "webhook_enabled": getattr(settings, 'SRI_WEBHOOK_ENABLED', False),
+                "webhook_url": getattr(settings, 'SRI_WEBHOOK_URL', ''),
+                "webhook_timeout": getattr(settings, 'SRI_WEBHOOK_TIMEOUT', 30)
+            },
+            "timestamp": timezone.now().isoformat(),
+            "message": "Complete auto-send configuration status and service availability"
+        })
+    
+    @action(detail=True, methods=['post'])
+    def process_to_sri_manual(self, request, pk=None):
+        """Procesar documento existente y enviarlo al SRI manualmente"""
+        try:
+            document = self.get_object()
+            
+            if document.status in ['AUTHORIZED', 'SENT']:
+                return Response(
+                    {
+                        "success": False,
+                        "message": "Document already processed", 
+                        "current_status": document.status,
+                        "document_number": document.document_number,
+                        "processing_method": "manual",
+                        "suggestion": "Document is already in a final state. No further processing needed."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Verificar si el procesamiento está temporalmente deshabilitado
+            from django.conf import settings
+            circuit_breaker_enabled = getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True)
+            
+            if circuit_breaker_enabled:
+                circuit_key = f"sri_circuit_breaker_{document.company.id}"
+                circuit_failures = cache.get(circuit_key, 0)
+                circuit_threshold = getattr(settings, 'SRI_CIRCUIT_BREAKER_FAILURE_THRESHOLD', 5)
+                
+                if circuit_failures >= circuit_threshold:
+                    logger.warning(f"Manual processing blocked by circuit breaker for company {document.company.id}")
+                    return Response({
+                        "success": False,
+                        "message": "Manual processing temporarily disabled due to multiple recent failures",
+                        "current_status": document.status,
+                        "document_number": document.document_number,
+                        "processing_method": "manual",
+                        "circuit_breaker_open": True,
+                        "failures_count": circuit_failures,
+                        "suggestion": "Wait a few minutes and try again, or contact support if the issue persists."
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+            # Intentar procesamiento manual
+            try:
+                from .services.document_processor import DocumentProcessor
+                
+                logger.info(f"Manual processing requested for document {document.id} by user {request.user.username}")
+                processor = DocumentProcessor(document.company)
+                
+                # Obtener parámetros opcionales
+                send_email = request.data.get('send_email', True)
+                force_reprocess = request.data.get('force_reprocess', False)
+                
+                success, message = processor.process_document(
+                    document, 
+                    send_email=send_email,
+                    force_reprocess=force_reprocess
+                )
+                
+                if success:
+                    # Limpiar circuit breaker en caso de éxito
+                    if circuit_breaker_enabled:
+                        circuit_key = f"sri_circuit_breaker_{document.company.id}"
+                        cache.delete(circuit_key)
+                    
+                    logger.info(f"✅ Manual processing successful for document {document.id}")
+                    
+                    return Response({
+                        "success": True,
+                        "message": "Document processed and sent to SRI successfully",
+                        "document_number": document.document_number,
+                        "status": document.status,
+                        "sri_authorization_code": getattr(document, 'sri_authorization_code', None),
+                        "sri_authorization_date": getattr(document, 'sri_authorization_date', None),
+                        "processing_details": message,
+                        "processing_method": "manual",
+                        "email_sent": send_email,
+                        "files_generated": {
+                            "xml": bool(getattr(document, 'xml_file', None)),
+                            "signed_xml": bool(getattr(document, 'signed_xml_file', None)),
+                            "pdf": bool(getattr(document, 'pdf_file', None))
+                        },
+                        "processing_timestamp": timezone.now().isoformat()
+                    })
+                else:
+                    # Incrementar circuit breaker en caso de falla
+                    if circuit_breaker_enabled:
+                        circuit_key = f"sri_circuit_breaker_{document.company.id}"
+                        circuit_failures = cache.get(circuit_key, 0) + 1
+                        recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                        cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+                    
+                    logger.error(f"❌ Manual processing failed for document {document.id}: {message}")
+                    
+                    return Response({
+                        "success": False,
+                        "message": f"Processing failed: {message}",
+                        "document_number": document.document_number,
+                        "current_status": document.status,
+                        "processing_method": "manual",
+                        "processing_details": message,
+                        "suggestion": "Check SRI configuration, certificate validity, and document data. Try again or contact support."
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    
+            except ImportError:
+                logger.error(f"DocumentProcessor service not available for manual processing")
+                return Response({
+                    "success": False,
+                    "message": "Document processor service is not available",
+                    "document_number": document.document_number,
+                    "current_status": document.status,
+                    "processing_method": "manual",
+                    "suggestion": "Contact system administrator to verify service configuration."
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+                
+        except Exception as e:
+            logger.error(f"Error in manual processing for document {pk}: {str(e)}")
+            
+            # Incrementar circuit breaker incluso para errores inesperados
+            try:
+                if hasattr(self, 'get_object'):
+                    doc = self.get_object()
+                    circuit_breaker_enabled = getattr(settings, 'SRI_CIRCUIT_BREAKER_ENABLED', True)
+                    if circuit_breaker_enabled:
+                        circuit_key = f"sri_circuit_breaker_{doc.company.id}"
+                        circuit_failures = cache.get(circuit_key, 0) + 1
+                        recovery_timeout = getattr(settings, 'SRI_CIRCUIT_BREAKER_RECOVERY_TIMEOUT', 60)
+                        cache.set(circuit_key, circuit_failures, timeout=recovery_timeout)
+            except:
+                pass
+            
+            return Response(
+                {
+                    "success": False,
+                    "error": f"Processing error: {str(e)}",
+                    "processing_method": "manual",
+                    "suggestion": "Check system logs and contact support if the issue persists."
+                }, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class DocumentItemViewSet(viewsets.ModelViewSet):
@@ -700,36 +1160,10 @@ class SRIResponseViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["-created_at"]
     permission_classes = [permissions.AllowAny]  # Para pruebas
 
-# -*- coding: utf-8 -*-
-"""
-PASO 1: AGREGAR AL FINAL DE apps/sri_integration/views.py
-Sistema completo de descarga para TODOS los tipos de documentos SRI
-"""
 
-from django.http import HttpResponse, Http404, FileResponse, JsonResponse
-from django.shortcuts import get_object_or_404
-from django.contrib.auth.decorators import login_required
-from django.views.decorators.http import require_GET
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-import os
-import mimetypes
-import logging
-
-logger = logging.getLogger(__name__)
-
-# Importar función de permisos del core
-try:
-    from apps.core.views import get_user_companies_secure
-except ImportError:
-    def get_user_companies_secure(user):
-        from apps.companies.models import Company
-        if user.is_staff or user.is_superuser:
-            return Company.objects.filter(is_active=True)
-        return Company.objects.filter(is_active=True)[:1]  # Fallback
-
+# ==========================================
+# FUNCIONES HELPER
+# ==========================================
 
 def get_document_by_id_and_type(document_id, user):
     """
@@ -798,11 +1232,28 @@ def get_document_files(document, doc_type):
     return files
 
 
+def calculate_elapsed_time(started_at_str):
+    """Calcular tiempo transcurrido desde que inició la tarea"""
+    if not started_at_str:
+        return None
+    
+    try:
+        started_at = parser.parse(started_at_str)
+        elapsed = timezone.now() - started_at
+        return int(elapsed.total_seconds())
+    except:
+        return None
+
+
+# ==========================================
+# VISTAS DE DESCARGA DE ARCHIVOS
+# ==========================================
+
 @login_required
 @require_GET
 def download_document_pdf(request, document_id):
     """
-    Descarga el PDF de cualquier tipo de documento autorizado
+    Descarga el PDF de cualquier tipo de documento
     URL: /sri/documents/<id>/download/pdf/
     """
     try:
@@ -816,19 +1267,48 @@ def download_document_pdf(request, document_id):
         # Obtener archivos del documento
         files = get_document_files(document, doc_type)
         
-        # Verificar que el documento esté autorizado
-        if files['status'] != 'AUTHORIZED':
+        # CAMBIO: Permitir descarga de PDF en más estados
+        valid_states_for_pdf = ['AUTHORIZED', 'SENT', 'SIGNED', 'GENERATED']
+        
+        if files['status'] not in valid_states_for_pdf:
             return JsonResponse({
-                'error': 'DOCUMENT_NOT_AUTHORIZED',
-                'message': f'El documento debe estar autorizado para descargar el PDF. Estado actual: {files["status"]}'
+                'error': 'DOCUMENT_STATUS_INVALID',
+                'message': f'El documento debe estar en uno de estos estados para descargar el PDF: {", ".join(valid_states_for_pdf)}. Estado actual: {files["status"]}'
             }, status=400)
         
         # Verificar que existe el archivo PDF
         if not files['pdf_file']:
-            return JsonResponse({
-                'error': 'PDF_NOT_FOUND',
-                'message': 'El archivo PDF no está disponible para este documento'
-            }, status=404)
+            # Si no existe el PDF, intentar generarlo
+            from apps.sri_integration.services.pdf_generator import PDFGenerator
+            
+            try:
+                pdf_generator = PDFGenerator()
+                
+                # Generar PDF según el tipo de documento
+                if doc_type == 'credit_note':
+                    success, pdf_path = pdf_generator.generate_credit_note_pdf(document)
+                elif doc_type == 'electronic_document':
+                    success, pdf_path = pdf_generator.generate_invoice_pdf(document)
+                else:
+                    success, pdf_path = pdf_generator.generate_invoice_pdf(document)
+                
+                if success:
+                    # Actualizar el documento con el PDF generado
+                    document.pdf_file = pdf_path
+                    document.save()
+                    files = get_document_files(document, doc_type)
+                else:
+                    return JsonResponse({
+                        'error': 'PDF_GENERATION_FAILED',
+                        'message': 'No se pudo generar el PDF del documento'
+                    }, status=500)
+                    
+            except Exception as e:
+                logger.error(f"Error generando PDF: {str(e)}")
+                return JsonResponse({
+                    'error': 'PDF_GENERATION_ERROR',
+                    'message': f'Error al generar PDF: {str(e)}'
+                }, status=500)
         
         # Verificar que el archivo existe físicamente
         try:
@@ -854,7 +1334,7 @@ def download_document_pdf(request, document_id):
         }
         
         type_name = doc_type_names.get(doc_type, 'documento')
-        filename = f"{files['document_number']}_{type_name}_autorizado.pdf"
+        filename = f"{files['document_number']}_{type_name}_{files['status'].lower()}.pdf"
         
         # Servir archivo
         response = FileResponse(
@@ -864,7 +1344,7 @@ def download_document_pdf(request, document_id):
             content_type='application/pdf'
         )
         
-        logger.info(f"Usuario {request.user.username} descargó PDF del {type_name} {document_id}")
+        logger.info(f"Usuario {request.user.username} descargó PDF del {type_name} {document_id} en estado {files['status']}")
         return response
         
     except Exception as e:
@@ -873,7 +1353,6 @@ def download_document_pdf(request, document_id):
             'error': 'DOWNLOAD_ERROR',
             'message': f'Error interno al descargar el archivo: {str(e)}'
         }, status=500)
-
 
 @login_required
 @require_GET
@@ -983,6 +1462,10 @@ def check_document_files(request, document_id):
         # Obtener archivos del documento
         files = get_document_files(document, doc_type)
         
+        # MODIFICACIÓN: Estados válidos para descarga de PDF
+        pdf_valid_states = ['AUTHORIZED', 'SENT', 'SIGNED', 'GENERATED']
+        xml_valid_states = ['SIGNED', 'SENT', 'AUTHORIZED']
+        
         # Verificar disponibilidad de archivos
         file_status = {
             'document_id': document_id,
@@ -1012,7 +1495,8 @@ def check_document_files(request, document_id):
                 if os.path.exists(files['pdf_file'].path):
                     file_status['files']['pdf']['exists'] = True
                     file_status['files']['pdf']['size'] = os.path.getsize(files['pdf_file'].path)
-                    file_status['files']['pdf']['downloadable'] = files['status'] == 'AUTHORIZED'
+                    # CAMBIO: Permitir descarga en más estados
+                    file_status['files']['pdf']['downloadable'] = files['status'] in pdf_valid_states
             except (AttributeError, ValueError, OSError):
                 pass
         
@@ -1023,7 +1507,7 @@ def check_document_files(request, document_id):
                 if os.path.exists(xml_to_check.path):
                     file_status['files']['xml']['exists'] = True
                     file_status['files']['xml']['size'] = os.path.getsize(xml_to_check.path)
-                    file_status['files']['xml']['downloadable'] = files['status'] in ['SIGNED', 'SENT', 'AUTHORIZED']
+                    file_status['files']['xml']['downloadable'] = files['status'] in xml_valid_states
             except (AttributeError, ValueError, OSError):
                 pass
         
@@ -1035,9 +1519,6 @@ def check_document_files(request, document_id):
             'error': 'CHECK_ERROR',
             'message': f'Error interno al verificar archivos: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# ===== ENDPOINT PARA GENERAR ARCHIVOS FALTANTES =====
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1135,3 +1616,731 @@ def generate_missing_files(request, document_id):
             'message': f'Error del sistema: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+# ==========================================
+# NUEVAS APIS PARA MONITOREO DE CELERY
+# ==========================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def celery_status(request):
+    """
+    Estado general de Celery
+    URL: /api/sri/celery/status/
+    """
+    try:
+        control = Control(current_app)
+        
+        # Verificar workers activos
+        workers = control.inspect().active()
+        worker_stats = control.inspect().stats()
+        
+        response_data = {
+            'celery_healthy': bool(workers),
+            'workers_count': len(workers) if workers else 0,
+            'workers': list(workers.keys()) if workers else [],
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        # Estadísticas de colas si disponible
+        if workers:
+            try:
+                active_tasks = control.inspect().active()
+                reserved_tasks = control.inspect().reserved()
+                
+                total_active = sum(len(tasks) for tasks in (active_tasks or {}).values())
+                total_reserved = sum(len(tasks) for tasks in (reserved_tasks or {}).values())
+                
+                response_data.update({
+                    'queue_stats': {
+                        'active_tasks': total_active,
+                        'reserved_tasks': total_reserved
+                    }
+                })
+            except Exception as e:
+                logger.warning(f"Could not get queue stats: {e}")
+        
+        return Response(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error checking Celery status: {e}")
+        return Response({
+            'celery_healthy': False,
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def document_task_status(request, document_id):
+    """
+    Estado de procesamiento de un documento específico
+    URL: /api/sri/documents/<document_id>/task-status/
+    """
+    try:
+        # Verificar permisos
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            return Response({
+                'error': 'DOCUMENT_NOT_FOUND',
+                'message': 'Documento no encontrado o sin permisos'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Buscar tareas activas para este documento
+        cache_key = f"document_tasks_{document_id}"
+        cached_tasks = cache.get(cache_key, [])
+        
+        active_tasks = []
+        completed_tasks = []
+        
+        for task_id in cached_tasks:
+            try:
+                result = AsyncResult(task_id)
+                
+                task_data = {
+                    'task_id': task_id,
+                    'status': result.status,
+                    'ready': result.ready(),
+                    'successful': result.successful() if result.ready() else None,
+                    'failed': result.failed() if result.ready() else None
+                }
+                
+                if result.ready():
+                    task_data['result'] = result.result
+                    completed_tasks.append(task_data)
+                else:
+                    active_tasks.append(task_data)
+                    
+            except Exception as e:
+                logger.warning(f"Error checking task {task_id}: {e}")
+        
+        # Información del documento
+        document_data = {
+            'document_id': document_id,
+            'document_number': getattr(document, 'document_number', str(document.id)),
+            'document_type': doc_type,
+            'current_status': getattr(document, 'status', 'UNKNOWN'),
+            'created_at': getattr(document, 'created_at', timezone.now()).isoformat(),
+            'updated_at': getattr(document, 'updated_at', timezone.now()).isoformat(),
+            'active_tasks': active_tasks,
+            'completed_tasks': completed_tasks[-5:],  # Últimas 5 tareas completadas
+            'has_active_processing': len(active_tasks) > 0,
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        # Calcular progreso estimado
+        if document.status == 'SENT':
+            document_data['progress'] = {
+                'current_step': 'Waiting for SRI authorization',
+                'estimated_completion': '2-10 minutes',
+                'percentage': 80
+            }
+        elif document.status == 'GENERATED':
+            document_data['progress'] = {
+                'current_step': 'Ready for signing and sending',
+                'estimated_completion': 'Manual action required',
+                'percentage': 60
+            }
+        elif document.status == 'AUTHORIZED':
+            document_data['progress'] = {
+                'current_step': 'Complete',
+                'estimated_completion': 'Done',
+                'percentage': 100
+            }
+        else:
+            document_data['progress'] = {
+                'current_step': document.status,
+                'estimated_completion': 'Unknown',
+                'percentage': 40
+            }
+        
+        return Response(document_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting document task status: {e}")
+        return Response({
+            'error': str(e),
+            'document_id': document_id
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def trigger_document_processing(request, document_id):
+    """
+    Disparar procesamiento asíncrono de un documento
+    URL: /api/sri/documents/<document_id>/trigger-processing/
+    """
+    try:
+        # Verificar permisos
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            return Response({
+                'error': 'DOCUMENT_NOT_FOUND',
+                'message': 'Documento no encontrado o sin permisos'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verificar estado válido
+        valid_statuses = ['DRAFT', 'GENERATED', 'ERROR']
+        if document.status not in valid_statuses:
+            return Response({
+                'error': 'INVALID_STATUS',
+                'message': f'El documento debe estar en estado {", ".join(valid_statuses)}. Estado actual: {document.status}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Importar tareas
+        from .tasks import process_document_async, check_document_authorization_async
+        
+        # Determinar qué tarea ejecutar
+        if document.status == 'GENERATED':
+            # Si ya está generado, solo verificar autorización
+            task = check_document_authorization_async.apply_async(
+                args=[document_id],
+                queue='sri_authorization'
+            )
+            operation = 'authorization_check'
+        else:
+            # Procesamiento completo
+            task = process_document_async.apply_async(
+                args=[document_id],
+                queue='sri_processing'
+            )
+            operation = 'complete_processing'
+        
+        # Guardar task ID en cache para tracking
+        cache_key = f"document_tasks_{document_id}"
+        cached_tasks = cache.get(cache_key, [])
+        cached_tasks.append(task.id)
+        cache.set(cache_key, cached_tasks[-10:], timeout=3600)  # Mantener últimas 10 tareas
+        
+        # Guardar información de la tarea
+        task_cache_key = f"task_info_{task.id}"
+        cache.set(task_cache_key, {
+            'document_id': document_id,
+            'document_type': doc_type,
+            'operation': operation,
+            'started_at': timezone.now().isoformat(),
+            'user_id': request.user.id
+        }, timeout=3600)
+        
+        logger.info(f"Usuario {request.user.username} inició {operation} para documento {document_id} (task: {task.id})")
+        
+        return Response({
+            'success': True,
+            'message': f'Procesamiento iniciado: {operation}',
+            'task_id': task.id,
+            'document_id': document_id,
+            'operation': operation,
+            'status_url': f'/api/sri/documents/{document_id}/task-status/',
+            'polling_interval': 2000  # milisegundos
+        })
+        
+    except Exception as e:
+        logger.error(f"Error triggering processing for document {document_id}: {e}")
+        return Response({
+            'error': str(e),
+            'document_id': document_id
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_user_active_tasks(request):
+    """
+    Obtener todas las tareas activas del usuario
+    URL: /api/sri/celery/my-tasks/
+    """
+    try:
+        # Obtener documentos del usuario
+        user_companies = get_user_companies_secure(request.user)
+        
+        # Buscar en ElectronicDocument
+        user_document_ids = list(ElectronicDocument.objects.filter(
+            company__in=user_companies
+        ).values_list('id', flat=True))
+        
+        # Buscar en CreditNote también
+        try:
+            credit_note_ids = list(CreditNote.objects.filter(
+                company__in=user_companies
+            ).values_list('id', flat=True))
+            user_document_ids.extend([f"credit_{id}" for id in credit_note_ids])
+        except:
+            pass
+        
+        user_active_tasks = []
+        
+        # Revisar tareas para cada documento
+        for doc_id in user_document_ids:
+            # Limpiar prefijo si es credit note
+            clean_doc_id = str(doc_id).replace('credit_', '')
+            cache_key = f"document_tasks_{clean_doc_id}"
+            cached_tasks = cache.get(cache_key, [])
+            
+            for task_id in cached_tasks:
+                try:
+                    result = AsyncResult(task_id)
+                    
+                    if not result.ready():  # Solo tareas activas
+                        task_info = cache.get(f"task_info_{task_id}", {})
+                        
+                        task_data = {
+                            'task_id': task_id,
+                            'document_id': clean_doc_id,
+                            'status': result.status,
+                            'operation': task_info.get('operation', 'unknown'),
+                            'started_at': task_info.get('started_at'),
+                            'document_type': task_info.get('document_type', 'unknown'),
+                            'elapsed_time': calculate_elapsed_time(task_info.get('started_at'))
+                        }
+                        user_active_tasks.append(task_data)
+                        
+                except Exception as e:
+                    logger.warning(f"Error checking task {task_id}: {e}")
+        
+        return Response({
+            'active_tasks': user_active_tasks,
+            'count': len(user_active_tasks),
+            'has_active_tasks': len(user_active_tasks) > 0,
+            'timestamp': timezone.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting user active tasks: {e}")
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def stop_document_processing(request, document_id):
+    """
+    Detener procesamiento de un documento
+    URL: /api/sri/documents/<document_id>/stop-processing/
+    """
+    try:
+        # Verificar permisos
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            return Response({
+                'error': 'DOCUMENT_NOT_FOUND'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Obtener tareas activas
+        cache_key = f"document_tasks_{document_id}"
+        cached_tasks = cache.get(cache_key, [])
+        
+        cancelled_tasks = []
+        
+        for task_id in cached_tasks:
+            try:
+                result = AsyncResult(task_id)
+                
+                if not result.ready():  # Solo cancelar tareas activas
+                    current_app.control.revoke(task_id, terminate=True)
+                    cancelled_tasks.append(task_id)
+                    
+                    # Limpiar cache
+                    cache.delete(f"task_info_{task_id}")
+                    
+            except Exception as e:
+                logger.warning(f"Error cancelling task {task_id}: {e}")
+        
+        # Limpiar cache de tareas del documento
+        cache.delete(cache_key)
+        
+        logger.info(f"Usuario {request.user.username} canceló {len(cancelled_tasks)} tareas para documento {document_id}")
+        
+        return Response({
+            'success': True,
+            'message': f'Se cancelaron {len(cancelled_tasks)} tareas',
+            'cancelled_tasks': cancelled_tasks,
+            'document_id': document_id
+        })
+        
+    except Exception as e:
+        logger.error(f"Error stopping document processing: {e}")
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_task_status(request, task_id):
+    """
+    Obtener estado de una tarea específica
+    URL: /api/sri/celery/task/<task_id>/status/
+    """
+    try:
+        result = AsyncResult(task_id)
+        
+        task_info = {
+            'task_id': task_id,
+            'status': result.status,
+            'result': result.result,
+            'successful': result.successful(),
+            'failed': result.failed(),
+            'ready': result.ready(),
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        # Información adicional si la tarea falló
+        if result.failed():
+            task_info.update({
+                'error': str(result.result) if result.result else 'Unknown error',
+                'traceback': result.traceback
+            })
+        
+        # Información adicional si está en progreso
+        if result.status == 'PENDING':
+            task_info.update({
+                'progress': 'Task is queued or in progress',
+                'eta': None
+            })
+        
+        return Response(task_info)
+        
+    except Exception as e:
+        logger.error(f"Error getting task status for {task_id}: {e}")
+        return Response({
+            'error': str(e),
+            'task_id': task_id
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_queue_stats(request):
+    """
+    Obtener estadísticas de las colas de Celery
+    URL: /api/sri/celery/queue-stats/
+    """
+    try:
+        control = Control(current_app)
+        
+        # Obtener estadísticas
+        active = control.inspect().active()
+        reserved = control.inspect().reserved()
+        scheduled = control.inspect().scheduled()
+        
+        # Calcular totales
+        total_active = sum(len(tasks) for tasks in (active or {}).values())
+        total_reserved = sum(len(tasks) for tasks in (reserved or {}).values())
+        total_scheduled = sum(len(tasks) for tasks in (scheduled or {}).values())
+        
+        # Buscar tareas relacionadas con documentos SRI
+        sri_tasks = 0
+        if active:
+            for worker, tasks in active.items():
+                for task in tasks:
+                    if any(name in task.get('name', '') for name in [
+                        'check_document_authorization_async',
+                        'process_document_async',
+                        'send_authorization_notification_email'
+                    ]):
+                        sri_tasks += 1
+        
+        stats = {
+            'queue_totals': {
+                'active': total_active,
+                'reserved': total_reserved,
+                'scheduled': total_scheduled,
+                'sri_related': sri_tasks
+            },
+            'workers': list((active or {}).keys()),
+            'worker_count': len((active or {}).keys()),
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        # Agregar detalles por worker si hay datos
+        if active:
+            stats['worker_details'] = {}
+            for worker, tasks in active.items():
+                stats['worker_details'][worker] = {
+                    'active_tasks': len(tasks),
+                    'task_names': [task.get('name', 'unknown') for task in tasks]
+                }
+        
+        return Response(stats)
+        
+    except Exception as e:
+        logger.error(f"Error getting queue stats: {e}")
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_documents_with_task_status(request):
+    """
+    Obtener documentos con información de tareas asíncronas activas
+    URL: /api/sri/documents/with-tasks/
+    """
+    try:
+        # Obtener documentos del usuario
+        user_companies = get_user_companies_secure(request.user)
+        
+        # Documentos recientes
+        documents = ElectronicDocument.objects.filter(
+            company__in=user_companies
+        ).order_by('-created_at')[:50]  # Últimos 50 documentos
+        
+        documents_with_tasks = []
+        
+        for doc in documents:
+            # Buscar tareas activas para este documento
+            cache_key = f"document_tasks_{doc.id}"
+            cached_tasks = cache.get(cache_key, [])
+            
+            active_tasks_count = 0
+            for task_id in cached_tasks:
+                try:
+                    result = AsyncResult(task_id)
+                    if not result.ready():
+                        active_tasks_count += 1
+                except:
+                    pass
+            
+            doc_data = {
+                'id': doc.id,
+                'document_number': doc.document_number,
+                'status': doc.status,
+                'created_at': doc.created_at.isoformat(),
+                'total_amount': float(doc.total_amount) if doc.total_amount else 0,
+                'customer_name': doc.customer_name,
+                'active_tasks_count': active_tasks_count,
+                'has_active_processing': active_tasks_count > 0
+            }
+            documents_with_tasks.append(doc_data)
+        
+        return Response({
+            'documents': documents_with_tasks,
+            'total_documents': len(documents_with_tasks),
+            'documents_with_active_tasks': len([d for d in documents_with_tasks if d['has_active_processing']]),
+            'timestamp': timezone.now().isoformat()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting documents with task status: {e}")
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def process_document_with_celery(request, document_id):
+    """
+    ENDPOINT PRINCIPAL: Procesar documento usando Celery con monitoreo completo
+    URL: /api/sri/documents/<document_id>/process-celery/
+    """
+    try:
+        # Verificar permisos
+        document, doc_type = get_document_by_id_and_type(document_id, request.user)
+        
+        if not document:
+            return Response({
+                'error': 'DOCUMENT_NOT_FOUND',
+                'message': 'Documento no encontrado o sin permisos'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Verificar que no esté ya autorizado
+        if document.status == 'AUTHORIZED':
+            return Response({
+                'error': 'DOCUMENT_ALREADY_AUTHORIZED',
+                'message': 'El documento ya está autorizado'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Importar tarea de procesamiento
+        from .tasks import process_document_async
+        
+        # Iniciar procesamiento con Celery
+        task = process_document_async.apply_async(
+            args=[document_id],
+            queue='sri_processing'
+        )
+        
+        # Guardar información de tracking
+        cache_key = f"document_tasks_{document_id}"
+        cached_tasks = cache.get(cache_key, [])
+        cached_tasks.append(task.id)
+        cache.set(cache_key, cached_tasks[-5:], timeout=3600)
+        
+        task_cache_key = f"task_info_{task.id}"
+        cache.set(task_cache_key, {
+            'document_id': document_id,
+            'document_type': doc_type,
+            'operation': 'celery_complete_processing',
+            'started_at': timezone.now().isoformat(),
+            'user_id': request.user.id,
+            'user_email': request.user.email
+        }, timeout=3600)
+        
+        logger.info(f"CELERY PROCESSING iniciado por {request.user.username} para documento {document_id}")
+        
+        return Response({
+            'success': True,
+            'message': 'Procesamiento iniciado con Celery',
+            'task_id': task.id,
+            'document_id': document_id,
+            'document_number': getattr(document, 'document_number', str(document.id)),
+            'current_status': document.status,
+            'monitoring': {
+                'polling_url': f'/api/sri/documents/{document_id}/task-status/',
+                'polling_interval': 3000,
+                'estimated_completion': '2-10 minutes'
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error processing document with Celery: {e}")
+        return Response({
+            'error': str(e),
+            'document_id': document_id
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ==========================================
+# VISTA PARA DASHBOARD CON ESTADÍSTICAS DE CELERY
+# ==========================================
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_with_celery_stats(request):
+    """
+    Dashboard con estadísticas que incluye información de Celery
+    URL: /api/sri/dashboard-stats/
+    """
+    try:
+        user_companies = get_user_companies_secure(request.user)
+        
+        # Estadísticas básicas de documentos
+        total_docs = ElectronicDocument.objects.filter(company__in=user_companies).count()
+        authorized_docs = ElectronicDocument.objects.filter(
+            company__in=user_companies, 
+            status='AUTHORIZED'
+        ).count()
+        pending_docs = ElectronicDocument.objects.filter(
+            company__in=user_companies, 
+            status='SENT'
+        ).count()
+        
+        # Estadísticas de Celery
+        celery_stats = {
+            'healthy': False,
+            'workers_count': 0,
+            'active_tasks': 0,
+            'user_active_tasks': 0
+        }
+        
+        try:
+            control = Control(current_app)
+            workers = control.inspect().active()
+            
+            if workers:
+                celery_stats['healthy'] = True
+                celery_stats['workers_count'] = len(workers)
+                celery_stats['active_tasks'] = sum(len(tasks) for tasks in workers.values())
+                
+                # Contar tareas del usuario
+                user_task_count = 0
+                for doc_id in ElectronicDocument.objects.filter(company__in=user_companies).values_list('id', flat=True):
+                    cache_key = f"document_tasks_{doc_id}"
+                    cached_tasks = cache.get(cache_key, [])
+                    for task_id in cached_tasks:
+                        try:
+                            result = AsyncResult(task_id)
+                            if not result.ready():
+                                user_task_count += 1
+                        except:
+                            pass
+                
+                celery_stats['user_active_tasks'] = user_task_count
+                
+        except Exception as e:
+            logger.warning(f"Error getting Celery stats for dashboard: {e}")
+        
+        # Documentos en procesamiento (últimos 24 horas)
+        recent_cutoff = timezone.now() - timedelta(hours=24)
+        recent_processing = ElectronicDocument.objects.filter(
+            company__in=user_companies,
+            status__in=['SENT', 'GENERATED'],
+            created_at__gte=recent_cutoff
+        ).count()
+        
+        dashboard_data = {
+            'document_stats': {
+                'total': total_docs,
+                'authorized': authorized_docs,
+                'pending': pending_docs,
+                'recent_processing': recent_processing
+            },
+            'celery_stats': celery_stats,
+            'system_health': {
+                'celery_operational': celery_stats['healthy'],
+                'has_pending_processing': recent_processing > 0,
+                'overall_status': 'healthy' if celery_stats['healthy'] else 'degraded'
+            },
+            'timestamp': timezone.now().isoformat()
+        }
+        
+        return Response(dashboard_data)
+        
+    except Exception as e:
+        logger.error(f"Error getting dashboard stats: {e}")
+        return Response({
+            'error': str(e)
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ==========================================
+# ENDPOINT PARA TESTING
+# ==========================================
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def test_celery_connection(request):
+    """
+    Endpoint para probar la conexión con Celery
+    URL: /api/sri/celery/test/
+    """
+    try:
+        # Probar ping básico
+        control = Control(current_app)
+        ping_result = control.inspect().ping()
+        
+        if ping_result:
+            # Probar tarea simple
+            from .tasks import check_all_pending_authorizations
+            
+            test_task = check_all_pending_authorizations.delay()
+            
+            return Response({
+                'success': True,
+                'message': 'Celery connection successful',
+                'ping_result': ping_result,
+                'test_task_id': test_task.id,
+                'workers_active': len(ping_result),
+                'timestamp': timezone.now().isoformat()
+            })
+        else:
+            return Response({
+                'success': False,
+                'message': 'No Celery workers responding to ping',
+                'timestamp': timezone.now().isoformat()
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            
+    except Exception as e:
+        logger.error(f"Error testing Celery connection: {e}")
+        return Response({
+            'success': False,
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

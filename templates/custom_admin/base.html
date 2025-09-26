@@ -76,12 +76,13 @@
             width: var(--sidebar-collapsed-width);
         }
         
+        /* Clases para móvil */
         .admin-sidebar.mobile-hidden {
             transform: translateX(-100%);
         }
         
         .admin-sidebar.mobile-active {
-            transform: translateX(0);
+            transform: translateX(0) !important;
         }
         
         /* Sidebar Header Responsivo */
@@ -651,7 +652,7 @@
         
         /* Tablet (768px - 991px) */
         @media (max-width: 991px) {
-            /* Sidebar siempre oculto en tablet y móvil */
+            /* Sidebar oculto por defecto en tablet y móvil */
             .admin-sidebar {
                 transform: translateX(-100%);
             }
@@ -661,10 +662,12 @@
                 z-index: 1050;
             }
             
+            /* Main sin margen en tablet/móvil */
             .admin-main {
-                margin-left: 0;
+                margin-left: 0 !important;
             }
             
+            /* Mostrar botón hamburguesa */
             .header-toggle {
                 display: block;
             }
@@ -1257,7 +1260,7 @@
                     }
                 });
                 
-                // Initialize sidebar state
+                // Initialize sidebar state based on device
                 this.initializeSidebarState();
             },
             
@@ -1304,18 +1307,44 @@
                 
                 // Save state
                 localStorage.setItem('sidebarCollapsed', this.state.sidebarCollapsed);
+                
+                // Adjust DataTables after sidebar toggle
+                setTimeout(() => {
+                    if ($.fn.DataTable) {
+                        $.fn.DataTable.tables({ visible: true, api: true }).columns.adjust().responsive.recalc();
+                    }
+                }, 300);
             },
             
             // Initialize sidebar state
             initializeSidebarState: function() {
-                if (!this.state.isMobile) {
+                const sidebar = document.getElementById('adminSidebar');
+                const main = document.getElementById('adminMain');
+                const toggle = document.getElementById('sidebarToggle');
+                
+                if (this.state.isMobile) {
+                    // Mobile: hide sidebar, show hamburger
+                    sidebar.classList.add('mobile-hidden');
+                    sidebar.classList.remove('mobile-active');
+                    main.classList.remove('sidebar-collapsed');
+                    main.classList.add('expanded');
+                    toggle.style.display = 'block';
+                } else {
+                    // Desktop: show sidebar normally
+                    sidebar.classList.remove('mobile-hidden', 'mobile-active');
+                    main.classList.remove('expanded');
+                    toggle.style.display = 'none';
+                    
+                    // Check if user previously collapsed the sidebar
                     const savedState = localStorage.getItem('sidebarCollapsed') === 'true';
                     if (savedState) {
-                        const sidebar = document.getElementById('adminSidebar');
-                        const main = document.getElementById('adminMain');
                         sidebar.classList.add('collapsed');
                         main.classList.add('sidebar-collapsed');
                         this.state.sidebarCollapsed = true;
+                    } else {
+                        sidebar.classList.remove('collapsed');
+                        main.classList.remove('sidebar-collapsed');
+                        this.state.sidebarCollapsed = false;
                     }
                 }
             },
@@ -1348,18 +1377,24 @@
                 const sidebar = document.getElementById('adminSidebar');
                 const main = document.getElementById('adminMain');
                 const overlay = document.getElementById('sidebarOverlay');
+                const toggle = document.getElementById('sidebarToggle');
                 
                 if (this.state.isMobile) {
                     // Switch to mobile
                     this.closeMobileSidebar();
+                    sidebar.classList.add('mobile-hidden');
                     sidebar.classList.remove('collapsed');
                     main.classList.remove('sidebar-collapsed');
+                    main.classList.add('expanded');
+                    toggle.style.display = 'block';
                 } else {
                     // Switch to desktop
-                    sidebar.classList.remove('mobile-active');
+                    sidebar.classList.remove('mobile-active', 'mobile-hidden');
                     overlay.classList.remove('active');
                     document.body.style.overflow = '';
                     this.state.sidebarVisible = false;
+                    main.classList.remove('expanded');
+                    toggle.style.display = 'none';
                     
                     // Restore desktop sidebar state
                     const savedState = localStorage.getItem('sidebarCollapsed') === 'true';
@@ -1367,6 +1402,10 @@
                         sidebar.classList.add('collapsed');
                         main.classList.add('sidebar-collapsed');
                         this.state.sidebarCollapsed = true;
+                    } else {
+                        sidebar.classList.remove('collapsed');
+                        main.classList.remove('sidebar-collapsed');
+                        this.state.sidebarCollapsed = false;
                     }
                 }
             },
@@ -1683,4 +1722,4 @@
     
     {% block extra_js %}{% endblock %}
 </body>
-</html> 
+</html>

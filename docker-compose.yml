@@ -1,6 +1,8 @@
+version: '3.8'
+
 services:
   db:
-    image: postgres:14
+    image: postgres:15
     container_name: pg14-sitemadefacturacion
     environment:
       POSTGRES_DB: ${DB_NAME}
@@ -34,8 +36,9 @@ services:
         gunicorn vendo_sri.wsgi:application --bind 0.0.0.0:8000
       "
     volumes:
-      - static_volumen:/app/staticfiles
-      - media_volumen:/app/mediafiles
+      - .:/app                            # Monta código fuente para desarrollo
+      - static_volumen:/app/staticfiles   # Archivos estáticos
+      - media_volumen:/app/mediafiles     # Archivos media
     ports:
       - "8000:8000"
     depends_on:
@@ -47,6 +50,87 @@ services:
     networks:
       - django-facturacion
       - general-net
+
+  # ======================================
+  # SERVICIOS CELERY PARA SRI
+  # ======================================
+  
+  celery:
+    build: .
+    image: vendo_sri_web  # Usa la misma imagen que web
+    container_name: vendo_sri_celery
+    command: >
+      sh -c "
+        echo 'Iniciando Celery Worker...' &&
+        celery -A vendo_sri worker --loglevel=info --logfile=logs/celery.log --concurrency=4
+      "
+    volumes:
+      - .:/app
+      - static_volumen:/app/staticfiles
+      - media_volumen:/app/mediafiles
+    depends_on:
+      - db
+      - redis
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - django-facturacion
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+  celery-beat:
+    build: .
+    image: vendo_sri_web  # Usa la misma imagen que web
+    container_name: vendo_sri_celery_beat
+    command: >
+      sh -c "
+        echo 'Iniciando Celery Beat...' &&
+        celery -A vendo_sri beat --loglevel=info --logfile=logs/celery_beat.log --scheduler=django_celery_beat.schedulers:DatabaseScheduler
+      "
+    volumes:
+      - .:/app
+      - static_volumen:/app/staticfiles
+      - media_volumen:/app/mediafiles
+    depends_on:
+      - db
+      - redis
+      - celery
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - django-facturacion
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+
+  # ======================================
+  # MONITOR OPCIONAL PARA CELERY (FLOWER)
+  # ======================================
+  
+  flower:
+    build: .
+    image: vendo_sri_web
+    container_name: vendo_sri_flower
+    command: >
+      sh -c "
+        echo 'Iniciando Flower Monitor...' &&
+        celery -A vendo_sri flower --port=5555
+      "
+    ports:
+      - "5555:5555"
+    depends_on:
+      - celery
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - django-facturacion
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
 volumes:
   postgres_data:
