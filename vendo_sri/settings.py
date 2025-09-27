@@ -839,6 +839,10 @@ if not DEBUG:
 # ==========================================
 
 # Crear directorios automáticamente
+import os
+import tempfile
+
+# Crear directorios automáticamente
 directories_to_create = [
     LOG_DIR,
     'storage',
@@ -862,6 +866,29 @@ except PermissionsError:
     # Configurar permisos seguros para certificados y backups
     if 'certificates' in directory or 'backup' in directory:
         os.chmod(dir_path, 0o700)
+    if directory == LOG_DIR:
+        dir_path = LOG_DIR  # LOG_DIR ya es ruta completa
+    else:
+        dir_path = BASE_DIR / directory
+    
+    try:
+        os.makedirs(dir_path, exist_ok=True)
+        
+        # Configurar permisos seguros para certificados y backups
+        if 'certificates' in str(directory) or 'backup' in str(directory):
+            os.chmod(dir_path, 0o700)
+            
+    except PermissionError:
+        # Usar directorio temporal como fallback
+        temp_dir = os.path.join(tempfile.gettempdir(), f'vendo_sri_{directory.replace("/", "_")}')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Actualizar LOG_DIR si es necesario
+        if directory == LOG_DIR:
+            LOG_DIR = temp_dir
+            
+        print(f"Warning: Using temporary directory {temp_dir} for {directory}")
+>>>>>>> e2d90dcccfe5e60212f0aa10f991fa9f3b596578
 
 # ==========================================
 # CONFIGURACIÓN DE STARTUP
