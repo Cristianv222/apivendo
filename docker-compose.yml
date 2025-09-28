@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   db:
-    image: postgres:15
+    image: postgres:14
     container_name: pg14-sitemadefacturacion
     environment:
       POSTGRES_DB: ${DB_NAME}

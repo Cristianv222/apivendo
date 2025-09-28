@@ -855,6 +855,17 @@ directories_to_create = [
 ]
 
 for directory in directories_to_create:
+    dir_path = BASE_DIR / directory
+try:
+    os.makedirs(dir_path, exist_ok=True)
+except PermissionsError:
+    import tempfile
+    dir_path = os.path.join(tempfile.gettempdir(), 'vendo_sri_logs')
+    os.makedirs(dir_path. exist_ok=True)
+
+    # Configurar permisos seguros para certificados y backups
+    if 'certificates' in directory or 'backup' in directory:
+        os.chmod(dir_path, 0o700)
     if directory == LOG_DIR:
         dir_path = LOG_DIR  # LOG_DIR ya es ruta completa
     else:
@@ -877,6 +888,7 @@ for directory in directories_to_create:
             LOG_DIR = temp_dir
             
         print(f"Warning: Using temporary directory {temp_dir} for {directory}")
+>>>>>>> e2d90dcccfe5e60212f0aa10f991fa9f3b596578
 
 # ==========================================
 # CONFIGURACIÓN DE STARTUP
