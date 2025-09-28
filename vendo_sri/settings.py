@@ -657,37 +657,37 @@ LOGGING = {
             'datefmt': '%Y-%m-%d %H:%M:%S'
         },
     },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-            'level': LOG_LEVEL,
-        },
-        'file': {
-            'class': 'logging.FileHandler',
-            'filename': f'{LOG_DIR}/vendo_sri.log',
-            'formatter': 'verbose',
-            'level': LOG_LEVEL,
-        },
-        'celery_file': {
-            'class': 'logging.FileHandler',
-            'filename': f'{LOG_DIR}/celery.log',
-            'formatter': 'celery',
-            'level': 'INFO',
-        },
-        'sri_file': {
-            'class': 'logging.FileHandler',
-            'filename': f'{LOG_DIR}/sri_integration.log',
-            'formatter': 'sri_integration',
-            'level': 'INFO',
-        },
-        'certificates_file': {
-            'class': 'logging.FileHandler',
-            'filename': f'{LOG_DIR}/certificates.log',
-            'formatter': 'certificates',
-            'level': 'INFO',
-        },
+'handlers': {
+    'console': {
+        'class': 'logging.StreamHandler',
+        'formatter': 'simple',
+        'level': LOG_LEVEL,
     },
+    'file': {
+        'class': 'logging.FileHandler',
+        'filename': '/app/storage/logs/vendo_sri.log',
+        'formatter': 'verbose',
+        'level': LOG_LEVEL,
+    },
+    'celery_file': {
+        'class': 'logging.FileHandler',
+        'filename': '/app/logs/celery.log',
+        'formatter': 'celery',
+        'level': 'INFO',
+    },
+    'sri_file': {
+        'class': 'logging.FileHandler',
+        'filename': '/app/storage/logs/sri_integration.log',
+        'formatter': 'sri_integration',
+        'level': 'INFO',
+    },
+    'certificates_file': {
+        'class': 'logging.FileHandler',
+        'filename': '/app/storage/logs/certificates.log',
+        'formatter': 'certificates',
+        'level': 'INFO',
+    },
+},
     'loggers': {
         'django': {
             'handlers': ['console', 'file'],
