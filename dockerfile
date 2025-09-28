@@ -46,7 +46,8 @@ RUN mkdir -p \
     /app/storage/invoices/pdf \
     /app/staticfiles \
     /app/mediafiles \
-    /app/certificates
+    /app/certificates \
+    /app/logs
 
 # Crear archivos de logs vacíos
 RUN touch /app/storage/logs/vendo_sri.log \
@@ -55,13 +56,14 @@ RUN touch /app/storage/logs/vendo_sri.log \
           /app/storage/logs/gunicorn_access.log \
           /app/storage/logs/gunicorn_error.log \
           /app/storage/logs/sri_integration.log \
-          /app/storage/logs/certificates.log
+          /app/storage/logs/certificates.log \
+          /app/logs/celery.log
 
 # Dar permisos a los archivos y carpetas
 RUN chown -R appuser:appuser /app && \
     chmod -R 755 /app && \
-    chmod -R 644 /app/storage/logs/*.log
+    chmod -R 644 /app/storage/logs/*.log && \
+    chmod 644 /app/logs/celery.log
 
 # Cambiar a usuario no root
 USER appuser
-
