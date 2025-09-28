@@ -858,10 +858,10 @@ for directory in directories_to_create:
     dir_path = BASE_DIR / directory
 try:
     os.makedirs(dir_path, exist_ok=True)
-except PermissionsError:
+except PermissionError:
     import tempfile
     dir_path = os.path.join(tempfile.gettempdir(), 'vendo_sri_logs')
-    os.makedirs(dir_path. exist_ok=True)
+    os.makedirs(dir_path, exist_ok=True)
 
     # Configurar permisos seguros para certificados y backups
     if 'certificates' in directory or 'backup' in directory:
@@ -888,7 +888,7 @@ except PermissionsError:
             LOG_DIR = temp_dir
             
         print(f"Warning: Using temporary directory {temp_dir} for {directory}")
->>>>>>> e2d90dcccfe5e60212f0aa10f991fa9f3b596578
+
 
 # ==========================================
 # CONFIGURACIÓN DE STARTUP
