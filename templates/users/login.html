@@ -6,1019 +6,706 @@
     <title>FronteraTech - Inicia Sesión</title>
     {% load static %}
     {% load socialaccount %}
-    
+    <link rel="icon" type="image/png" href="{% static 'images/favicon.png' %}">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
     
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        /* ═══════════════════════════════════════════════════════════
+           DESIGN TOKENS — Same as landing page
+           ═══════════════════════════════════════════════════════════ */
+        :root{
+          --navy:       #1a2a4a;
+          --navy-soft:  #243352;
+          --blue:       #3b7abf;
+          --blue-hover: #2e6aa8;
+          --blue-light:#5a9fd4;
+          --blue-pale:  #d6e8f5;
+          --blue-wash:  #eaf2f9;
+          --blue-frost: #f3f8fc;
+          --brand-gray:#6b7a8d;
+          --green:      #16a34a;
+          --green-wash: #dcfce7;
+          --amber:      #d97706;
+          --amber-wash: #fef3c7;
+          --purple:     #7c3aed;
+          --purple-wash:#ede9fe;
+          --text:       #1e293b;
+          --text-mid:   #475569;
+          --text-soft:  #64748b;
+          --border:     #e2e8f0;
+          --border-light:#eef2f6;
+          --surface:    #f4f7fb;
+          --white:      #ffffff;
+        }
+        
+        *{margin:0;padding:0;box-sizing:border-box}
+        *:focus{outline:2px solid var(--blue-light);outline-offset:2px}
+        html{scroll-behavior:smooth}
+        
+        body{
+          font-family:'Outfit',sans-serif;
+          color:var(--text);
+          background:var(--surface);
+          min-height:100vh;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding:clamp(1rem,3vw,1.5rem);
+          position:relative;
+          overflow-x:hidden;
         }
 
-        body {
-            font-family: 'Poppins', sans-serif;
-            min-height: 100vh;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 25%, #0f3460 50%, #533483 75%, #7209b7 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: clamp(0.5rem, 2vw, 1rem);
-            position: relative;
-            overflow: hidden;
+        /* Decorative background swoosh */
+        .bg-swoosh{
+          position:fixed;top:-15%;right:-10%;
+          width:clamp(400px,80vw,900px);height:clamp(400px,80vw,900px);
+          pointer-events:none;z-index:0;opacity:.04;
         }
 
-        /* Fondo con formas abstractas */
-        .background-shapes {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
+        /* Main container */
+        .login-container{
+          position:relative;z-index:1;
+          background:var(--white);
+          border:1.5px solid var(--border);
+          border-radius:16px;
+          box-shadow:0 8px 32px rgba(26,42,74,.08);
+          width:100%;
+          max-width:1100px;
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          overflow:hidden;
+          transition:all .3s ease;
         }
 
-        .sun {
-            position: absolute;
-            top: 10%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: clamp(30px, 5vw, 40px);
-            height: clamp(30px, 5vw, 40px);
-            background: linear-gradient(135deg, #4a90e2, #7b68ee);
-            border-radius: 50%;
-            box-shadow: 0 0 30px rgba(74, 144, 226, 0.6);
-            z-index: 2;
+        .login-container.tokens-mode{
+          max-width:1400px;
+          grid-template-columns:1fr 1fr 1fr;
         }
 
-        .mountain-1 {
-            position: absolute;
-            bottom: 0;
-            left: -10%;
-            width: 40%;
-            height: clamp(40%, 50vw, 50%);
-            background: linear-gradient(45deg, #1a1a2e, #16213e);
-            clip-path: polygon(0 100%, 0 40%, 30% 20%, 60% 35%, 100% 25%, 100% 100%);
-            z-index: 3;
+        /* Left panel - Info */
+        .info-panel{
+          background:linear-gradient(135deg,var(--navy) 0%,var(--navy-soft) 100%);
+          padding:clamp(2rem,5vw,3rem);
+          color:var(--white);
+          display:flex;
+          flex-direction:column;
+          justify-content:center;
         }
 
-        .mountain-2 {
-            position: absolute;
-            bottom: 0;
-            left: 25%;
-            width: 35%;
-            height: clamp(35%, 45vw, 45%);
-            background: linear-gradient(45deg, #0f3460, #533483);
-            clip-path: polygon(0 100%, 0 45%, 40% 25%, 70% 40%, 100% 30%, 100% 100%);
-            z-index: 4;
+        .logo-section{
+          margin-bottom:clamp(1.5rem,4vw,2rem);
         }
 
-        .mountain-3 {
-            position: absolute;
-            bottom: 0;
-            right: -10%;
-            width: 45%;
-            height: clamp(45%, 55vw, 55%);
-            background: linear-gradient(45deg, #533483, #7209b7);
-            clip-path: polygon(0 100%, 0 35%, 25% 20%, 50% 30%, 75% 15%, 100% 25%, 100% 100%);
-            z-index: 2;
+        .logo-img{
+          height:clamp(48px,10vw,64px);
+          width:auto;
+          filter:brightness(0) invert(1);
         }
 
-        /* Estrellas */
-        .stars {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            z-index: 5;
+        .api-badge{
+          display:inline-block;
+          background:rgba(90,159,212,.2);
+          color:var(--blue-light);
+          padding:.25rem .6rem;
+          border-radius:6px;
+          font-size:.7rem;
+          font-weight:600;
+          margin-top:.8rem;
+          border:1px solid rgba(90,159,212,.3);
         }
 
-        .star {
-            position: absolute;
-            width: clamp(1.5px, 0.3vw, 2px);
-            height: clamp(1.5px, 0.3vw, 2px);
-            background: white;
-            border-radius: 50%;
-            animation: twinkle 2s infinite alternate;
+        .info-title{
+          font-family:'Playfair Display',serif;
+          font-size:clamp(1.3rem,3.2vw,1.6rem);
+          font-weight:700;
+          margin-bottom:.8rem;
+          line-height:1.2;
         }
 
-        .star:nth-child(1) { top: 20%; left: 15%; animation-delay: 0s; }
-        .star:nth-child(2) { top: 30%; right: 20%; animation-delay: 0.5s; }
-        .star:nth-child(3) { top: 45%; left: 25%; animation-delay: 1s; }
-        .star:nth-child(4) { top: 15%; right: 35%; animation-delay: 1.5s; }
-        .star:nth-child(5) { top: 55%; right: 15%; animation-delay: 2s; }
-        .star:nth-child(6) { top: 10%; left: 45%; animation-delay: 0.3s; }
-
-        @keyframes twinkle {
-            0% { opacity: 0.3; transform: scale(1); }
-            100% { opacity: 1; transform: scale(1.2); }
+        .info-desc{
+          font-size:clamp(.82rem,1.8vw,.9rem);
+          line-height:1.7;
+          opacity:.9;
+          margin-bottom:1.5rem;
         }
 
-        /* Container principal - MANTENIENDO TAMAÑOS ORIGINALES */
-        .main-container {
-            position: relative;
-            z-index: 10;
-            background: rgba(255, 255, 255, 0.1);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: clamp(8px, 2vw, 12px);
-            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.3);
-            width: 100%;
-            max-width: clamp(320px, 90vw, 900px);
-            min-height: clamp(450px, 70vh, 550px);
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            overflow: hidden;
-            transition: all 0.3s ease;
+        .features-title{
+          font-size:.85rem;
+          font-weight:600;
+          margin-bottom:.8rem;
+          opacity:.8;
         }
 
-        .main-container.tokens-mode {
-            max-width: clamp(320px, 95vw, 1200px);
-            grid-template-columns: 1fr 1fr 1fr;
+        .features-list{
+          list-style:none;
+          padding:0;
+          margin-bottom:1.5rem;
         }
 
-        /* Sección izquierda - Info API */
-        .info-section {
-            background: rgba(26, 26, 46, 0.85);
-            backdrop-filter: blur(20px);
-            padding: clamp(1rem, 3vw, 1.5rem);
-            color: white;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            position: relative;
+        .feature-item{
+          font-size:.8rem;
+          margin-bottom:.6rem;
+          display:flex;
+          align-items:flex-start;
+          gap:.5rem;
+          opacity:.85;
         }
 
-        .logo-section {
-            display: flex;
-            align-items: center;
-            gap: clamp(0.4rem, 1.2vw, 0.6rem);
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-            flex-wrap: wrap;
+        .feature-item i{
+          color:var(--green-wash);
+          font-size:.75em;
+          margin-top:.15rem;
         }
 
-        .logo-icon {
-            background: linear-gradient(135deg, #4a90e2, #7b68ee);
-            padding: clamp(0.4rem, 1.2vw, 0.6rem);
-            border-radius: clamp(8px, 2vw, 10px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
+        .tech-stack{
+          background:rgba(0,0,0,.2);
+          border-radius:8px;
+          padding:.9rem;
+          border:1px solid rgba(255,255,255,.1);
         }
 
-        .logo-icon i {
-            font-size: clamp(1rem, 2.4vw, 1.2rem);
-            color: white;
+        .tech-title{
+          color:var(--blue-light);
+          font-size:.72rem;
+          margin-bottom:.6rem;
+          font-weight:500;
         }
 
-        .logo-text {
-            font-size: clamp(1.2rem, 3.2vw, 1.6rem);
-            font-weight: 700;
-            color: white;
+        .tech-badges{
+          display:flex;
+          flex-wrap:wrap;
+          gap:.35rem;
         }
 
-        .api-badge {
-            display: inline-block;
-            background: rgba(74, 144, 226, 0.2);
-            color: #4a90e2;
-            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 0.8vw, 0.5rem);
-            border-radius: 4px;
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            font-weight: 600;
-            margin-left: clamp(0.3rem, 0.8vw, 0.5rem);
+        .tech-badge{
+          background:rgba(255,255,255,.1);
+          color:rgba(255,255,255,.75);
+          padding:.2rem .5rem;
+          border-radius:5px;
+          font-size:.65rem;
+          border:1px solid rgba(255,255,255,.15);
         }
 
-        .description {
-            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
-            line-height: 1.5;
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-            opacity: 0.9;
+        /* Right panel - Login form */
+        .form-panel{
+          background:var(--white);
+          padding:clamp(2rem,5vw,3rem);
+          display:flex;
+          flex-direction:column;
+          justify-content:center;
         }
 
-        .features-title {
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            font-weight: 600;
-            margin-bottom: clamp(0.6rem, 1.6vw, 0.8rem);
-            color: white;
+        .form-header{
+          text-align:center;
+          margin-bottom:clamp(1.5rem,4vw,2rem);
         }
 
-        .features-list {
-            list-style: none;
-            padding: 0;
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
+        .form-title{
+          font-family:'Playfair Display',serif;
+          font-size:clamp(1.4rem,3.4vw,1.7rem);
+          font-weight:700;
+          color:var(--navy);
+          margin-bottom:.4rem;
         }
 
-        .feature-item {
-            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
-            margin-bottom: clamp(0.4rem, 1vw, 0.5rem);
-            display: flex;
-            align-items: flex-start;
-            gap: clamp(0.3rem, 0.8vw, 0.5rem);
-            line-height: 1.4;
+        .form-subtitle{
+          color:var(--text-soft);
+          font-size:.88rem;
         }
 
-        .feature-item i {
-            color: #4ade80;
-            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
-            margin-top: 0.2rem;
-            flex-shrink: 0;
+        .security-badge{
+          display:inline-flex;
+          align-items:center;
+          gap:.35rem;
+          background:var(--blue-wash);
+          color:var(--blue);
+          padding:.28rem .7rem;
+          border-radius:6px;
+          font-size:.72rem;
+          font-weight:500;
+          margin-top:.6rem;
         }
 
-        .tech-stack {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: clamp(6px, 1.6vw, 8px);
-            padding: clamp(0.6rem, 1.6vw, 0.8rem);
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+        /* Mode toggle */
+        .mode-toggle{
+          text-align:center;
+          margin-bottom:1.5rem;
         }
 
-        .tech-title {
-            color: #4a90e2;
-            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
-            margin-bottom: clamp(0.4rem, 1vw, 0.5rem);
-            font-weight: 500;
+        .mode-selector{
+          display:inline-flex;
+          background:var(--surface);
+          border-radius:8px;
+          padding:4px;
+          width:100%;
+          max-width:320px;
         }
 
-        .tech-badges {
-            display: flex;
-            flex-wrap: wrap;
-            gap: clamp(0.2rem, 0.6vw, 0.3rem);
+        .mode-btn{
+          flex:1;
+          padding:.6rem 1.2rem;
+          border:none;
+          background:transparent;
+          color:var(--text-mid);
+          font-size:.8rem;
+          font-weight:600;
+          border-radius:6px;
+          cursor:pointer;
+          transition:all .22s;
         }
 
-        .tech-badge {
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.8);
-            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 0.8vw, 0.4rem);
-            border-radius: 4px;
-            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            white-space: nowrap;
+        .mode-btn.active{
+          background:var(--navy);
+          color:var(--white);
+          box-shadow:0 2px 8px rgba(26,42,74,.15);
         }
 
-        .footer-text {
-            margin-top: auto;
-            text-align: center;
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            opacity: 0.8;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: clamp(0.2rem, 0.6vw, 0.3rem);
-        }
-
-        .footer-text i {
-            color: #f87171;
-        }
-
-        /* Sección derecha - Login */
-        .login-section {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            padding: clamp(1rem, 3vw, 1.5rem);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-        }
-
-        .login-header {
-            text-align: center;
-            margin-bottom: clamp(1rem, 2.4vw, 1.2rem);
-        }
-
-        .welcome-title {
-            font-size: clamp(1.1rem, 2.6vw, 1.3rem);
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
-        }
-
-        .welcome-subtitle {
-            color: #6b7280;
-            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
-            margin-bottom: clamp(0.4rem, 1.2vw, 0.6rem);
-        }
-
-        .security-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: clamp(0.2rem, 0.6vw, 0.3rem);
-            background: rgba(74, 144, 226, 0.1);
-            color: #4a90e2;
-            padding: clamp(0.2rem, 0.6vw, 0.3rem) clamp(0.4rem, 1.2vw, 0.6rem);
-            border-radius: 5px;
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            font-weight: 500;
-        }
-
-        /* Token Mode Toggle */
-        .token-mode-toggle {
-            text-align: center;
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-        }
-
-        .mode-selector {
-            display: inline-flex;
-            background: rgba(74, 144, 226, 0.1);
-            border-radius: clamp(6px, 1.6vw, 8px);
-            padding: 4px;
-            margin-bottom: clamp(0.3rem, 1vw, 0.5rem);
-            width: 100%;
-            max-width: 280px;
-        }
-
-        .mode-btn {
-            padding: clamp(6px, 1.6vw, 8px) clamp(12px, 3.2vw, 16px);
-            border: none;
-            background: transparent;
-            color: #4a90e2;
-            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
-            font-weight: 600;
-            border-radius: clamp(4px, 1.2vw, 6px);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            flex: 1;
-        }
-
-        .mode-btn.active {
-            background: #4a90e2;
-            color: white;
-            box-shadow: 0 2px 8px rgba(74, 144, 226, 0.3);
-        }
-
-        .mode-description {
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            color: #6b7280;
-            margin-bottom: clamp(0.3rem, 1vw, 0.5rem);
-            line-height: 1.4;
-            padding: 0 1rem;
-        }
-
-        /* Google Button */
-        .google-section {
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-        }
-
-        .btn-google {
-            width: 100%;
-            padding: clamp(8px, 2vw, 10px) clamp(12px, 2.8vw, 14px);
-            border: 2px solid #e5e7eb;
-            border-radius: clamp(6px, 1.6vw, 8px);
-            background: white;
-            color: #374151;
-            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: clamp(6px, 1.6vw, 8px);
-        }
-
-        .btn-google:hover {
-            border-color: #4285f4;
-            background: #f8faff;
-            color: #4285f4;
-            text-decoration: none;
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(66, 133, 244, 0.15);
-        }
-
-        /* Divider */
-        .divider {
-            text-align: center;
-            position: relative;
-            margin: clamp(0.8rem, 2vw, 1rem) 0;
-            color: #9ca3af;
-            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
-        }
-
-        .divider::before {
-            content: '';
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: #e5e7eb;
-        }
-
-        .divider span {
-            background: rgba(255, 255, 255, 0.95);
-            padding: 0 clamp(0.4rem, 1.2vw, 0.6rem);
-            position: relative;
-        }
-
-        /* Form */
-        .form-group {
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-        }
-
-        .form-label {
-            display: block;
-            color: #374151;
-            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
-            font-weight: 500;
-            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
-        }
-
-        .form-control-custom {
-            width: 100%;
-            padding: clamp(8px, 2vw, 10px) clamp(10px, 2.4vw, 12px);
-            border: 2px solid #e5e7eb;
-            border-radius: clamp(6px, 1.6vw, 8px);
-            background: #f9fafb;
-            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
-            color: #111827;
-            transition: all 0.3s ease;
-            outline: none;
-        }
-
-        .form-control-custom:focus {
-            border-color: #4a90e2;
-            background: white;
-            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-        }
-
-        .form-control-custom::placeholder {
-            color: #9ca3af;
-        }
-
-        /* Remember me */
-        .form-options {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: clamp(1rem, 2.4vw, 1.2rem);
-            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
-            gap: clamp(0.5rem, 2vw, 1rem);
-            flex-wrap: wrap;
-        }
-
-        .remember-me {
-            display: flex;
-            align-items: center;
-            gap: clamp(0.2rem, 0.6vw, 0.3rem);
-            color: #6b7280;
-            flex-shrink: 0;
-        }
-
-        .remember-me input[type="checkbox"] {
-            width: clamp(10px, 2.4vw, 12px);
-            height: clamp(10px, 2.4vw, 12px);
-            accent-color: #4a90e2;
-        }
-
-        .forgot-link {
-            color: #4a90e2;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .forgot-link:hover {
-            text-decoration: underline;
-        }
-
-        /* Login Button */
-        .btn-login {
-            width: 100%;
-            padding: clamp(8px, 2vw, 10px);
-            border: none;
-            border-radius: clamp(6px, 1.6vw, 8px);
-            background: linear-gradient(135deg, #4a90e2, #7b68ee);
-            color: white;
-            font-size: clamp(0.75rem, 1.7vw, 0.85rem);
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: clamp(0.2rem, 0.6vw, 0.3rem);
-        }
-
-        .btn-login:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(74, 144, 226, 0.3);
+        .mode-desc{
+          font-size:.72rem;
+          color:var(--text-soft);
+          margin-top:.6rem;
+          padding:0 1rem;
         }
 
         /* Alerts */
-        .alert-custom {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            color: #dc2626;
-            padding: clamp(0.4rem, 1vw, 0.5rem) clamp(0.5rem, 1.4vw, 0.7rem);
-            border-radius: clamp(4px, 1.2vw, 6px);
-            font-size: clamp(0.65rem, 1.5vw, 0.75rem);
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-            display: flex;
-            align-items: center;
-            gap: clamp(0.2rem, 0.6vw, 0.3rem);
-            line-height: 1.4;
+        .alert-box{
+          background:rgba(239,68,68,.08);
+          border:1px solid rgba(239,68,68,.2);
+          color:#dc2626;
+          padding:.7rem .9rem;
+          border-radius:8px;
+          font-size:.8rem;
+          margin-bottom:1rem;
+          display:flex;
+          align-items:center;
+          gap:.5rem;
         }
 
-        .alert-success-custom {
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            color: #059669;
+        .alert-box.success{
+          background:var(--green-wash);
+          border-color:rgba(22,163,74,.3);
+          color:var(--green);
         }
 
-        /* Sección de tokens */
-        .tokens-section {
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(20px);
-            padding: clamp(1rem, 3vw, 1.5rem);
-            display: none;
-            flex-direction: column;
-            justify-content: flex-start;
-            border-left: 1px solid rgba(255, 255, 255, 0.2);
-            max-height: 100%;
-            overflow-y: auto;
+        /* Google button */
+        .google-section{
+          margin-bottom:1.2rem;
         }
 
-        .tokens-section.show {
-            display: flex;
+        .btn-google{
+          width:100%;
+          padding:.75rem 1rem;
+          border:1.5px solid var(--border);
+          border-radius:8px;
+          background:var(--white);
+          color:var(--text);
+          font-size:.86rem;
+          font-weight:500;
+          cursor:pointer;
+          transition:all .22s;
+          text-decoration:none;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          gap:.6rem;
         }
 
-        .tokens-header {
-            text-align: center;
-            margin-bottom: clamp(1rem, 3vw, 1.5rem);
-            position: sticky;
-            top: 0;
-            background: rgba(255, 255, 255, 0.98);
-            backdrop-filter: blur(10px);
-            padding-bottom: clamp(0.5rem, 1.2vw, 0.8rem);
-            z-index: 10;
+        .btn-google:hover{
+          border-color:var(--blue);
+          background:var(--blue-frost);
+          color:var(--blue);
+          text-decoration:none;
+          transform:translateY(-1px);
         }
 
-        .tokens-title {
-            font-size: clamp(1rem, 2.4vw, 1.2rem);
-            font-weight: 700;
-            color: #1f2937;
-            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
+        /* Divider */
+        .divider{
+          text-align:center;
+          position:relative;
+          margin:1.2rem 0;
+          color:var(--brand-gray);
+          font-size:.75rem;
         }
 
-        .tokens-subtitle {
-            color: #6b7280;
-            font-size: clamp(0.7rem, 1.6vw, 0.8rem);
+        .divider::before{
+          content:'';
+          position:absolute;
+          top:50%;
+          left:0;
+          right:0;
+          height:1px;
+          background:var(--border);
         }
 
-        .token-card {
-            background: rgba(255, 255, 255, 0.9);
-            border: 2px solid #e5e7eb;
-            border-radius: clamp(8px, 2vw, 10px);
-            padding: clamp(0.8rem, 2vw, 1rem);
-            margin-bottom: clamp(0.8rem, 2vw, 1rem);
-            transition: all 0.3s ease;
-            cursor: pointer;
+        .divider span{
+          background:var(--white);
+          padding:0 .8rem;
+          position:relative;
         }
 
-        .token-card:hover {
-            border-color: #4a90e2;
-            background: white;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(74, 144, 226, 0.1);
+        /* Form fields */
+        .form-group{
+          margin-bottom:1rem;
         }
 
-        .token-card.recommended {
-            border-color: #10b981;
-            background: rgba(16, 185, 129, 0.05);
+        .form-label{
+          display:block;
+          color:var(--text);
+          font-size:.8rem;
+          font-weight:500;
+          margin-bottom:.4rem;
         }
 
-        .token-card.recommended:hover {
-            border-color: #10b981;
-            background: rgba(16, 185, 129, 0.1);
+        .form-control{
+          width:100%;
+          padding:.75rem .9rem;
+          border:1.5px solid var(--border);
+          border-radius:8px;
+          background:var(--surface);
+          font-size:.88rem;
+          color:var(--text);
+          transition:all .22s;
         }
 
-        .token-card-header {
-            display: flex;
-            align-items: center;
-            gap: clamp(0.3rem, 1vw, 0.5rem);
-            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
-            flex-wrap: wrap;
+        .form-control:focus{
+          border-color:var(--blue);
+          background:var(--white);
+          box-shadow:0 0 0 3px rgba(59,122,191,.1);
+          outline:none;
         }
 
-        .token-type-badge {
-            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 1vw, 0.5rem);
-            border-radius: 4px;
-            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
-            font-weight: 600;
-            flex-shrink: 0;
+        .form-control::placeholder{
+          color:var(--text-soft);
         }
 
-        .token-type-badge.user {
-            background: rgba(74, 144, 226, 0.1);
-            color: #4a90e2;
+        /* Form options */
+        .form-options{
+          display:flex;
+          justify-content:space-between;
+          align-items:center;
+          margin-bottom:1.2rem;
+          font-size:.78rem;
         }
 
-        .token-type-badge.company {
-            background: rgba(16, 185, 129, 0.1);
-            color: #10b981;
+        .remember-me{
+          display:flex;
+          align-items:center;
+          gap:.4rem;
+          color:var(--text-mid);
         }
 
-        .recommended-badge {
-            background: rgba(251, 191, 36, 0.1);
-            color: #f59e0b;
-            padding: clamp(0.15rem, 0.4vw, 0.2rem) clamp(0.3rem, 0.8vw, 0.4rem);
-            border-radius: 4px;
-            font-size: clamp(0.5rem, 1.2vw, 0.6rem);
-            font-weight: 600;
-            flex-shrink: 0;
+        .remember-me input[type="checkbox"]{
+          width:16px;
+          height:16px;
+          accent-color:var(--blue);
         }
 
-        .token-name {
-            font-size: clamp(0.8rem, 1.8vw, 0.9rem);
-            font-weight: 600;
-            color: #1f2937;
-            margin-bottom: clamp(0.2rem, 0.6vw, 0.3rem);
-            line-height: 1.3;
+        .forgot-link{
+          color:var(--blue);
+          text-decoration:none;
+          font-weight:500;
         }
 
-        .token-description {
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            color: #6b7280;
-            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
-            line-height: 1.4;
+        .forgot-link:hover{
+          text-decoration:underline;
         }
 
-        .token-display {
-            background: #f3f4f6;
-            border: 1px solid #d1d5db;
-            border-radius: clamp(3px, 0.8vw, 4px);
-            padding: clamp(0.3rem, 0.8vw, 0.4rem) clamp(0.4rem, 1.2vw, 0.6rem);
-            font-family: 'Courier New', monospace;
-            font-size: clamp(0.5rem, 1.2vw, 0.6rem);
-            color: #374151;
-            word-break: break-all;
-            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
-            line-height: 1.3;
+        /* Submit button */
+        .btn-submit{
+          width:100%;
+          padding:.85rem 1rem;
+          border:none;
+          border-radius:8px;
+          background:var(--navy);
+          color:var(--white);
+          font-size:.88rem;
+          font-weight:600;
+          cursor:pointer;
+          transition:all .22s;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          gap:.5rem;
         }
 
-        .token-actions {
-            display: flex;
-            gap: clamp(0.3rem, 1vw, 0.5rem);
+        .btn-submit:hover{
+          background:var(--blue);
+          transform:translateY(-1px);
+          box-shadow:0 4px 16px rgba(59,122,191,.3);
         }
 
-        .btn-use-token {
-            flex: 1;
-            padding: clamp(5px, 1.4vw, 6px) clamp(8px, 2.4vw, 12px);
-            border: none;
-            border-radius: clamp(4px, 1.2vw, 6px);
-            background: linear-gradient(135deg, #4a90e2, #7b68ee);
-            color: white;
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .btn-submit:disabled{
+          opacity:.7;
+          cursor:not-allowed;
         }
 
-        .btn-use-token:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+        /* Tokens panel */
+        .tokens-panel{
+          background:var(--surface);
+          padding:clamp(2rem,5vw,3rem);
+          display:none;
+          flex-direction:column;
+          border-left:1px solid var(--border);
+          overflow-y:auto;
+          max-height:600px;
         }
 
-        .btn-copy-token {
-            padding: clamp(5px, 1.4vw, 6px) clamp(6px, 1.6vw, 8px);
-            border: 1px solid #d1d5db;
-            border-radius: clamp(4px, 1.2vw, 6px);
-            background: white;
-            color: #6b7280;
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            cursor: pointer;
-            transition: all 0.3s ease;
-            flex-shrink: 0;
+        .tokens-panel.show{
+          display:flex;
         }
 
-        .btn-copy-token:hover {
-            border-color: #4a90e2;
-            color: #4a90e2;
+        .tokens-header{
+          text-align:center;
+          margin-bottom:1.5rem;
+          position:sticky;
+          top:0;
+          background:var(--surface);
+          padding-bottom:.8rem;
+          z-index:10;
         }
 
-        /* Token Info Display */
-        .token-info-display {
-            background: rgba(74, 144, 226, 0.05);
-            border: 1px solid rgba(74, 144, 226, 0.2);
-            border-radius: clamp(6px, 1.6vw, 8px);
-            padding: clamp(0.8rem, 2vw, 1rem);
-            margin-top: clamp(0.8rem, 2vw, 1rem);
-            display: none;
+        .tokens-title{
+          font-family:'Playfair Display',serif;
+          font-size:1.3rem;
+          font-weight:700;
+          color:var(--navy);
+          margin-bottom:.3rem;
         }
 
-        .token-info-display.show {
-            display: block;
+        .tokens-subtitle{
+          color:var(--text-soft);
+          font-size:.82rem;
         }
 
-        .current-token-label {
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            color: #4a90e2;
-            font-weight: 600;
-            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
+        .token-card{
+          background:var(--white);
+          border:1.5px solid var(--border);
+          border-radius:10px;
+          padding:1rem;
+          margin-bottom:1rem;
+          transition:all .22s;
+          cursor:pointer;
         }
 
-        .current-token-display {
-            background: white;
-            border: 1px solid #d1d5db;
-            border-radius: clamp(4px, 1.2vw, 6px);
-            padding: clamp(0.4rem, 1.2vw, 0.5rem);
-            font-family: 'Courier New', monospace;
-            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
-            color: #374151;
-            word-break: break-all;
-            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
-            line-height: 1.3;
+        .token-card:hover{
+          border-color:var(--blue);
+          box-shadow:0 4px 16px rgba(59,122,191,.1);
+          transform:translateY(-2px);
         }
 
-        .token-usage-info {
-            font-size: clamp(0.55rem, 1.3vw, 0.65rem);
-            color: #6b7280;
-            margin-bottom: clamp(0.4rem, 1.2vw, 0.5rem);
-            line-height: 1.3;
+        .token-card.recommended{
+          border-color:var(--green);
+          background:var(--green-wash);
         }
 
-        .btn-test-token {
-            width: 100%;
-            padding: clamp(6px, 1.6vw, 8px);
-            border: 1px solid #4a90e2;
-            border-radius: clamp(4px, 1.2vw, 6px);
-            background: white;
-            color: #4a90e2;
-            font-size: clamp(0.6rem, 1.4vw, 0.7rem);
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
+        .token-card-header{
+          display:flex;
+          align-items:center;
+          gap:.5rem;
+          margin-bottom:.5rem;
+          flex-wrap:wrap;
         }
 
-        .btn-test-token:hover {
-            background: #4a90e2;
-            color: white;
+        .token-type-badge{
+          padding:.2rem .5rem;
+          border-radius:5px;
+          font-size:.65rem;
+          font-weight:600;
         }
 
-        /* BREAKPOINTS RESPONSIVOS CONSERVADORES */
-
-        /* Desktop Grande (1200px+) */
-        @media (min-width: 1200px) {
-            .main-container {
-                max-width: 900px;
-            }
-            
-            .main-container.tokens-mode {
-                max-width: 1200px;
-            }
+        .token-type-badge.user{
+          background:var(--blue-wash);
+          color:var(--blue);
         }
 
-        /* Tablets y Laptops pequeñas (769px - 1199px) */
-        @media (min-width: 769px) and (max-width: 1199px) {
-            .main-container {
-                max-width: 800px;
-            }
-            
-            .main-container.tokens-mode {
-                max-width: 1000px;
-            }
+        .token-type-badge.company{
+          background:var(--green-wash);
+          color:var(--green);
         }
 
-        /* Tablets (481px - 768px) */
-        @media (max-width: 768px) {
-            .main-container {
-                grid-template-columns: 1fr;
-                max-width: 500px;
-                min-height: auto;
-            }
-            
-            .main-container.tokens-mode {
-                grid-template-columns: 1fr;
-                max-width: 500px;
-            }
-            
-            .info-section {
-                display: none;
-            }
-            
-            .login-section, 
-            .tokens-section {
-                padding: clamp(1.5rem, 4vw, 2rem);
-            }
-            
-            .tokens-section {
-                border-left: none;
-                border-top: 1px solid rgba(255, 255, 255, 0.2);
-            }
-            
-            .mode-selector {
-                max-width: 100%;
-            }
-            
-            .form-options {
-                flex-direction: column;
-                align-items: stretch;
-                gap: 1rem;
-            }
-            
-            .remember-me {
-                justify-content: center;
-            }
-            
-            .forgot-link {
-                text-align: center;
-            }
+        .recommended-badge{
+          background:var(--amber-wash);
+          color:var(--amber);
+          padding:.2rem .5rem;
+          border-radius:5px;
+          font-size:.6rem;
+          font-weight:600;
         }
 
-        /* Móviles (320px - 480px) */
-        @media (max-width: 480px) {
-            body {
-                padding: 1rem;
-            }
-            
-            .main-container {
-                max-width: 400px;
-                border-radius: 12px;
-            }
-            
-            .login-section, 
-            .tokens-section {
-                padding: 1.5rem;
-            }
-
-            .welcome-title, 
-            .tokens-title {
-                font-size: 1.25rem;
-            }
-            
-            .form-control-custom {
-                font-size: 16px; /* Prevenir zoom en iOS */
-                padding: 12px 14px;
-            }
-            
-            .btn-google,
-            .btn-login {
-                padding: 12px 16px;
-                font-size: 0.9rem;
-            }
-            
-            .token-card {
-                padding: 1rem;
-            }
-            
-            .token-actions {
-                flex-direction: column;
-                gap: 0.5rem;
-            }
-            
-            .btn-copy-token {
-                width: 100%;
-            }
+        .token-name{
+          font-size:.9rem;
+          font-weight:600;
+          color:var(--navy);
+          margin-bottom:.3rem;
         }
 
-        /* Móviles muy pequeños (hasta 320px) */
-        @media (max-width: 320px) {
-            body {
-                padding: 0.5rem;
-            }
-            
-            .main-container {
-                max-width: 100%;
-                border-radius: 8px;
-            }
-            
-            .login-section,
-            .tokens-section {
-                padding: 1rem;
-            }
-            
-            .welcome-title,
-            .tokens-title {
-                font-size: 1.1rem;
-            }
-            
-            .mode-btn {
-                padding: 8px 10px;
-                font-size: 0.7rem;
-            }
+        .token-description{
+          font-size:.72rem;
+          color:var(--text-soft);
+          margin-bottom:.5rem;
+          line-height:1.4;
         }
 
-        /* Orientación landscape en móviles */
-        @media (max-height: 500px) and (orientation: landscape) {
-            body {
-                padding: 0.5rem;
-            }
-            
-            .main-container {
-                min-height: auto;
-                max-height: 90vh;
-            }
-            
-            .login-section,
-            .tokens-section {
-                padding: 1rem;
-                overflow-y: auto;
-                max-height: 85vh;
-            }
-            
-            .login-header,
-            .tokens-header {
-                margin-bottom: 0.8rem;
-            }
-            
-            .form-group {
-                margin-bottom: 0.7rem;
-            }
+        .token-display{
+          background:var(--surface);
+          border:1px solid var(--border);
+          border-radius:6px;
+          padding:.5rem .7rem;
+          font-family:monospace;
+          font-size:.65rem;
+          color:var(--text-mid);
+          word-break:break-all;
+          margin-bottom:.6rem;
         }
 
-        /* Estados de loading */
-        .loading .btn-login,
-        .loading .btn-google,
-        .loading .btn-use-token,
-        .loading .btn-test-token {
-            pointer-events: none;
-            opacity: 0.8;
-            cursor: not-allowed;
+        .token-actions{
+          display:flex;
+          gap:.5rem;
         }
 
-        /* Mejoras para pantallas táctiles */
-        @media (hover: none) and (pointer: coarse) {
-            .btn-google:hover,
-            .btn-login:hover,
-            .btn-use-token:hover,
-            .btn-copy-token:hover,
-            .btn-test-token:hover,
-            .token-card:hover {
-                transform: none;
-                box-shadow: none;
-            }
-            
-            .btn-google:active,
-            .btn-login:active,
-            .btn-use-token:active,
-            .btn-copy-token:active,
-            .btn-test-token:active {
-                transform: scale(0.98);
-            }
-            
-            .token-card:active {
-                transform: scale(0.99);
-            }
+        .btn-use-token{
+          flex:1;
+          padding:.5rem .8rem;
+          border:none;
+          border-radius:6px;
+          background:var(--navy);
+          color:var(--white);
+          font-size:.75rem;
+          font-weight:500;
+          cursor:pointer;
+          transition:all .22s;
         }
 
-        /* Mejoras para accesibilidad */
-        @media (prefers-reduced-motion: reduce) {
-            * {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-            
-            .star {
-                animation: none;
-            }
+        .btn-use-token:hover{
+          background:var(--blue);
+          transform:translateY(-1px);
         }
 
-        /* Utilidades */
-        .d-none {
-            display: none !important;
+        .btn-copy-token{
+          padding:.5rem .7rem;
+          border:1px solid var(--border);
+          border-radius:6px;
+          background:var(--white);
+          color:var(--text-mid);
+          font-size:.75rem;
+          cursor:pointer;
+          transition:all .22s;
+        }
+
+        .btn-copy-token:hover{
+          border-color:var(--blue);
+          color:var(--blue);
+        }
+
+        /* Token info display */
+        .token-info{
+          background:var(--blue-wash);
+          border:1px solid var(--blue-pale);
+          border-radius:8px;
+          padding:1rem;
+          margin-top:1rem;
+          display:none;
+        }
+
+        .token-info.show{
+          display:block;
+        }
+
+        .token-info-label{
+          font-size:.72rem;
+          color:var(--blue);
+          font-weight:600;
+          margin-bottom:.5rem;
+        }
+
+        .token-info-display{
+          background:var(--white);
+          border:1px solid var(--border);
+          border-radius:6px;
+          padding:.6rem;
+          font-family:monospace;
+          font-size:.68rem;
+          color:var(--text);
+          word-break:break-all;
+          margin-bottom:.6rem;
+        }
+
+        .token-info-usage{
+          font-size:.68rem;
+          color:var(--text-soft);
+          margin-bottom:.6rem;
+        }
+
+        .btn-test-token{
+          width:100%;
+          padding:.6rem;
+          border:1px solid var(--blue);
+          border-radius:6px;
+          background:var(--white);
+          color:var(--blue);
+          font-size:.75rem;
+          font-weight:500;
+          cursor:pointer;
+          transition:all .22s;
+        }
+
+        .btn-test-token:hover{
+          background:var(--blue);
+          color:var(--white);
+        }
+
+        /* Utility */
+        .d-none{display:none!important}
+        .spinner{animation:spin 1s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+
+        /* Responsive */
+        @media(max-width:768px){
+          .login-container{
+            grid-template-columns:1fr;
+            max-width:500px;
+          }
+          .login-container.tokens-mode{
+            grid-template-columns:1fr;
+          }
+          .info-panel{display:none}
+          .tokens-panel{border-left:none;border-top:1px solid var(--border)}
         }
     </style>
 </head>
 <body>
-    <!-- Fondo con formas abstractas -->
-    <div class="background-shapes">
-        <div class="sun"></div>
-        <div class="mountain-1"></div>
-        <div class="mountain-2"></div>
-        <div class="mountain-3"></div>
-        
-        <div class="stars">
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-            <div class="star"></div>
-        </div>
-    </div>
+    <!-- Background decoration -->
+    <svg class="bg-swoosh" viewBox="0 0 700 700" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <ellipse cx="350" cy="350" rx="320" ry="320" stroke="#1a2a4a" stroke-width="1.8"/>
+        <ellipse cx="350" cy="350" rx="250" ry="250" stroke="#3b7abf" stroke-width="1.2"/>
+        <ellipse cx="350" cy="350" rx="180" ry="180" stroke="#5a9fd4" stroke-width=".8"/>
+        <path d="M80 420 Q200 180 420 320 T680 250" stroke="#3b7abf" stroke-width="2.2" stroke-linecap="round"/>
+        <path d="M60 500 Q220 260 380 380 T700 310" stroke="#5a9fd4" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
 
-    <!-- Container principal -->
-    <div class="main-container" id="mainContainer">
-        <!-- Sección izquierda - Información de API -->
-        <div class="info-section">
+    <!-- Main container -->
+    <div class="login-container" id="mainContainer">
+        <!-- Info panel -->
+        <div class="info-panel">
             <div class="logo-section">
-                <img src="{% static 'images/frontera-logo-full.png' %}" alt="FronteraTech" 
-                    style="height: 64px; width: auto; margin-bottom: 12px; max-width: 100%;">
-                <div class="api-badge">API</div>
-            </div>  
-            
-            <div class="description">
-                API REST de facturación electrónica con integración directa al SRI Ecuador. Sistema completo para emisión y gestión de documentos tributarios.
+                <img src="{% static 'images/logo-sri.png' %}" alt="FronteraTech" class="logo-img">
+                <div class="api-badge">API REST</div>
             </div>
+            
+            <h1 class="info-title">Sistema de Facturación Electrónica SRI Ecuador</h1>
+            
+            <p class="info-desc">
+                API REST completa con integración directa al SRI. Emisión y gestión de documentos tributarios con firma electrónica y validación automática.
+            </p>
             
             <div class="features-title">Características principales:</div>
             
             <ul class="features-list">
                 <li class="feature-item">
                     <i class="fas fa-check"></i>
-                    <span>Emisión de facturas, notas de crédito y retenciones</span>
+                    <span>Facturas, notas de crédito y retenciones</span>
                 </li>
                 <li class="feature-item">
                     <i class="fas fa-check"></i>
@@ -1030,15 +717,15 @@
                 </li>
                 <li class="feature-item">
                     <i class="fas fa-check"></i>
-                    <span>Gestión de certificados digitales</span>
+                    <span>Certificados digitales automáticos</span>
                 </li>
                 <li class="feature-item">
                     <i class="fas fa-check"></i>
-                    <span>🔑 Autenticación dual: Usuario + Empresa</span>
+                    <span>Autenticación dual: Usuario + Empresa</span>
                 </li>
                 <li class="feature-item">
                     <i class="fas fa-check"></i>
-                    <span>🛡️ Seguridad nuclear con tokens</span>
+                    <span>Seguridad avanzada con tokens JWT</span>
                 </li>
             </ul>
             
@@ -1054,54 +741,52 @@
                     <span class="tech-badge">SOAP/XML</span>
                 </div>
             </div>
-            
-            <div class="footer-text">
-                <i class="fas fa-shield-alt"></i>
-                Cumple normativas SRI Ecuador
-            </div>
         </div>
         
-        <!-- Sección derecha - Login -->
-        <div class="login-section" id="loginSection">
-            <div class="login-header">
-                <h2 class="welcome-title">Acceso API 🔐</h2>
-                <p class="welcome-subtitle">Panel de administración</p>
+        <!-- Form panel -->
+        <div class="form-panel">
+            <div class="form-header">
+                <h2 class="form-title">Acceso al Sistema</h2>
+                <p class="form-subtitle">Panel de administración</p>
                 <div class="security-badge">
                     <i class="fas fa-lock"></i>
                     Conexión segura
                 </div>
             </div>
 
-            <!-- Token Mode Toggle -->
-            <div class="token-mode-toggle">
+            <!-- Mode toggle -->
+            <div class="mode-toggle">
                 <div class="mode-selector">
                     <button class="mode-btn active" data-mode="session" id="sessionModeBtn">
                         <i class="fas fa-globe"></i> Navegador
                     </button>
+                    <button class="mode-btn" data-mode="token" id="tokenModeBtn">
+                        <i class="fas fa-key"></i> Tokens API
+                    </button>
                 </div>
-                <div class="mode-description" id="modeDescription">
+                <div class="mode-desc" id="modeDescription">
                     Modo navegador - Para usar la interfaz web
                 </div>
             </div>
             
-            <!-- Mensajes del sistema -->
+            <!-- Alerts -->
             {% if messages %}
                 {% for message in messages %}
-                    <div class="alert-custom {% if message.tags == 'success' %}alert-success-custom{% endif %}">
+                    <div class="alert-box {% if message.tags == 'success' %}success{% endif %}">
                         <i class="fas fa-{% if message.tags == 'error' or message.tags == 'danger' %}exclamation-triangle{% elif message.tags == 'success' %}check-circle{% else %}info-circle{% endif %}"></i>
                         {{ message }}
                     </div>
                 {% endfor %}
             {% endif %}
 
-            <!-- Google Login -->
+            <!-- Google login -->
             <div class="google-section">
                 {% get_providers as socialaccount_providers %}
                 {% if socialaccount_providers %}
                     {% for provider in socialaccount_providers %}
                         {% if provider.id == "google" %}
                             <a href="{% provider_login_url 'google' %}" class="btn-google" id="googleLoginBtn">
-                                <svg width="16" height="16" viewBox="0 0 24 24">
+                                <svg width="18" height="18" viewBox="0 0 24 24">
                                     <path fill="#4285f4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
                                     <path fill="#34a853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
                                     <path fill="#fbbc05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
@@ -1119,37 +804,29 @@
                 <span>o usa tu email</span>
             </div>
             
-            <!-- Formulario de login -->
+            <!-- Login form -->
             <form method="post" id="loginForm" novalidate>
                 {% csrf_token %}
                 
                 <div class="form-group">
                     <label for="id_username" class="form-label">Email</label>
                     <input type="email" 
-                           class="form-control-custom" 
+                           class="form-control" 
                            id="id_username" 
                            name="username" 
                            placeholder="tu@email.com"
-                           autocomplete="new-password"
-                           autocorrect="off"
-                           autocapitalize="none"
-                           spellcheck="false"
-                           data-form-type="other"
+                           autocomplete="off"
                            required>
                 </div>
                 
                 <div class="form-group">
                     <label for="id_password" class="form-label">Contraseña</label>
                     <input type="password" 
-                           class="form-control-custom" 
+                           class="form-control" 
                            id="id_password" 
                            name="password"
                            placeholder="••••••••"
-                           autocomplete="new-password"
-                           autocorrect="off"
-                           autocapitalize="none"
-                           spellcheck="false"
-                           data-form-type="other"
+                           autocomplete="off"
                            required>
                 </div>
                 
@@ -1163,38 +840,38 @@
                     </a>
                 </div>
                 
-                <button type="submit" class="btn-login" id="loginSubmitBtn">
+                <button type="submit" class="btn-submit" id="loginSubmitBtn">
                     <span class="btn-text">
                         <i class="fas fa-sign-in-alt"></i>
                         <span id="loginBtnText">Iniciar sesión</span>
                     </span>
                     <span class="btn-spinner d-none">
-                        <i class="fas fa-spinner fa-spin"></i>
+                        <i class="fas fa-spinner spinner"></i>
                         <span id="loginSpinnerText">Accediendo...</span>
                     </span>
                 </button>
             </form>
 
-            <!-- Token Info Display -->
-            <div class="token-info-display" id="tokenInfoDisplay">
-                <div class="current-token-label">🔑 Token seleccionado:</div>
-                <div class="current-token-display" id="currentTokenDisplay"></div>
-                <div class="token-usage-info" id="tokenUsageInfo"></div>
+            <!-- Token info display -->
+            <div class="token-info" id="tokenInfoDisplay">
+                <div class="token-info-label">🔑 Token seleccionado:</div>
+                <div class="token-info-display" id="currentTokenDisplay"></div>
+                <div class="token-info-usage" id="tokenUsageInfo"></div>
                 <button type="button" class="btn-test-token" onclick="testCurrentToken()">
                     <i class="fas fa-flask"></i> Probar Token
                 </button>
             </div>
         </div>
 
-        <!-- Sección de tokens -->
-        <div class="tokens-section" id="tokensSection">
+        <!-- Tokens panel -->
+        <div class="tokens-panel" id="tokensPanel">
             <div class="tokens-header">
-                <h3 class="tokens-title">🎯 Selecciona tu Token</h3>
+                <h3 class="tokens-title">Selecciona tu Token</h3>
                 <p class="tokens-subtitle">Elige el token más adecuado para tu uso</p>
             </div>
 
             <div id="tokensContainer">
-                <!-- Los tokens se llenarán dinámicamente -->
+                <!-- Tokens loaded dynamically -->
             </div>
         </div>
     </div>
@@ -1206,56 +883,44 @@
         let selectedToken = null;
 
         document.addEventListener('DOMContentLoaded', function() {
-            // Limpiar campos al cargar la página
             clearFormFields();
             
-            // Mode toggle handlers
+            // Mode toggle
             document.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.addEventListener('click', function() {
-                    const mode = this.dataset.mode;
-                    switchMode(mode);
+                    switchMode(this.dataset.mode);
                 });
             });
 
-            // Auto-focus en el primer input (solo en desktop)
+            // Auto-focus
             const firstInput = document.querySelector('input[type="email"]');
             if (firstInput && !('ontouchstart' in window)) {
-                setTimeout(() => {
-                    firstInput.focus();
-                }, 300);
+                setTimeout(() => firstInput.focus(), 300);
             }
             
-            // Google login handler
+            // Google login
             const googleBtn = document.getElementById('googleLoginBtn');
             if (googleBtn) {
                 googleBtn.addEventListener('click', function() {
                     this.style.pointerEvents = 'none';
-                    this.innerHTML = `
-                        <i class="fas fa-spinner fa-spin"></i>
-                        Conectando...
-                    `;
-                    document.body.classList.add('loading');
+                    this.innerHTML = '<i class="fas fa-spinner spinner"></i> Conectando...';
                 });
             }
             
             // Form submission
             const loginForm = document.getElementById('loginForm');
-            const submitBtn = document.getElementById('loginSubmitBtn');
-            
-            if (loginForm && submitBtn) {
+            if (loginForm) {
                 loginForm.addEventListener('submit', function(e) {
                     e.preventDefault();
                     
                     const email = this.querySelector('input[type="email"]').value.trim();
                     const password = this.querySelector('input[type="password"]').value;
                     
-                    // Validación de campos vacíos
                     if (!email || !password) {
                         showAlert('Por favor completa todos los campos', 'error');
                         return;
                     }
 
-                    // Validación básica de email
                     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
                     if (!emailRegex.test(email)) {
                         showAlert('Por favor ingresa un email válido', 'error');
@@ -1271,16 +936,14 @@
             }
             
             // Auto-hide success alerts
-            setTimeout(function() {
-                const alerts = document.querySelectorAll('.alert-success-custom');
-                alerts.forEach(function(alert) {
-                    alert.style.transition = 'opacity 0.5s';
+            setTimeout(() => {
+                document.querySelectorAll('.alert-box.success').forEach(alert => {
                     alert.style.opacity = '0';
+                    alert.style.transition = 'opacity 0.5s';
                     setTimeout(() => alert.remove(), 500);
                 });
             }, 4000);
 
-            // Prevenir autocompletado
             preventAutocomplete();
         });
 
@@ -1291,16 +954,10 @@
             if (emailInput) emailInput.value = '';
             if (passwordInput) passwordInput.value = '';
 
-            // Múltiples intentos de limpieza
             setTimeout(() => {
                 if (emailInput) emailInput.value = '';
                 if (passwordInput) passwordInput.value = '';
             }, 100);
-
-            setTimeout(() => {
-                if (emailInput) emailInput.value = '';
-                if (passwordInput) passwordInput.value = '';
-            }, 500);
         }
 
         function preventAutocomplete() {
@@ -1317,25 +974,6 @@
                     this.dataset.userTyped = 'true';
                 });
             });
-
-            // Limpieza periódica solo los primeros 3 segundos
-            const clearInterval = setInterval(() => {
-                const emailInput = document.getElementById('id_username');
-                const passwordInput = document.getElementById('id_password');
-                
-                if (document.activeElement !== emailInput && document.activeElement !== passwordInput) {
-                    if (emailInput && emailInput.value && !emailInput.dataset.userTyped) {
-                        emailInput.value = '';
-                    }
-                    if (passwordInput && passwordInput.value && !passwordInput.dataset.userTyped) {
-                        passwordInput.value = '';
-                    }
-                }
-            }, 200);
-
-            setTimeout(() => {
-                clearInterval(clearInterval);
-            }, 3000);
         }
 
         function switchMode(mode) {
@@ -1346,7 +984,7 @@
             const loginBtnText = document.getElementById('loginBtnText');
             const loginSpinnerText = document.getElementById('loginSpinnerText');
             const mainContainer = document.getElementById('mainContainer');
-            const tokensSection = document.getElementById('tokensSection');
+            const tokensPanel = document.getElementById('tokensPanel');
 
             sessionBtn.classList.remove('active');
             tokenBtn.classList.remove('active');
@@ -1357,7 +995,7 @@
                 loginBtnText.textContent = 'Iniciar sesión';
                 loginSpinnerText.textContent = 'Accediendo...';
                 mainContainer.classList.remove('tokens-mode');
-                tokensSection.classList.remove('show');
+                tokensPanel.classList.remove('show');
             } else {
                 tokenBtn.classList.add('active');
                 modeDescription.textContent = 'Modo tokens - Para APIs externas y máxima seguridad';
@@ -1373,11 +1011,9 @@
             const btnSpinner = submitBtn.querySelector('.btn-spinner');
             const loginForm = document.getElementById('loginForm');
             
-            // Loading state
             btnText.classList.add('d-none');
             btnSpinner.classList.remove('d-none');
             submitBtn.disabled = true;
-            document.body.classList.add('loading');
 
             try {
                 const formData = new FormData(loginForm);
@@ -1391,28 +1027,18 @@
                 });
 
                 if (response.ok) {
-                    // Si la respuesta es exitosa, redirigir
                     window.location.href = response.url || '/dashboard/';
                 } else {
-                    // Error de credenciales
-                    showAlert('❌ Email o contraseña incorrectos. Verifica tus credenciales e intenta nuevamente.', 'error');
-                    
-                    // Limpiar contraseña
-                    const passwordInput = document.getElementById('id_password');
-                    if (passwordInput) {
-                        passwordInput.value = '';
-                        passwordInput.dataset.userTyped = '';
-                    }
+                    showAlert('❌ Email o contraseña incorrectos', 'error');
+                    document.getElementById('id_password').value = '';
                 }
 
             } catch (error) {
-                showAlert('❌ Error de conexión. Verifica tu internet e intenta nuevamente.', 'error');
+                showAlert('❌ Error de conexión', 'error');
             } finally {
-                // Reset loading state
                 btnText.classList.remove('d-none');
                 btnSpinner.classList.add('d-none');
                 submitBtn.disabled = false;
-                document.body.classList.remove('loading');
             }
         }
 
@@ -1421,11 +1047,9 @@
             const btnText = submitBtn.querySelector('.btn-text');
             const btnSpinner = submitBtn.querySelector('.btn-spinner');
             
-            // Loading state
             btnText.classList.add('d-none');
             btnSpinner.classList.remove('d-none');
             submitBtn.disabled = true;
-            document.body.classList.add('loading');
 
             try {
                 const response = await fetch('/api/auth/login/', {
@@ -1443,69 +1067,42 @@
                     availableTokens = data;
                     showTokens(data);
                 } else {
-                    let errorMessage = 'Error de autenticación';
-                    
-                    if (response.status === 401 || response.status === 400) {
-                        errorMessage = '❌ Email o contraseña incorrectos. Verifica tus credenciales e intenta nuevamente.';
-                    } else if (response.status === 403) {
-                        errorMessage = '❌ Acceso denegado. Tu cuenta puede estar desactivada.';
-                    } else if (response.status >= 500) {
-                        errorMessage = '❌ Error del servidor. Intenta nuevamente en unos momentos.';
-                    } else if (data.message) {
-                        errorMessage = '❌ ' + data.message;
-                    }
-                    
-                    showAlert(errorMessage, 'error');
-                    
-                    // Limpiar contraseña
-                    const passwordInput = document.getElementById('id_password');
-                    if (passwordInput) {
-                        passwordInput.value = '';
-                        passwordInput.dataset.userTyped = '';
-                    }
+                    showAlert('❌ ' + (data.message || 'Error de autenticación'), 'error');
+                    document.getElementById('id_password').value = '';
                 }
 
             } catch (error) {
                 showAlert('❌ Error de conexión: ' + error.message, 'error');
-                
-                // Limpiar contraseña
-                const passwordInput = document.getElementById('id_password');
-                if (passwordInput) {
-                    passwordInput.value = '';
-                    passwordInput.dataset.userTyped = '';
-                }
             } finally {
-                // Reset loading state
                 btnText.classList.remove('d-none');
                 btnSpinner.classList.add('d-none');
                 submitBtn.disabled = false;
-                document.body.classList.remove('loading');
             }
         }
 
         function showTokens(tokenData) {
             const tokensContainer = document.getElementById('tokensContainer');
-            const tokensSection = document.getElementById('tokensSection');
+            const tokensPanel = document.getElementById('tokensPanel');
             
             tokensContainer.innerHTML = '';
 
-            // User token card
+            // User token
             const userTokenCard = createTokenCard({
                 type: 'user',
                 name: 'Token de Usuario - ' + tokenData.user.full_name,
-                description: 'Acceso a múltiples empresas - Requiere especificar company_id en requests',
+                description: 'Acceso a múltiples empresas - Requiere company_id',
                 token: tokenData.user_token,
                 recommended: false,
                 info: tokenData.company_tokens.length + ' empresas disponibles'
             });
             tokensContainer.appendChild(userTokenCard);
 
-            // Company token cards
+            // Company tokens
             tokenData.company_tokens.forEach(companyToken => {
                 const companyTokenCard = createTokenCard({
                     type: 'company',
                     name: companyToken.company_name,
-                    description: 'Acceso directo a esta empresa - No requiere company_id',
+                    description: 'Acceso directo - No requiere company_id',
                     token: companyToken.token,
                     recommended: companyToken.recommended,
                     info: 'RUC: ' + companyToken.company_ruc + ' | ID: ' + companyToken.company_id
@@ -1513,7 +1110,7 @@
                 tokensContainer.appendChild(companyTokenCard);
             });
 
-            tokensSection.classList.add('show');
+            tokensPanel.classList.add('show');
         }
 
         function createTokenCard(tokenInfo) {
@@ -1528,7 +1125,7 @@
                 <div class="token-name">${tokenInfo.name}</div>
                 <div class="token-description">${tokenInfo.description}</div>
                 <div class="token-display">${tokenInfo.token}</div>
-                <div class="token-usage-info">${tokenInfo.info}</div>
+                <div class="token-info-usage">${tokenInfo.info}</div>
                 <div class="token-actions">
                     <button class="btn-use-token" onclick="selectToken('${tokenInfo.token}', '${tokenInfo.type}', '${tokenInfo.name}')">
                         <i class="fas fa-play"></i> Usar Token
@@ -1553,21 +1150,21 @@
             tokenUsageInfo.textContent = 'Tipo: ' + type + ' | ' + name;
             tokenInfoDisplay.classList.add('show');
 
-            showAlert('Token ' + type + ' seleccionado correctamente', 'success');
+            showAlert('✅ Token ' + type + ' seleccionado', 'success');
         }
 
         async function copyToken(token) {
             try {
                 await navigator.clipboard.writeText(token);
-                showAlert('Token copiado al portapapeles', 'success');
+                showAlert('✅ Token copiado', 'success');
             } catch (error) {
-                showAlert('Error al copiar token', 'error');
+                showAlert('❌ Error al copiar', 'error');
             }
         }
 
         async function testCurrentToken() {
             if (!selectedToken) {
-                showAlert('Selecciona un token primero', 'error');
+                showAlert('❌ Selecciona un token primero', 'error');
                 return;
             }
 
@@ -1584,58 +1181,37 @@
                     const empresas = data.results ? data.results.length : (Array.isArray(data) ? data.length : 0);
                     showAlert('✅ Token funcionando - ' + empresas + ' empresa(s) accesible(s)', 'success');
                 } else {
-                    showAlert('❌ Error con token: ' + (data.error || 'Error desconocido'), 'error');
+                    showAlert('❌ Error con token', 'error');
                 }
             } catch (error) {
-                showAlert('Error al probar token: ' + error.message, 'error');
+                showAlert('❌ Error al probar token', 'error');
             }
         }
 
         function showAlert(message, type) {
-            // Remover alertas existentes
-            document.querySelectorAll('.alert-custom').forEach(alert => alert.remove());
+            document.querySelectorAll('.alert-box').forEach(alert => alert.remove());
 
             const alert = document.createElement('div');
-            alert.className = 'alert-custom' + (type === 'success' ? ' alert-success-custom' : '');
+            alert.className = 'alert-box' + (type === 'success' ? ' success' : '');
             alert.innerHTML = `
                 <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
                 ${message}
             `;
 
-            const loginSection = document.getElementById('loginSection');
-            const loginHeader = loginSection.querySelector('.login-header');
-            loginHeader.insertAdjacentElement('afterend', alert);
+            const formPanel = document.querySelector('.form-panel');
+            const formHeader = formPanel.querySelector('.form-header');
+            formHeader.insertAdjacentElement('afterend', alert);
 
-            // Auto-hide: 6 segundos para errores, 4 para éxito
-            const hideTimeout = type === 'error' ? 6000 : 4000;
             setTimeout(() => {
                 if (alert.parentNode) {
-                    alert.style.transition = 'opacity 0.5s';
                     alert.style.opacity = '0';
+                    alert.style.transition = 'opacity 0.5s';
                     setTimeout(() => {
                         if (alert.parentNode) alert.remove();
                     }, 500);
                 }
-            }, hideTimeout);
-
-            // Scroll suave hacia la alerta
-            setTimeout(() => {
-                alert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, 100);
+            }, type === 'error' ? 6000 : 4000);
         }
-
-        /* Animación del spinner */
-        const style = document.createElement('style');
-        style.innerHTML = `
-            @keyframes spin {
-                from { transform: rotate(0deg); }
-                to { transform: rotate(360deg); }
-            }
-            .fa-spinner {
-                animation: spin 1s linear infinite;
-            }
-        `;
-        document.head.appendChild(style);
     </script>
 </body>
 </html>

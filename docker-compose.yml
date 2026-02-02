@@ -27,18 +27,21 @@ services:
 
   web:
     build: .
-    image: vendo_sri_web  
+    image: vendo_sri_web
     container_name: vendo_sri_web
+    # El entrypoint.sh se ejecuta primero, luego este command
     command: >
       sh -c "
         python manage.py migrate --noinput &&
         python manage.py collectstatic --noinput --settings=vendo_sri.settings &&
         gunicorn vendo_sri.wsgi:application --bind 0.0.0.0:8000
+            --access-logfile /app/storage/logs/gunicorn_access.log
+            --error-logfile /app/storage/logs/gunicorn_error.log
       "
     volumes:
-      - .:/app                            # Monta código fuente para desarrollo
-      - static_volumen:/app/staticfiles   # Archivos estáticos
-      - media_volumen:/app/mediafiles     # Archivos media
+      - .:/app
+      - static_volumen:/app/staticfiles
+      - media_volumen:/app/mediafiles
     ports:
       - "8000:8000"
     depends_on:
@@ -49,20 +52,19 @@ services:
     restart: unless-stopped
     networks:
       - django-facturacion
-      - general-net
 
-  # ======================================
-  # SERVICIOS CELERY PARA SRI
-  # ======================================
-  
   celery:
     build: .
-    image: vendo_sri_web  # Usa la misma imagen que web
+    image: vendo_sri_web
     container_name: vendo_sri_celery
+    # Ruta absoluta al logfile para evitar problemas con cwd
     command: >
       sh -c "
         echo 'Iniciando Celery Worker...' &&
-        celery -A vendo_sri worker --loglevel=info --logfile=logs/celery.log --concurrency=4
+        celery -A vendo_sri worker
+            --loglevel=info
+            --logfile=/app/logs/celery.log
+            --concurrency=4
       "
     volumes:
       - .:/app
@@ -82,12 +84,16 @@ services:
 
   celery-beat:
     build: .
-    image: vendo_sri_web  # Usa la misma imagen que web
+    image: vendo_sri_web
     container_name: vendo_sri_celery_beat
+    # Ruta absoluta al logfile para evitar problemas con cwd
     command: >
       sh -c "
         echo 'Iniciando Celery Beat...' &&
-        celery -A vendo_sri beat --loglevel=info --logfile=logs/celery_beat.log --scheduler=django_celery_beat.schedulers:DatabaseScheduler
+        celery -A vendo_sri beat
+            --loglevel=info
+            --logfile=/app/logs/celery_beat.log
+            --scheduler=django_celery_beat.schedulers:DatabaseScheduler
       "
     volumes:
       - .:/app
@@ -106,10 +112,6 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
-  # ======================================
-  # MONITOR OPCIONAL PARA CELERY (FLOWER)
-  # ======================================
-  
   flower:
     build: .
     image: vendo_sri_web
@@ -140,5 +142,3 @@ volumes:
 networks:
   django-facturacion:
     driver: bridge
-  general-net:
-    external: true
