@@ -1,6 +1,6 @@
 ﻿# -*- coding: utf-8 -*-
 """
-Models for certificates app - CORREGIDO DEFINITIVO CON STORAGE DUAL
+Models for certificates app - CORREGIDO DEFINITIVO CON STORAGE DUAL + ENCRYPTED PASSWORD
 Modelos para certificados digitales del SRI
 """
 
@@ -8,6 +8,7 @@ import os
 import hashlib
 import uuid
 import logging
+import base64
 from pathlib import Path
 from django.db import models
 from django.conf import settings
@@ -17,6 +18,7 @@ from django.core.exceptions import ValidationError
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography import x509
+from cryptography.fernet import Fernet
 from apps.core.models import BaseModel
 from apps.companies.models import Company
 
@@ -54,7 +56,7 @@ class DigitalCertificate(BaseModel):
         help_text=_('P12 certificate file')
     )
     
-    # ========== NUEVO CAMPO PARA STORAGE DUAL ==========
+    # ========== STORAGE DUAL ==========
     storage_path = models.CharField(
         _('storage path'),
         max_length=500,
@@ -63,11 +65,20 @@ class DigitalCertificate(BaseModel):
         help_text=_('Path to certificate file in storage/certificates/ directory')
     )
     
-    # Clave hasheada - NUNCA almacenar en texto plano
+    # ========== SEGURIDAD DE PASSWORD ==========
+    # Clave hasheada - LEGACY (mantener para compatibilidad)
     password_hash = models.CharField(
         _('password hash'),
         max_length=128,
-        help_text=_('Hashed password for the certificate')
+        help_text=_('Hashed password for the certificate (LEGACY)')
+    )
+    
+    # ✅ NUEVO: Password encriptado con Fernet
+    encrypted_password = models.TextField(
+        _('encrypted password'),
+        blank=True,
+        null=True,
+        help_text=_('Certificate password encrypted with Fernet (AES-128)')
     )
     
     # Información del certificado
@@ -134,6 +145,104 @@ class DigitalCertificate(BaseModel):
     def __str__(self):
         return f"{self.company.business_name} - {self.subject_name}"
     
+    # ========== ENCRIPTACIÓN DE PASSWORD ==========
+    
+    def _get_encryption_key(self):
+        """
+        Genera clave de encriptación desde SECRET_KEY de Django
+        Usa PBKDF2 para derivar una clave compatible con Fernet
+        """
+        # Derivar clave de 32 bytes desde SECRET_KEY
+        key = hashlib.pbkdf2_hmac(
+            'sha256',
+            settings.SECRET_KEY.encode('utf-8'),
+            b'certificate_encryption_salt',  # Salt fijo para consistencia
+            100000,  # Iteraciones
+            dklen=32
+        )
+        return base64.urlsafe_b64encode(key)
+    
+    def set_password(self, password: str):
+        """
+        Encripta y almacena el password del certificado usando Fernet (AES-128)
+        
+        Args:
+            password: contraseña en texto plano del certificado P12
+        """
+        if not password:
+            logger.warning(f"Intentando establecer password vacío para certificado {self.id}")
+            return
+        
+        try:
+            # Encriptar con Fernet
+            fernet = Fernet(self._get_encryption_key())
+            encrypted = fernet.encrypt(password.encode('utf-8'))
+            self.encrypted_password = base64.b64encode(encrypted).decode('utf-8')
+            
+            # LEGACY: También actualizar password_hash para compatibilidad
+            self.password_hash = hashlib.sha256(password.encode('utf-8')).hexdigest()
+            
+            logger.info(f"✅ Password encriptado exitosamente para certificado {self.id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error encriptando password para certificado {self.id}: {e}")
+            raise
+    
+    def get_password(self) -> str:
+        """
+        Desencripta y retorna el password del certificado
+        
+        Returns:
+            str: password en texto plano o None si no existe
+        """
+        if not self.encrypted_password:
+            logger.warning(
+                f"No hay password encriptado para certificado {self.id} (empresa {self.company_id}). "
+                f"Use cert.set_password('su_password') para establecerlo."
+            )
+            return None
+        
+        try:
+            # Desencriptar con Fernet
+            fernet = Fernet(self._get_encryption_key())
+            encrypted_bytes = base64.b64decode(self.encrypted_password.encode('utf-8'))
+            decrypted = fernet.decrypt(encrypted_bytes)
+            password = decrypted.decode('utf-8')
+            
+            logger.debug(f"✅ Password desencriptado exitosamente para certificado {self.id}")
+            return password
+            
+        except Exception as e:
+            logger.error(f"❌ Error desencriptando password para certificado {self.id}: {e}")
+            return None
+    
+    def verify_password(self, password: str) -> bool:
+        """
+        Verifica si un password es correcto para este certificado
+        
+        Args:
+            password: password a verificar
+            
+        Returns:
+            bool: True si el password es correcto
+        """
+        stored_password = self.get_password()
+        if not stored_password:
+            return False
+        
+        return stored_password == password
+    
+    def has_valid_password(self) -> bool:
+        """
+        Verifica si el certificado tiene un password válido almacenado
+        
+        Returns:
+            bool: True si tiene password encriptado
+        """
+        return bool(self.encrypted_password)
+    
+    # ========== MÉTODOS DJANGO ==========
+    
     def save(self, *args, **kwargs):
         # Asegurar campos requeridos ANTES de guardar
         self._ensure_required_fields()
@@ -148,7 +257,7 @@ class DigitalCertificate(BaseModel):
                 # Guardar de nuevo si se extrajo información
                 super().save(update_fields=['fingerprint'])
             except Exception as e:
-                print(f'Warning: Could not extract certificate info: {e}')
+                logger.debug(f'Warning: Could not extract certificate info: {e}')
     
     def _ensure_required_fields(self):
         """Asegurar que todos los campos requeridos tienen valores"""
@@ -179,31 +288,11 @@ class DigitalCertificate(BaseModel):
         if not self.password_hash:
             self.password_hash = 'temp_hash'
     
-    def set_password(self, password):
-        """Hashea y almacena la contraseña del certificado"""
-        if password:
-            self.password_hash = hashlib.pbkdf2_hmac(
-                'sha256',
-                password.encode('utf-8'),
-                self.company.ruc.encode('utf-8'),
-                100000
-            ).hex()
+    # ========== EXTRACCIÓN DE INFORMACIÓN ==========
     
-    def verify_password(self, password):
-        """Verifica la contraseña del certificado"""
-        if not self.password_hash or self.password_hash == 'temp_hash':
-            return False
-        
-        return self.password_hash == hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            self.company.ruc.encode('utf-8'),
-            100000
-        ).hex()
-    
-    def extract_real_certificate_info(self, password):
+    def extract_real_certificate_info(self, password: str) -> bool:
         """
-        NUEVO MÉTODO: Extrae información REAL del certificado P12
+        Extrae información REAL del certificado P12
         
         Args:
             password: contraseña del certificado
@@ -272,14 +361,17 @@ class DigitalCertificate(BaseModel):
             else:
                 self.status = 'ACTIVE'
             
+            # Guardar password encriptado
+            self.set_password(password)
+            
             # Guardar cambios
             self.save()
             
-            print(f"✅ Información real extraída para {self.company.business_name}")
+            logger.info(f"✅ Información real extraída para {self.company.business_name}")
             return True
             
         except Exception as e:
-            print(f"❌ Error extrayendo información real: {e}")
+            logger.error(f"❌ Error extrayendo información real: {e}")
             return False
     
     def _extract_certificate_info(self):
@@ -311,9 +403,9 @@ class DigitalCertificate(BaseModel):
         except Exception as e:
             # En caso de error, generar fingerprint único
             self.fingerprint = str(uuid.uuid4()).replace('-', '')[:32]
-            print(f'Warning extracting certificate info: {e}')
+            logger.debug(f'Warning extracting certificate info: {e}')
     
-    # ========== NUEVOS MÉTODOS PARA STORAGE DUAL ==========
+    # ========== STORAGE DUAL ==========
     
     @property
     def storage_file_exists(self):
@@ -505,7 +597,7 @@ class DigitalCertificate(BaseModel):
             logger.error(f"Error sincronizando certificado a storage: {e}")
             return False
     
-    # ========== MÉTODOS EXISTENTES ==========
+    # ========== PROPIEDADES ==========
     
     @property
     def is_expired(self):
@@ -551,6 +643,8 @@ class DigitalCertificate(BaseModel):
         }
         return status_map.get(self.storage_status, '❓ Estado desconocido')
     
+    # ========== FACTORY METHOD ==========
+    
     @classmethod
     def create_with_password(cls, company, certificate_file, password, environment='TEST', **kwargs):
         """
@@ -584,7 +678,7 @@ class DigitalCertificate(BaseModel):
             password_hash='temp'  # Se actualizará inmediatamente
         )
         
-        # Configurar contraseña
+        # Configurar contraseña ENCRIPTADA
         certificate.set_password(password)
         
         # Guardar
@@ -594,7 +688,7 @@ class DigitalCertificate(BaseModel):
         try:
             certificate.extract_real_certificate_info(password)
         except Exception as e:
-            print(f'Warning: Could not extract real certificate info: {e}')
+            logger.warning(f'Could not extract real certificate info: {e}')
         
         return certificate
 
