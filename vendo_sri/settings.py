@@ -858,7 +858,7 @@ for directory in directories_to_create:
     dir_path = BASE_DIR / directory
 try:
     os.makedirs(dir_path, exist_ok=True)
-except PermissionsError:
+except PermissionError:
     import tempfile
     dir_path = os.path.join(tempfile.gettempdir(), 'vendo_sri_logs')
     os.makedirs(dir_path, exist_ok=True)
