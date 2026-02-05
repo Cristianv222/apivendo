@@ -46,7 +46,7 @@ class CertificateData:
     
     def is_expired(self):
         """Verifica si el certificado ha expirado"""
-        return self.certificate.not_valid_after < datetime.utcnow()
+        return self.certificate.not_valid_after_utc.replace(tzinfo=None) < datetime.utcnow()
     
     def days_until_expiration(self):
         """Días hasta expiración"""
