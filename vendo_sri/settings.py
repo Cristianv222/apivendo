@@ -889,7 +889,6 @@ except PermissionError:
             
         print(f"Warning: Using temporary directory {temp_dir} for {directory}")
 
-
 # ==========================================
 # CONFIGURACIÓN DE STARTUP
 # ==========================================

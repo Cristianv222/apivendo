@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Crear usuario no root (opcional pero recomendado)
+# Crear usuario no root
 RUN useradd -ms /bin/bash appuser
 
 # Establecer directorio de trabajo
@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copiar el resto del código de la aplicación
 COPY . /app/
 
-# Crear directorios necesarios
+# Crear directorios necesarios (como respaldo, pero el entrypoint los garantiza en runtime)
 RUN mkdir -p \
     /app/storage/logs \
     /app/storage/backups \
@@ -59,6 +59,10 @@ RUN touch /app/storage/logs/vendo_sri.log \
           /app/storage/logs/certificates.log \
           /app/logs/celery.log
 
+# Copiar entrypoint y dar permisos
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Dar permisos a los archivos y carpetas
 RUN chown -R appuser:appuser /app && \
     chmod -R 755 /app && \
@@ -67,3 +71,6 @@ RUN chown -R appuser:appuser /app && \
 
 # Cambiar a usuario no root
 USER appuser
+
+# Entrypoint garantiza directorios en runtime (después de volúmenes)
+ENTRYPOINT ["/app/entrypoint.sh"]
