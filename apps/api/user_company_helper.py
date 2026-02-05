@@ -17,6 +17,13 @@ def get_user_companies_exact(user):
         logger.warning("❌ User not authenticated")
         return Company.objects.none()
     
+    # ✅ NUEVO: Detectar VirtualCompanyUser (tokens VSR de empresa)
+    from apps.api.authentication import VirtualCompanyUser
+    if isinstance(user, VirtualCompanyUser):
+        # VirtualCompanyUser ya tiene su empresa asignada directamente
+        logger.info(f"✅ VirtualCompanyUser accessing company {user.company.id}")
+        return Company.objects.filter(id=user.company.id, is_active=True)
+    
     if user.is_superuser:
         logger.info(f"✅ Superuser {user.username} accessing all companies")
         return Company.objects.filter(is_active=True)
@@ -62,6 +69,21 @@ def get_user_company_by_id_exact(company_id, user):
     if not user or not user.is_authenticated:
         logger.warning("❌ User not authenticated")
         return None
+    
+    # ✅ NUEVO: VirtualCompanyUser - validar acceso directo
+    from apps.api.authentication import VirtualCompanyUser
+    if isinstance(user, VirtualCompanyUser):
+        try:
+            company_id = int(company_id)
+            if user.company.id == company_id and user.company.is_active:
+                logger.info(f"✅ VirtualCompanyUser has access to company {company_id}")
+                return user.company
+            else:
+                logger.warning(f"❌ VirtualCompanyUser denied access to company {company_id}")
+                return None
+        except (ValueError, TypeError):
+            logger.error(f"Invalid company_id format: {company_id}")
+            return None
     
     try:
         company_id = int(company_id)
@@ -175,6 +197,12 @@ class CompanyJWTManager:
             logger.warning("❌ User not authenticated")
             return None
         
+        # ✅ NUEVO: VirtualCompanyUser no necesita validar JWT
+        from apps.api.authentication import VirtualCompanyUser
+        if isinstance(user, VirtualCompanyUser):
+            logger.info(f"✅ VirtualCompanyUser bypasses JWT validation")
+            return None  # No aplica JWT para VirtualCompanyUser
+        
         # Validar token y obtener company_id
         company_id = CompanyJWTManager.validate_company_token(token, user.id)
         
@@ -203,6 +231,12 @@ class CompanyJWTManager:
     def generate_user_company_tokens(user):
         """Genera tokens JWT para todas las empresas del usuario"""
         if not user or not user.is_authenticated:
+            return {}
+        
+        # ✅ NUEVO: VirtualCompanyUser no genera JWT tokens
+        from apps.api.authentication import VirtualCompanyUser
+        if isinstance(user, VirtualCompanyUser):
+            logger.info(f"✅ VirtualCompanyUser doesn't need JWT tokens")
             return {}
         
         try:
@@ -301,7 +335,19 @@ def debug_user_exact_relationship(user):
     if not user:
         return "No user provided"
     
+    # ✅ NUEVO: Información especial para VirtualCompanyUser
+    from apps.api.authentication import VirtualCompanyUser
+    if isinstance(user, VirtualCompanyUser):
+        return {
+            'user_type': 'VirtualCompanyUser',
+            'company_id': user.company.id,
+            'company_name': user.company.business_name,
+            'is_authenticated': user.is_authenticated,
+            'access_method': 'company_api_token'
+        }
+    
     debug_info = {
+        'user_type': 'Django User',
         'user_id': user.id,
         'username': user.username,
         'email': user.email,
