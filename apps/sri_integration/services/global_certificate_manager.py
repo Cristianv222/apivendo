@@ -208,42 +208,29 @@ class GlobalCertificateManager:
     
     def _get_decrypted_password(self, certificate_obj: DigitalCertificate) -> Optional[str]:
         """
-        Obtiene password descifrado del certificado
+        Obtiene password descifrado del certificado usando el método get_password() del modelo
         """
         try:
-            # Si el password_hash contiene el password en texto plano (desarrollo)
-            if certificate_obj.password_hash and certificate_obj.password_hash != 'temp_hash':
-                # Verificar si es un hash real o texto plano
-                if len(certificate_obj.password_hash) < 50:  # Probablemente texto plano
-                    return certificate_obj.password_hash
-                
-                # TODO: Implementar descifrado real con master key
-                # Por ahora, intentar passwords conocidos
-                known_passwords = [
-                    'Jheymie10', 'password', '123456', 'test', 'admin',
-                    certificate_obj.company.ruc
-                ]
-                
-                for pwd in known_passwords:
-                    try:
-                        # Verificar cargando el certificado
-                        with open(certificate_obj.certificate_file.path, 'rb') as f:
-                            p12_data = f.read()
-                        
-                        pkcs12.load_key_and_certificates(p12_data, pwd.encode('utf-8'))
-                        logger.info(f"Password found for company {certificate_obj.company.id}: {pwd}")
-                        return pwd
-                        
-                    except Exception:
-                        continue
-                
-                logger.error(f"Could not determine password for company {certificate_obj.company.id}")
-                return None
+            # ✅ MÉTODO PRINCIPAL: Usar password encriptado del modelo
+            password = certificate_obj.get_password()
             
+            if password:
+                logger.debug(f"✅ Password retrieved from encrypted storage for company {certificate_obj.company.id}")
+                return password
+            
+            # Si no hay password encriptado, mostrar error claro con instrucciones
+            logger.error(
+                f"❌ No encrypted password found for company {certificate_obj.company.id}. "
+                f"Please set password using Django shell:\n"
+                f"  from apps.certificates.models import DigitalCertificate\n"
+                f"  cert = DigitalCertificate.objects.get(id={certificate_obj.id})\n"
+                f"  cert.set_password('your_password')\n"
+                f"  cert.save()"
+            )
             return None
             
         except Exception as e:
-            logger.error(f"Error decrypting password: {str(e)}")
+            logger.error(f"❌ Error retrieving password for company {certificate_obj.company.id}: {str(e)}")
             return None
     
     def preload_certificates(self, company_ids: list = None):
