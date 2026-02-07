@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Procesador principal de documentos electrónicos - VERSIÓN CORREGIDA DEFINITIVA
-RESUELVE: Error 35 - Eliminado atributo 'Id' del elemento X509Certificate
-CORREGIDO: Estructura XML válida según esquemas SRI exactos
+Procesador principal de documentos electrónicos - VERSIÓN CORREGIDA FINAL
+CORRIGE: No modificar XML después de firmar - Resuelve Error 39 FIRMA INVALIDA
 """
 
 import logging
@@ -19,7 +18,7 @@ from apps.sri_integration.services.soap_client import SRISOAPClient
 from apps.sri_integration.services.email_service import EmailService
 from apps.core.models import AuditLog
 
-# Imports para firma XAdES-BES corregida
+# Imports para firma XAdES-BES
 from lxml import etree
 import base64
 import hashlib
@@ -36,7 +35,7 @@ logger = logging.getLogger(__name__)
 class DocumentProcessor:
     """
     Procesador principal de documentos electrónicos del SRI
-    VERSIÓN CORREGIDA: Sin atributo Id en X509Certificate - Resuelve Error 35
+    VERSIÓN CORREGIDA: NO modifica el XML después de firmarlo
     """
     
     def __init__(self, company):
@@ -76,7 +75,7 @@ class DocumentProcessor:
                     logger.error(f"XML generation failed: {xml_content}")
                     return False, f"XML generation failed: {xml_content}"
                 
-                # 2. Firmar XML con estructura corregida (SIN Id en X509Certificate)
+                # 2. Firmar XML con estructura corregida
                 logger.info(f"Firmando XML para documento {document.id}")
                 success, signed_xml = self._sign_xml_corrected(document, xml_content)
                 if not success:
@@ -159,7 +158,7 @@ class DocumentProcessor:
             return False, f"Certificate verification failed: {str(e)}"
     
     def _sign_xml_corrected(self, document, xml_content):
-        """Firma el XML con estructura válida - SIN atributo Id en X509Certificate"""
+        """Firma el XML SIN modificaciones posteriores"""
         try:
             logger.info(f"Iniciando firma XML corregida para documento {document.id}")
             
@@ -168,7 +167,7 @@ class DocumentProcessor:
             if not cert_data:
                 return False, "Certificate not available"
             
-            # Firmar con implementación corregida (SIN Id en X509Certificate)
+            # Firmar con implementación corregida
             signed_xml = self._create_xades_bes_signature_fixed(xml_content, cert_data)
             
             # Guardar XML firmado
@@ -192,9 +191,15 @@ class DocumentProcessor:
             return False, f"XML_SIGNING_ERROR: {str(e)}"
     
     def _create_xades_bes_signature_fixed(self, xml_content, cert_data):
-        """Crear firma XAdES-BES SIN atributo Id en X509Certificate - RESUELVE ERROR 35"""
+        """
+        Crear firma XAdES-BES SIN modificaciones posteriores - CORREGIDO
+        ✅ NO modifica el XML después de firmarlo
+        """
         try:
-            # Parsear XML original
+            # ✅ PASO 1: Limpiar XML ANTES de parsear (si es necesario)
+            xml_content = self._pre_clean_xml_if_needed(xml_content)
+            
+            # PASO 2: Parsear XML original
             parser = etree.XMLParser(
                 remove_blank_text=False,
                 strip_cdata=False,
@@ -205,19 +210,18 @@ class DocumentProcessor:
             
             root = etree.fromstring(xml_content.encode('utf-8'), parser)
             
-            # Configurar elemento comprobante
+            # PASO 3: Configurar elemento comprobante
             comprobante_id = self._ensure_comprobante_id(root)
             
-            # Generar IDs únicos
+            # PASO 4: Generar IDs únicos
             signature_id = f"Signature{uuid.uuid4().hex[:8]}"
             signed_properties_id = f"{signature_id}-SignedProperties{uuid.uuid4().hex[:6]}"
             reference_id = f"Reference-ID-{uuid.uuid4().hex[:6]}"
-            # ✅ CRÍTICO: NO generar certificate_id para evitar el atributo Id
             
-            # Extraer certificado
+            # PASO 5: Extraer certificado
             certificate = cert_data.certificate
             
-            # Crear estructura de firma completa SIN Id en X509Certificate
+            # PASO 6: Crear estructura de firma completa
             signature_element = self._build_signature_structure_fixed(
                 signature_id,
                 signed_properties_id, 
@@ -228,27 +232,49 @@ class DocumentProcessor:
                 root
             )
             
-            # Insertar firma en documento
+            # PASO 7: Insertar firma en documento
             root.append(signature_element)
             
-            # Generar XML final
+            # ✅ PASO 8: Generar XML final SIN pretty_print y SIN modificaciones
             signed_xml = etree.tostring(
                 root,
                 encoding='utf-8',
                 method='xml',
                 xml_declaration=True,
-                pretty_print=True
+                pretty_print=False  # ✅ SIN pretty_print para evitar cambios
             ).decode('utf-8')
             
-            # Limpiar XML
-            signed_xml = self._clean_xml_for_sri(signed_xml)
+            # ✅ CRÍTICO: NO MODIFICAR EL XML DESPUÉS DE FIRMAR
+            # ❌ NO llamar a _clean_xml_for_sri() aquí
+            # ❌ NO hacer replace, strip, o cualquier modificación
             
             logger.info("✅ XML firmado SIN atributo Id en X509Certificate")
+            logger.info("✅ XML NO modificado después de firmar")
             return signed_xml
             
         except Exception as e:
             logger.error(f"Error creating XAdES-BES signature: {str(e)}")
             raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
+    
+    def _pre_clean_xml_if_needed(self, xml_content):
+        """
+        Limpieza PRE-firma si es absolutamente necesaria
+        Solo se ejecuta ANTES de firmar
+        """
+        try:
+            # Solo asegurar que tenga declaración XML correcta
+            if not xml_content.strip().startswith('<?xml'):
+                xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_content
+            
+            # Eliminar BOM si existe
+            if xml_content.startswith('\ufeff'):
+                xml_content = xml_content[1:]
+            
+            return xml_content
+            
+        except Exception as e:
+            logger.warning(f"Error in pre-cleaning: {e}")
+            return xml_content
     
     def _ensure_comprobante_id(self, root):
         """Asegurar que el comprobante tenga ID válido"""
@@ -346,7 +372,6 @@ class DocumentProcessor:
         x509_cert = etree.SubElement(x509_data, f"{{{ds_ns}}}X509Certificate")
         
         # ✅ CRÍTICO: NO agregar atributo Id al X509Certificate
-        # x509_cert.set("Id", certificate_id)  ← ESTA LÍNEA CAUSABA EL ERROR 35
         
         # Certificado en base64
         cert_der = certificate.public_bytes(serialization.Encoding.DER)
@@ -510,35 +535,6 @@ class DocumentProcessor:
         except Exception as e:
             logger.error(f"Error canonicalizing: {e}")
             raise Exception(f"CANONICALIZATION_FAILED: {str(e)}")
-    
-    def _clean_xml_for_sri(self, signed_xml):
-        """Limpiar XML para compatibilidad con SRI"""
-        import re
-        
-        # Declaración XML correcta
-        xml_decl_pattern = r'<\?xml[^>]*\?>\s*'
-        signed_xml = re.sub(xml_decl_pattern, '', signed_xml)
-        signed_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + signed_xml.lstrip()
-        
-        # Normalizar saltos de línea
-        signed_xml = signed_xml.replace('\r\n', '\n').replace('\r', '\n')
-        
-        # Eliminar BOM si existe
-        if signed_xml.startswith('\ufeff'):
-            signed_xml = signed_xml[1:]
-        
-        # Limpiar espacios en elementos críticos
-        critical_elements = ['ds:DigestValue', 'ds:SignatureValue', 'ds:X509Certificate']
-        
-        for element in critical_elements:
-            pattern = f'(<{element}[^>]*>)([^<]*?)(</{element}>)'
-            def clean_content(match):
-                start, content, end = match.groups()
-                clean_content = ''.join(content.split())
-                return start + clean_content + end
-            signed_xml = re.sub(pattern, clean_content, signed_xml)
-        
-        return signed_xml
     
     def _send_to_sri_enhanced(self, document, signed_xml):
         """Enviar documento al SRI con manejo mejorado"""
@@ -748,17 +744,15 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processing_method': 'SRI_Compatible_ERROR_35_FIXED',
-            'processor_version': 'NO_ID_ATTRIBUTE_IN_X509CERTIFICATE_VERSION',
+            'processing_method': 'SRI_Compatible_NO_POST_SIGN_MODIFICATIONS',
+            'processor_version': 'FIXED_FIRMA_INVALIDA_ERROR_39',
             'fixes_applied': [
+                'NO_MODIFICATIONS_AFTER_SIGNING',
+                'NO_PRETTY_PRINT_AFTER_SIGNING',
+                'NO_CLEAN_XML_FOR_SRI_AFTER_SIGNING',
                 'REMOVED_ID_ATTRIBUTE_FROM_X509CERTIFICATE',
-                'VALID_XML_STRUCTURE_ACCORDING_TO_SRI_SCHEMAS',
-                'SHA1_ALGORITHMS_EXACT_MATCH_OFFICIAL_FACTURADOR',
-                'CORRECT_NAMESPACES_AND_REFERENCES',
-                'SIGNED_DATA_OBJECT_PROPERTIES_INCLUDED',
-                'LOCAL_TIMEZONE_ECUADOR_MINUS_5',
-                'CLEAN_CANONICALIZATION_C14N',
-                'UNIVERSAL_CERTIFICATE_SUPPORT'
+                'SHA1_ALGORITHMS_EXACT_MATCH',
+                'CORRECT_CANONICALIZATION'
             ]
         }
     
