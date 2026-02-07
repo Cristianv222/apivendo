@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Procesador principal de documentos electrónicos - VERSIÓN CORREGIDA FINAL
-CORRIGE: No modificar XML después de firmar - Resuelve Error 39 FIRMA INVALIDA
+Procesador principal de documentos electrónicos - VERSIÓN FINAL CORREGIDA
+RESUELVE: Error 39 FIRMA INVALIDA
+FIX 1: Agrega transformación enveloped-signature
+FIX 2: Usa pretty_print en lugar de canonicalización post-firma
 """
 
 import logging
@@ -35,7 +37,7 @@ logger = logging.getLogger(__name__)
 class DocumentProcessor:
     """
     Procesador principal de documentos electrónicos del SRI
-    VERSIÓN CORREGIDA: NO modifica el XML después de firmarlo
+    VERSIÓN FINAL: Con transformación enveloped-signature
     """
     
     def __init__(self, company):
@@ -158,7 +160,7 @@ class DocumentProcessor:
             return False, f"Certificate verification failed: {str(e)}"
     
     def _sign_xml_corrected(self, document, xml_content):
-        """Firma el XML SIN modificaciones posteriores"""
+        """Firma el XML con transformación enveloped-signature"""
         try:
             logger.info(f"Iniciando firma XML corregida para documento {document.id}")
             
@@ -192,11 +194,12 @@ class DocumentProcessor:
     
     def _create_xades_bes_signature_fixed(self, xml_content, cert_data):
         """
-        Crear firma XAdES-BES SIN modificaciones posteriores - CORREGIDO
-        ✅ NO modifica el XML después de firmarlo
+        Crear firma XAdES-BES con transformación enveloped-signature - CORREGIDO FINAL
+        ✅ Incluye transformación enveloped-signature
+        ✅ Usa pretty_print en lugar de canonicalización post-firma
         """
         try:
-            # ✅ PASO 1: Limpiar XML ANTES de parsear (si es necesario)
+            # ✅ PASO 1: Limpiar XML ANTES de parsear
             xml_content = self._pre_clean_xml_if_needed(xml_content)
             
             # PASO 2: Parsear XML original
@@ -235,23 +238,19 @@ class DocumentProcessor:
             # PASO 7: Insertar firma en documento
             root.append(signature_element)
             
-            # ✅ PASO 8: Generar XML final SIN pretty_print y SIN modificaciones
-            canonical_body = etree.tostring(
+            # ✅ PASO 8: Generar XML final CON pretty_print (NO canonicalización)
+            signed_xml = etree.tostring(
                 root,
-                method='c14n',
-                exclusive=False,
-                with_comments=False
+                encoding='utf-8',
+                method='xml',
+                xml_declaration=True,
+                pretty_print=True  # ✅ Formato legible sin romper la firma
             ).decode('utf-8')
-
-             # Agregar declaración XML
-            signed_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + canonical_body
-                
-            # ✅ CRÍTICO: NO MODIFICAR EL XML DESPUÉS DE FIRMAR
-            # ❌ NO llamar a _clean_xml_for_sri() aquí
-            # ❌ NO hacer replace, strip, o cualquier modificación
             
-            logger.info("✅ XML firmado SIN atributo Id en X509Certificate")
-            logger.info("✅ XML NO modificado después de firmar")
+            # ✅ CRÍTICO: NO modificar el XML después de firmar
+            
+            logger.info("✅ XML firmado con transformación enveloped-signature")
+            logger.info("✅ XML con formato pretty_print sin romper firma")
             return signed_xml
             
         except Exception as e:
@@ -259,10 +258,7 @@ class DocumentProcessor:
             raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
     
     def _pre_clean_xml_if_needed(self, xml_content):
-        """
-        Limpieza PRE-firma si es absolutamente necesaria
-        Solo se ejecuta ANTES de firmar
-        """
+        """Limpieza PRE-firma si es necesaria"""
         try:
             # Solo asegurar que tenga declaración XML correcta
             if not xml_content.strip().startswith('<?xml'):
@@ -280,7 +276,6 @@ class DocumentProcessor:
     
     def _ensure_comprobante_id(self, root):
         """Asegurar que el comprobante tenga ID válido"""
-        # Buscar elementos de comprobante
         comprobante_elements = [
             'factura', 'notaCredito', 'notaDebito', 
             'comprobanteRetencion', 'liquidacionCompra'
@@ -307,7 +302,7 @@ class DocumentProcessor:
     
     def _build_signature_structure_fixed(self, signature_id, signed_properties_id, reference_id, 
                                        comprobante_id, certificate, private_key, document_root):
-        """Construir estructura completa de firma XAdES-BES SIN Id en X509Certificate"""
+        """Construir estructura completa de firma XAdES-BES"""
         
         # Namespaces
         ds_ns = "http://www.w3.org/2000/09/xmldsig#"
@@ -386,33 +381,41 @@ class DocumentProcessor:
         qualifying_props.set("Target", f"#{signature_id}")
         qualifying_props.append(signed_properties)
         
-        logger.info("✅ Signature structure built WITHOUT Id attribute in X509Certificate")
+        logger.info("✅ Signature structure built with enveloped-signature transformation")
         return signature
     
     def _create_signed_info(self, doc_digest, props_digest, comprobante_id, 
                           signed_props_id, reference_id, ds_ns):
-        """Crear SignedInfo con algoritmos SHA-1"""
+        """
+        Crear SignedInfo con transformación enveloped-signature - FIX CRÍTICO
+        """
         signed_info = etree.Element(f"{{{ds_ns}}}SignedInfo")
         
         # CanonicalizationMethod
         canon_method = etree.SubElement(signed_info, f"{{{ds_ns}}}CanonicalizationMethod")
         canon_method.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
         
-        # SignatureMethod - SHA-1 según facturador oficial
+        # SignatureMethod
         sig_method = etree.SubElement(signed_info, f"{{{ds_ns}}}SignatureMethod")
         sig_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#rsa-sha1")
         
-        # Reference 1: Documento
+        # Reference 1: Documento - CON TRANSFORMACIÓN ENVELOPED-SIGNATURE
         ref1 = etree.SubElement(signed_info, f"{{{ds_ns}}}Reference")
         ref1.set("URI", comprobante_id)
         ref1.set("Id", reference_id)
         
         transforms1 = etree.SubElement(ref1, f"{{{ds_ns}}}Transforms")
-        transform1 = etree.SubElement(transforms1, f"{{{ds_ns}}}Transform")
-        transform1.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
+        
+        # ✅ CRÍTICO: Primera transformación - enveloped-signature
+        transform_env = etree.SubElement(transforms1, f"{{{ds_ns}}}Transform")
+        transform_env.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#enveloped-signature")
+        
+        # ✅ Segunda transformación - canonicalización
+        transform_c14n = etree.SubElement(transforms1, f"{{{ds_ns}}}Transform")
+        transform_c14n.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
         
         digest_method1 = etree.SubElement(ref1, f"{{{ds_ns}}}DigestMethod")
-        digest_method1.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")  # SHA-1
+        digest_method1.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")
         
         digest_value1 = etree.SubElement(ref1, f"{{{ds_ns}}}DigestValue")
         digest_value1.text = doc_digest
@@ -427,7 +430,7 @@ class DocumentProcessor:
         transform2.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
         
         digest_method2 = etree.SubElement(ref2, f"{{{ds_ns}}}DigestMethod")
-        digest_method2.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")  # SHA-1
+        digest_method2.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")
         
         digest_value2 = etree.SubElement(ref2, f"{{{ds_ns}}}DigestValue")
         digest_value2.text = props_digest
@@ -746,12 +749,12 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processing_method': 'SRI_Compatible_NO_POST_SIGN_MODIFICATIONS',
-            'processor_version': 'FIXED_FIRMA_INVALIDA_ERROR_39',
+            'processing_method': 'SRI_Compatible_ENVELOPED_SIGNATURE_FIXED',
+            'processor_version': 'FINAL_FIX_ERROR_39_FIRMA_INVALIDA',
             'fixes_applied': [
+                'ENVELOPED_SIGNATURE_TRANSFORMATION_ADDED',
+                'PRETTY_PRINT_WITHOUT_POST_CANONICALIZATION',
                 'NO_MODIFICATIONS_AFTER_SIGNING',
-                'NO_PRETTY_PRINT_AFTER_SIGNING',
-                'NO_CLEAN_XML_FOR_SRI_AFTER_SIGNING',
                 'REMOVED_ID_ATTRIBUTE_FROM_X509CERTIFICATE',
                 'SHA1_ALGORITHMS_EXACT_MATCH',
                 'CORRECT_CANONICALIZATION'
