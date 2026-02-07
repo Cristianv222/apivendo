@@ -236,14 +236,16 @@ class DocumentProcessor:
             root.append(signature_element)
             
             # ✅ PASO 8: Generar XML final SIN pretty_print y SIN modificaciones
-            signed_xml = etree.tostring(
+            canonical_body = etree.tostring(
                 root,
-                encoding='utf-8',
-                method='xml',
-                xml_declaration=True,
-                pretty_print=False  # ✅ SIN pretty_print para evitar cambios
+                method='c14n',
+                exclusive=False,
+                with_comments=False
             ).decode('utf-8')
-            
+
+             # Agregar declaración XML
+            signed_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + canonical_body
+                
             # ✅ CRÍTICO: NO MODIFICAR EL XML DESPUÉS DE FIRMAR
             # ❌ NO llamar a _clean_xml_for_sri() aquí
             # ❌ NO hacer replace, strip, o cualquier modificación
