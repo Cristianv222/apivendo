@@ -595,9 +595,11 @@ class XMLGeneratorSRI2025:
         moneda = SubElement(info_factura, 'moneda')
         moneda.text = getattr(self.document, 'currency', 'DOLAR')
         
-        # 15. pagos - CAMPO OBLIGATORIO (según actualizaciones 2025)
+        # 15. pagos - CAMPO OBLIGATORIO (SIEMPRE debe existir)
+        pagos = SubElement(info_factura, 'pagos')  # ← CREAR SIEMPRE
+
         if hasattr(self.document, 'payment_methods') and self.document.payment_methods.exists():
-            pagos = SubElement(info_factura, 'pagos')
+            # Si hay payment_methods configurados, usarlos
             for payment in self.document.payment_methods.all():
                 pago = SubElement(pagos, 'pago')
                 SubElement(pago, 'formaPago').text = str(getattr(payment, 'payment_method_code', '01'))
@@ -610,7 +612,17 @@ class XMLGeneratorSRI2025:
                 # unidadTiempo - campo complementario
                 if hasattr(payment, 'time_unit') and payment.time_unit:
                     SubElement(pago, 'unidadTiempo').text = str(payment.time_unit)
-        
+        else:
+            # ← AGREGAR ESTE ELSE: Si NO hay payment_methods, crear pago por defecto
+            pago = SubElement(pagos, 'pago')
+            SubElement(pago, 'formaPago').text = '01'  # Sin utilización sistema financiero
+            SubElement(pago, 'total').text = self._format_decimal(self.document.total_amount)
+            
+            logger.warning(
+                f"⚠️  Factura {self.document.id} sin payment_methods. "
+                f"Generando pago por defecto (forma 01, total: {self.document.total_amount})"
+            )
+
         return info_factura
     
     # ========== DETALLES DE FACTURA ==========
