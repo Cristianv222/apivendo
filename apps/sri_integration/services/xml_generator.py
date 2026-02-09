@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Generador de XML para documentos del SRI - VERSIÓN 2025 ACTUALIZADA
-ACTUALIZADO: Septiembre 2025 - Ficha Técnica v2.31
-CORRIGE: Estructura obsoleta, nuevos campos, validaciones actualizadas
-CUMPLE: Resoluciones NAC-DGERCGC25-00000034 y NAC-DGERCGC25-00000014
+Generador de XML para documentos del SRI - VERSIÓN CORREGIDA 2025
+ACTUALIZADO: Noviembre 2025 - Ficha Técnica v2.32
+PARA: Facturas comerciales NORMALES (sin rubros de terceros)
+IMPORTANTE: Versiones 2.0.0 y 2.1.0 son SOLO para casos especiales
+CUMPLE: Resoluciones vigentes del SRI Ecuador
 """
 
 import logging
@@ -21,19 +22,28 @@ logger = logging.getLogger(__name__)
 
 class XMLGeneratorSRI2025:
     """
-    Generador de XML para documentos electrónicos del SRI - VERSIÓN 2025 ACTUALIZADA
-    ACTUALIZADO: Ficha Técnica v2.31 (abril 2025)
-    INCLUYE: Nuevas validaciones y campos obligatorios 2025
-    CUMPLE: Envío en tiempo real y nuevas normativas
+    Generador de XML para documentos electrónicos del SRI
+    VERSIÓN: Noviembre 2025 - Ficha Técnica v2.32
+    PARA: Facturas comerciales NORMALES
+    
+    IMPORTANTE: Este generador usa las versiones CORRECTAS para empresas comerciales:
+    - Factura: 1.1.0 (NO 2.1.0)
+    - Nota de Crédito: 1.1.0 (NO 2.1.0)
+    - Liquidación: 1.1.0 (NO 2.1.0)
+    
+    Las versiones 2.0.0 y 2.1.0 son EXCLUSIVAMENTE para:
+    - Facturas con rubros de terceros (Anexo 8)
+    - Facturas sustitutivas de guía de remisión (Anexo 9)
+    - Casos especiales con reembolsos y compensaciones
     """
     
-    # Versiones XML actualizadas para 2025
+    # ✅ VERSIONES CORRECTAS PARA FACTURAS COMERCIALES NORMALES
     XML_VERSIONS = {
-        'factura': '2.1.0',           # Actualizado de 1.1.0
-        'notaCredito': '2.1.0',       # Actualizado de 1.1.0  
-        'notaDebito': '1.0.0',        # Se mantiene
-        'comprobanteRetencion': '2.0.0',  # Se mantiene
-        'liquidacionCompra': '2.1.0', # Actualizado de 1.1.0
+        'factura': '1.1.0',           # ✅ Para facturas comerciales normales
+        'notaCredito': '1.1.0',       # ✅ Para notas de crédito normales
+        'notaDebito': '1.0.0',        # ✅ Se mantiene
+        'comprobanteRetencion': '2.0.0',  # ✅ Se mantiene
+        'liquidacionCompra': '1.1.0', # ✅ Para liquidaciones normales
     }
     
     def __init__(self, document):
@@ -71,10 +81,10 @@ class XMLGeneratorSRI2025:
         else:
             logger.info("Generando XML para AMBIENTE DE PRUEBAS")
     
-    # ========== MÉTODOS PRINCIPALES ACTUALIZADOS ==========
+    # ========== MÉTODOS PRINCIPALES ==========
     
     def generate_xml(self):
-        """Método principal actualizado que determina qué tipo de XML generar"""
+        """Método principal que determina qué tipo de XML generar"""
         from apps.sri_integration.models import CreditNote, DebitNote, Retention, PurchaseSettlement
         
         try:
@@ -89,60 +99,60 @@ class XMLGeneratorSRI2025:
             else:
                 return self.generate_invoice_xml()
         except Exception as e:
-            logger.error(f"Error en generate_xml 2025: {str(e)}")
+            logger.error(f"Error en generate_xml: {str(e)}")
             raise
     
     def generate_invoice_xml(self):
-        """Genera XML para factura con estructura v2.1.0 actualizada"""
+        """Genera XML para factura comercial normal v1.1.0"""
         try:
-            logger.info(f"Generando XML Factura v2.1.0 para ID {self.document.id}")
+            logger.info(f"Generando XML Factura v{self.XML_VERSIONS['factura']} para ID {self.document.id}")
             
-            # Elemento raíz con versión actualizada
+            # Elemento raíz con versión CORRECTA
             factura = Element('factura', {
                 'id': 'comprobante',
                 'version': self.XML_VERSIONS['factura']
             })
             
-            # Información tributaria con validaciones 2025
-            info_tributaria = self._create_info_tributaria_2025('01')  # 01 = Factura
+            # Información tributaria
+            info_tributaria = self._create_info_tributaria('01')  # 01 = Factura
             factura.append(info_tributaria)
             
-            # Información de la factura con campos nuevos 2025
-            info_factura = self._create_info_factura_2025()
+            # Información de la factura
+            info_factura = self._create_info_factura()
             factura.append(info_factura)
             
-            # Detalles con validaciones mejoradas
+            # Detalles
             detalles = SubElement(factura, 'detalles')
             if hasattr(self.document, 'items') and self.document.items.exists():
                 for item in self.document.items.all():
-                    detalle = self._create_detalle_factura_2025(item)
+                    detalle = self._create_detalle_factura(item)
                     detalles.append(detalle)
             else:
-                detalle = self._create_detalle_generico_2025()
+                detalle = self._create_detalle_generico()
                 detalles.append(detalle)
             
-            # Información adicional con validaciones estrictas
-            info_adicional = self._create_info_adicional_2025()
-            if self._has_valid_content_2025(info_adicional):
+            # Información adicional
+            info_adicional = self._create_info_adicional()
+            if self._has_valid_content(info_adicional):
                 factura.append(info_adicional)
             
             # Convertir a string con codificación correcta
-            xml_str = self._prettify_xml_2025(factura)
+            xml_str = self._prettify_xml(factura)
             
-            # Validaciones finales 2025
-            self._validate_xml_structure_2025(xml_str)
+            # Validaciones finales
+            self._validate_xml_structure(xml_str)
             
-            logger.info(f"XML Factura v2.1.0 generado exitosamente: {len(xml_str)} caracteres")
+            logger.info(f"XML Factura v{self.XML_VERSIONS['factura']} generado exitosamente: {len(xml_str)} caracteres")
             return xml_str
             
         except Exception as e:
-            logger.error(f"Error generando XML Factura 2025: {str(e)}")
-            raise ValueError(f"Error generando XML Factura 2025: {str(e)}")
+            logger.error(f"Error generando XML Factura: {str(e)}")
+            raise ValueError(f"Error generando XML Factura: {str(e)}")
     
     def generate_credit_note_xml(self):
-        """Genera XML para nota de crédito v2.1.0 actualizada"""
+        """Genera XML para nota de crédito comercial normal v1.1.0"""
         try:
-            logger.info(f"Generando XML NotaCredito v2.1.0 para ID {self.document.id}")
+            logger.info(f"Generando XML NotaCredito v{self.XML_VERSIONS['notaCredito']} para ID {self.document.id}")
             
             nota_credito = Element('notaCredito', {
                 'id': 'comprobante',
@@ -150,42 +160,42 @@ class XMLGeneratorSRI2025:
             })
             
             # Información tributaria
-            info_tributaria = self._create_info_tributaria_2025('04')  # 04 = Nota de Crédito
+            info_tributaria = self._create_info_tributaria('04')  # 04 = Nota de Crédito
             nota_credito.append(info_tributaria)
             
-            # Información de la nota de crédito actualizada
-            info_nota_credito = self._create_info_nota_credito_2025()
+            # Información de la nota de crédito
+            info_nota_credito = self._create_info_nota_credito()
             nota_credito.append(info_nota_credito)
             
             # Detalles
             detalles = SubElement(nota_credito, 'detalles')
             if hasattr(self.document, 'items') and self.document.items.exists():
                 for item in self.document.items.all():
-                    detalle = self._create_detalle_nota_credito_2025(item)
+                    detalle = self._create_detalle_nota_credito(item)
                     detalles.append(detalle)
             else:
-                detalle = self._create_detalle_generico_nota_credito_2025()
+                detalle = self._create_detalle_generico_nota_credito()
                 detalles.append(detalle)
             
             # Información adicional
-            info_adicional = self._create_info_adicional_2025()
-            if self._has_valid_content_2025(info_adicional):
+            info_adicional = self._create_info_adicional()
+            if self._has_valid_content(info_adicional):
                 nota_credito.append(info_adicional)
             
-            xml_str = self._prettify_xml_2025(nota_credito)
-            self._validate_xml_structure_2025(xml_str)
+            xml_str = self._prettify_xml(nota_credito)
+            self._validate_xml_structure(xml_str)
             
-            logger.info(f"XML NotaCredito v2.1.0 generado exitosamente: {len(xml_str)} caracteres")
+            logger.info(f"XML NotaCredito v{self.XML_VERSIONS['notaCredito']} generado exitosamente: {len(xml_str)} caracteres")
             return xml_str
             
         except Exception as e:
-            logger.error(f"Error generando XML NotaCredito 2025: {str(e)}")
-            raise ValueError(f"Error generando XML NotaCredito 2025: {str(e)}")
+            logger.error(f"Error generando XML NotaCredito: {str(e)}")
+            raise ValueError(f"Error generando XML NotaCredito: {str(e)}")
     
     def generate_debit_note_xml(self):
-        """Genera XML para nota de débito (mantiene v1.0.0)"""
+        """Genera XML para nota de débito v1.0.0"""
         try:
-            logger.info(f"Generando XML NotaDebito v1.0.0 para ID {self.document.id}")
+            logger.info(f"Generando XML NotaDebito v{self.XML_VERSIONS['notaDebito']} para ID {self.document.id}")
             
             nota_debito = Element('notaDebito', {
                 'id': 'comprobante',
@@ -193,46 +203,46 @@ class XMLGeneratorSRI2025:
             })
             
             # Información tributaria
-            info_tributaria = self._create_info_tributaria_2025('05')  # 05 = Nota de Débito
+            info_tributaria = self._create_info_tributaria('05')  # 05 = Nota de Débito
             nota_debito.append(info_tributaria)
             
             # Información de la nota de débito
-            info_nota_debito = self._create_info_nota_debito_2025()
+            info_nota_debito = self._create_info_nota_debito()
             nota_debito.append(info_nota_debito)
             
             # Motivos
             motivos = SubElement(nota_debito, 'motivos')
             if hasattr(self.document, 'motives') and self.document.motives.exists():
                 for motive in self.document.motives.all():
-                    motivo = self._create_motivo_nota_debito_2025(motive)
+                    motivo = self._create_motivo_nota_debito(motive)
                     motivos.append(motivo)
             elif hasattr(self.document, 'items') and self.document.items.exists():
                 for item in self.document.items.all():
-                    motivo = self._create_motivo_item_2025(item)
+                    motivo = self._create_motivo_item(item)
                     motivos.append(motivo)
             else:
-                motivo = self._create_motivo_generico_2025()
+                motivo = self._create_motivo_generico()
                 motivos.append(motivo)
             
             # Información adicional
-            info_adicional = self._create_info_adicional_2025()
-            if self._has_valid_content_2025(info_adicional):
+            info_adicional = self._create_info_adicional()
+            if self._has_valid_content(info_adicional):
                 nota_debito.append(info_adicional)
             
-            xml_str = self._prettify_xml_2025(nota_debito)
-            self._validate_xml_structure_2025(xml_str)
+            xml_str = self._prettify_xml(nota_debito)
+            self._validate_xml_structure(xml_str)
             
-            logger.info(f"XML NotaDebito v1.0.0 generado exitosamente: {len(xml_str)} caracteres")
+            logger.info(f"XML NotaDebito v{self.XML_VERSIONS['notaDebito']} generado exitosamente: {len(xml_str)} caracteres")
             return xml_str
             
         except Exception as e:
-            logger.error(f"Error generando XML NotaDebito 2025: {str(e)}")
-            raise ValueError(f"Error generando XML NotaDebito 2025: {str(e)}")
+            logger.error(f"Error generando XML NotaDebito: {str(e)}")
+            raise ValueError(f"Error generando XML NotaDebito: {str(e)}")
     
     def generate_retention_xml(self):
         """Genera XML para comprobante de retención v2.0.0"""
         try:
-            logger.info(f"Generando XML Retención v2.0.0 para ID {self.document.id}")
+            logger.info(f"Generando XML Retención v{self.XML_VERSIONS['comprobanteRetencion']} para ID {self.document.id}")
             
             comp_retencion = Element('comprobanteRetencion', {
                 'id': 'comprobante',
@@ -240,42 +250,42 @@ class XMLGeneratorSRI2025:
             })
             
             # Información tributaria
-            info_tributaria = self._create_info_tributaria_2025('07')  # 07 = Retención
+            info_tributaria = self._create_info_tributaria('07')  # 07 = Retención
             comp_retencion.append(info_tributaria)
             
             # Información de retención
-            info_comp_retencion = self._create_info_comp_retencion_2025()
+            info_comp_retencion = self._create_info_comp_retencion()
             comp_retencion.append(info_comp_retencion)
             
             # Impuestos (detalles de retención)
             impuestos = SubElement(comp_retencion, 'impuestos')
             if hasattr(self.document, 'details') and self.document.details.exists():
                 for detail in self.document.details.all():
-                    impuesto = self._create_impuesto_retencion_2025(detail)
+                    impuesto = self._create_impuesto_retencion(detail)
                     impuestos.append(impuesto)
             else:
-                impuesto = self._create_impuesto_retencion_generico_2025()
+                impuesto = self._create_impuesto_retencion_generico()
                 impuestos.append(impuesto)
             
             # Información adicional
-            info_adicional = self._create_info_adicional_2025()
-            if self._has_valid_content_2025(info_adicional):
+            info_adicional = self._create_info_adicional()
+            if self._has_valid_content(info_adicional):
                 comp_retencion.append(info_adicional)
             
-            xml_str = self._prettify_xml_2025(comp_retencion)
-            self._validate_xml_structure_2025(xml_str)
+            xml_str = self._prettify_xml(comp_retencion)
+            self._validate_xml_structure(xml_str)
             
-            logger.info(f"XML Retención v2.0.0 generado exitosamente: {len(xml_str)} caracteres")
+            logger.info(f"XML Retención v{self.XML_VERSIONS['comprobanteRetencion']} generado exitosamente: {len(xml_str)} caracteres")
             return xml_str
             
         except Exception as e:
-            logger.error(f"Error generando XML Retención 2025: {str(e)}")
-            raise ValueError(f"Error generando XML Retención 2025: {str(e)}")
+            logger.error(f"Error generando XML Retención: {str(e)}")
+            raise ValueError(f"Error generando XML Retención: {str(e)}")
     
     def generate_purchase_settlement_xml(self):
-        """Genera XML para liquidación de compra v2.1.0 actualizada"""
+        """Genera XML para liquidación de compra comercial normal v1.1.0"""
         try:
-            logger.info(f"Generando XML LiquidacionCompra v2.1.0 para ID {self.document.id}")
+            logger.info(f"Generando XML LiquidacionCompra v{self.XML_VERSIONS['liquidacionCompra']} para ID {self.document.id}")
             
             liquidacion_compra = Element('liquidacionCompra', {
                 'id': 'comprobante',
@@ -283,42 +293,42 @@ class XMLGeneratorSRI2025:
             })
             
             # Información tributaria
-            info_tributaria = self._create_info_tributaria_2025('03')  # 03 = Liquidación de compra
+            info_tributaria = self._create_info_tributaria('03')  # 03 = Liquidación de compra
             liquidacion_compra.append(info_tributaria)
             
             # Información de liquidación
-            info_liquidacion_compra = self._create_info_liquidacion_compra_2025()
+            info_liquidacion_compra = self._create_info_liquidacion_compra()
             liquidacion_compra.append(info_liquidacion_compra)
             
             # Detalles
             detalles = SubElement(liquidacion_compra, 'detalles')
             if hasattr(self.document, 'items') and self.document.items.exists():
                 for item in self.document.items.all():
-                    detalle = self._create_detalle_liquidacion_2025(item)
+                    detalle = self._create_detalle_liquidacion(item)
                     detalles.append(detalle)
             else:
-                detalle = self._create_detalle_generico_2025()
+                detalle = self._create_detalle_generico()
                 detalles.append(detalle)
             
             # Información adicional
-            info_adicional = self._create_info_adicional_2025()
-            if self._has_valid_content_2025(info_adicional):
+            info_adicional = self._create_info_adicional()
+            if self._has_valid_content(info_adicional):
                 liquidacion_compra.append(info_adicional)
             
-            xml_str = self._prettify_xml_2025(liquidacion_compra)
-            self._validate_xml_structure_2025(xml_str)
+            xml_str = self._prettify_xml(liquidacion_compra)
+            self._validate_xml_structure(xml_str)
             
-            logger.info(f"XML LiquidacionCompra v2.1.0 generado exitosamente: {len(xml_str)} caracteres")
+            logger.info(f"XML LiquidacionCompra v{self.XML_VERSIONS['liquidacionCompra']} generado exitosamente: {len(xml_str)} caracteres")
             return xml_str
             
         except Exception as e:
-            logger.error(f"Error generando XML LiquidacionCompra 2025: {str(e)}")
-            raise ValueError(f"Error generando XML LiquidacionCompra 2025: {str(e)}")
+            logger.error(f"Error generando XML LiquidacionCompra: {str(e)}")
+            raise ValueError(f"Error generando XML LiquidacionCompra: {str(e)}")
     
-    # ========== VALIDACIONES ACTUALIZADAS 2025 ==========
+    # ========== VALIDACIONES ==========
     
-    def _validate_xml_structure_2025(self, xml_str):
-        """Validaciones XML según Ficha Técnica v2.31 (abril 2025)"""
+    def _validate_xml_structure(self, xml_str):
+        """Validaciones XML según Ficha Técnica v2.32 (noviembre 2025)"""
         try:
             # 1. Validar campos vacíos críticos
             problematic_patterns = [
@@ -332,18 +342,18 @@ class XMLGeneratorSRI2025:
             
             for pattern in problematic_patterns:
                 if pattern in xml_str:
-                    raise ValueError(f"ERROR 2025: Elemento vacío detectado: {pattern}")
+                    raise ValueError(f"ERROR: Elemento vacío detectado: {pattern}")
             
             # 2. Validar elementos esenciales obligatorios
-            essential_elements_2025 = [
+            essential_elements = [
                 '<ambiente>', '<ruc>', '<claveAcceso>', 
                 '<totalSinImpuestos>', '<importeTotal>',
                 '<tipoEmision>', '<codDoc>'
             ]
             
-            for element in essential_elements_2025:
+            for element in essential_elements:
                 if element not in xml_str:
-                    raise ValueError(f"ERROR 2025: Elemento esencial faltante: {element}")
+                    raise ValueError(f"ERROR: Elemento esencial faltante: {element}")
             
             # 3. Validar formato de decimales (solo advertencia, no error)
             import re
@@ -356,9 +366,9 @@ class XMLGeneratorSRI2025:
             for pattern in decimal_patterns:
                 matches = re.findall(pattern, xml_str)
                 if matches:
-                    logger.warning(f"ADVERTENCIA 2025: Valores decimales con más de 2 decimales: {matches}")
+                    logger.warning(f"ADVERTENCIA: Valores decimales con más de 2 decimales: {matches}")
             
-            # 4. Validar longitud de campos según Ficha Técnica 2025
+            # 4. Validar longitud de campos según Ficha Técnica
             field_limits = {
                 'razonSocial': 300,
                 'descripcion': 300,
@@ -371,28 +381,28 @@ class XMLGeneratorSRI2025:
                 matches = re.findall(pattern, xml_str)
                 for match in matches:
                     if len(match) > limit:
-                        raise ValueError(f"ERROR 2025: Campo {field} excede límite de {limit} caracteres")
+                        raise ValueError(f"ERROR: Campo {field} excede límite de {limit} caracteres")
             
-            # 5. Validar estructura de versión según tipo de documento
-            version_patterns = {
-                'factura.*version="2.1.0"': 'factura',
-                'notaCredito.*version="2.1.0"': 'notaCredito',
-                'liquidacionCompra.*version="2.1.0"': 'liquidacionCompra'
+            # 5. Verificar que la versión sea correcta (1.1.0 para facturas normales)
+            version_checks = {
+                'factura': '1.1.0',
+                'notaCredito': '1.1.0',
+                'liquidacionCompra': '1.1.0'
             }
             
-            for pattern, doc_type in version_patterns.items():
+            for doc_type, expected_version in version_checks.items():
                 if doc_type in xml_str.lower():
-                    if not re.search(pattern, xml_str):
-                        logger.warning(f"ADVERTENCIA 2025: Versión XML podría no ser la más actual para {doc_type}")
+                    if f'version="{expected_version}"' not in xml_str:
+                        logger.warning(f"ADVERTENCIA: Versión XML no es {expected_version} para {doc_type}")
             
-            logger.info("Validación XML 2025 completada exitosamente")
+            logger.info("Validación XML completada exitosamente")
             
         except Exception as e:
-            logger.error(f"Error en validación XML 2025: {str(e)}")
+            logger.error(f"Error en validación XML: {str(e)}")
             raise
     
-    def _has_valid_content_2025(self, element):
-        """Verificación mejorada de contenido válido para 2025"""
+    def _has_valid_content(self, element):
+        """Verificación de contenido válido"""
         if element is None:
             return False
         
@@ -411,10 +421,10 @@ class XMLGeneratorSRI2025:
         
         return valid_children > 0
     
-    # ========== INFORMACIÓN TRIBUTARIA ACTUALIZADA 2025 ==========
+    # ========== INFORMACIÓN TRIBUTARIA ==========
     
-    def _create_info_tributaria_2025(self, cod_doc):
-        """Información tributaria actualizada según Ficha Técnica v2.31"""
+    def _create_info_tributaria(self, cod_doc):
+        """Información tributaria según Ficha Técnica v2.32"""
         info_tributaria = Element('infoTributaria')
         
         # 1. ambiente - CRÍTICO: Validar configuración
@@ -433,7 +443,7 @@ class XMLGeneratorSRI2025:
         
         # 3. razonSocial - Validación estricta longitud
         razon_social = SubElement(info_tributaria, 'razonSocial')
-        business_name = self.company.business_name.strip()[:300]  # Límite 2025
+        business_name = self.company.business_name.strip()[:300]
         razon_social.text = business_name
         
         # 4. nombreComercial - Opcional pero validado
@@ -443,26 +453,26 @@ class XMLGeneratorSRI2025:
             nombre_comercial = SubElement(info_tributaria, 'nombreComercial')
             nombre_comercial.text = self.company.trade_name.strip()[:300]
         
-        # 5. ruc - Validación de formato actualizada
+        # 5. ruc - Validación de formato
         ruc = SubElement(info_tributaria, 'ruc')
         ruc_value = self.company.ruc.strip()
         # Validar formato RUC ecuatoriano (13 dígitos)
         if not ruc_value.isdigit() or len(ruc_value) != 13:
-            logger.warning(f"ADVERTENCIA 2025: RUC {ruc_value} podría tener formato incorrecto")
+            logger.warning(f"ADVERTENCIA: RUC {ruc_value} podría tener formato incorrecto")
         ruc.text = ruc_value
         
         # 6. claveAcceso - Validación 49 dígitos
         clave_acceso = SubElement(info_tributaria, 'claveAcceso')
         access_key = self.document.access_key.strip()
         if len(access_key) != 49 or not access_key.isdigit():
-            raise ValueError(f"ERROR 2025: claveAcceso debe tener exactamente 49 dígitos: {access_key}")
+            raise ValueError(f"ERROR: claveAcceso debe tener exactamente 49 dígitos: {access_key}")
         clave_acceso.text = access_key
         
-        # 7. codDoc - Validación códigos actualizados 2025
+        # 7. codDoc - Validación códigos
         cod_documento = SubElement(info_tributaria, 'codDoc')
-        valid_codes_2025 = ['01', '03', '04', '05', '06', '07']
-        if cod_doc not in valid_codes_2025:
-            logger.warning(f"ADVERTENCIA 2025: Código documento {cod_doc} podría no ser válido")
+        valid_codes = ['01', '03', '04', '05', '06', '07']
+        if cod_doc not in valid_codes:
+            logger.warning(f"ADVERTENCIA: Código documento {cod_doc} podría no ser válido")
         cod_documento.text = cod_doc
         
         # 8. estab - Validación 3 dígitos
@@ -480,7 +490,7 @@ class XMLGeneratorSRI2025:
         seq_number = self.document.document_number.split('-')[-1].zfill(9)
         secuencial.text = seq_number
         
-        # 11. dirMatriz - Validación longitud actualizada
+        # 11. dirMatriz - Validación longitud
         dir_matriz = SubElement(info_tributaria, 'dirMatriz')
         address = (self.company.address[:300] if self.company.address 
                   else 'Dirección no especificada')
@@ -488,10 +498,10 @@ class XMLGeneratorSRI2025:
         
         return info_tributaria
     
-    # ========== INFORMACIÓN DE FACTURA ACTUALIZADA 2025 ==========
+    # ========== INFORMACIÓN DE FACTURA ==========
     
-    def _create_info_factura_2025(self):
-        """Información de factura actualizada con nuevos campos 2025"""
+    def _create_info_factura(self):
+        """Información de factura con campos actualizados 2025"""
         info_factura = Element('infoFactura')
         
         # 1. fechaEmision
@@ -503,7 +513,7 @@ class XMLGeneratorSRI2025:
         dir_establecimiento.text = (self.company.address[:300] if self.company.address 
                                    else 'Dirección no especificada')
         
-        # 3. contribuyenteEspecial - Campo actualizado 2025
+        # 3. contribuyenteEspecial - Campo opcional
         if (hasattr(self.sri_config, 'special_taxpayer') and 
             self.sri_config.special_taxpayer and 
             hasattr(self.sri_config, 'special_taxpayer_number') and 
@@ -517,23 +527,23 @@ class XMLGeneratorSRI2025:
         obligado_contabilidad = SubElement(info_factura, 'obligadoContabilidad')
         obligado_contabilidad.text = 'SI' if self.sri_config.accounting_required else 'NO'
         
-        # 5-7. Información del comprador - Validaciones estrictas 2025
+        # 5-7. Información del comprador - Validaciones estrictas
         tipo_identificacion_comprador = SubElement(info_factura, 'tipoIdentificacionComprador')
         customer_id_type = getattr(self.document, 'customer_identification_type', '05')
         if not customer_id_type or not str(customer_id_type).strip():
-            raise ValueError("ERROR 2025: customer_identification_type es obligatorio")
+            raise ValueError("ERROR: customer_identification_type es obligatorio")
         tipo_identificacion_comprador.text = str(customer_id_type)
         
         razon_social_comprador = SubElement(info_factura, 'razonSocialComprador')
         customer_name = getattr(self.document, 'customer_name', '')
         if not customer_name or not str(customer_name).strip():
-            raise ValueError("ERROR 2025: customer_name es obligatorio")
+            raise ValueError("ERROR: customer_name es obligatorio")
         razon_social_comprador.text = str(customer_name).strip()[:300]
         
         identificacion_comprador = SubElement(info_factura, 'identificacionComprador')
         customer_id = getattr(self.document, 'customer_identification', '')
         if not customer_id or not str(customer_id).strip():
-            raise ValueError("ERROR 2025: customer_identification es obligatorio")
+            raise ValueError("ERROR: customer_identification es obligatorio")
         identificacion_comprador.text = str(customer_id).strip()
         
         # 8. direccionComprador - Opcional pero validado
@@ -545,17 +555,17 @@ class XMLGeneratorSRI2025:
         
         # 9. totalSinImpuestos - Formato decimal estricto
         total_sin_impuestos = SubElement(info_factura, 'totalSinImpuestos')
-        subtotal_value = self._format_decimal_2025(self.document.subtotal_without_tax)
+        subtotal_value = self._format_decimal(self.document.subtotal_without_tax)
         total_sin_impuestos.text = subtotal_value
         
         # 10. totalDescuento
         total_descuento = SubElement(info_factura, 'totalDescuento')
-        discount_value = self._format_decimal_2025(getattr(self.document, 'total_discount', 0))
+        discount_value = self._format_decimal(getattr(self.document, 'total_discount', 0))
         total_descuento.text = discount_value
         
-        # 11. totalConImpuestos - Estructura actualizada 2025
+        # 11. totalConImpuestos - Estructura con impuestos
         total_con_impuestos = SubElement(info_factura, 'totalConImpuestos')
-        taxes_summary = self._get_taxes_summary_2025()
+        taxes_summary = self._get_taxes_summary()
         
         for tax_data in taxes_summary.values():
             total_impuesto = SubElement(total_con_impuestos, 'totalImpuesto')
@@ -563,14 +573,14 @@ class XMLGeneratorSRI2025:
             SubElement(total_impuesto, 'codigo').text = str(tax_data['codigo'])
             SubElement(total_impuesto, 'codigoPorcentaje').text = str(tax_data['codigoPorcentaje'])
             
-            # Validar descuentoAdicional si existe (nuevo campo 2025)
+            # descuentoAdicional si existe
             if tax_data.get('descuentoAdicional', 0) > 0:
                 descuento_adicional = SubElement(total_impuesto, 'descuentoAdicional')
-                descuento_adicional.text = self._format_decimal_2025(tax_data['descuentoAdicional'])
+                descuento_adicional.text = self._format_decimal(tax_data['descuentoAdicional'])
             
-            SubElement(total_impuesto, 'baseImponible').text = self._format_decimal_2025(tax_data['base'])
-            SubElement(total_impuesto, 'tarifa').text = self._format_decimal_2025(tax_data['tarifa'])
-            SubElement(total_impuesto, 'valor').text = self._format_decimal_2025(tax_data['valor'])
+            SubElement(total_impuesto, 'baseImponible').text = self._format_decimal(tax_data['base'])
+            SubElement(total_impuesto, 'tarifa').text = self._format_decimal(tax_data['tarifa'])
+            SubElement(total_impuesto, 'valor').text = self._format_decimal(tax_data['valor'])
         
         # 12. propina
         propina = SubElement(info_factura, 'propina')
@@ -578,35 +588,35 @@ class XMLGeneratorSRI2025:
         
         # 13. importeTotal
         importe_total = SubElement(info_factura, 'importeTotal')
-        total_value = self._format_decimal_2025(self.document.total_amount)
+        total_value = self._format_decimal(self.document.total_amount)
         importe_total.text = total_value
         
         # 14. moneda
         moneda = SubElement(info_factura, 'moneda')
         moneda.text = getattr(self.document, 'currency', 'DOLAR')
         
-        # 15. pagos - NUEVO CAMPO OBLIGATORIO 2025
+        # 15. pagos - CAMPO OBLIGATORIO (según actualizaciones 2025)
         if hasattr(self.document, 'payment_methods') and self.document.payment_methods.exists():
             pagos = SubElement(info_factura, 'pagos')
             for payment in self.document.payment_methods.all():
                 pago = SubElement(pagos, 'pago')
                 SubElement(pago, 'formaPago').text = str(getattr(payment, 'payment_method_code', '01'))
-                SubElement(pago, 'total').text = self._format_decimal_2025(getattr(payment, 'amount', 0))
+                SubElement(pago, 'total').text = self._format_decimal(getattr(payment, 'amount', 0))
                 
-                # plazo - nuevo campo para pagos a crédito
+                # plazo - campo para pagos a crédito
                 if hasattr(payment, 'payment_term') and payment.payment_term:
                     SubElement(pago, 'plazo').text = str(payment.payment_term)
                 
-                # unidadTiempo - nuevo campo
+                # unidadTiempo - campo complementario
                 if hasattr(payment, 'time_unit') and payment.time_unit:
                     SubElement(pago, 'unidadTiempo').text = str(payment.time_unit)
         
         return info_factura
     
-    # ========== DETALLES ACTUALIZADOS 2025 ==========
+    # ========== DETALLES DE FACTURA ==========
     
-    def _create_detalle_factura_2025(self, item):
-        """Detalle de factura con validaciones 2025"""
+    def _create_detalle_factura(self, item):
+        """Detalle de factura con validaciones"""
         detalle = Element('detalle')
         
         # codigoPrincipal - Límite 25 caracteres
@@ -626,27 +636,27 @@ class XMLGeneratorSRI2025:
         desc_text = str(getattr(item, 'description', 'Producto'))[:300]
         descripcion.text = desc_text
         
-        # cantidad - Formato decimal estricto (máximo 6 decimales según 2025)
+        # cantidad - Formato decimal (máximo 6 decimales)
         cantidad = SubElement(detalle, 'cantidad')
-        qty_value = self._format_decimal_2025(getattr(item, 'quantity', 1), max_decimals=6)
+        qty_value = self._format_decimal(getattr(item, 'quantity', 1), max_decimals=6)
         cantidad.text = qty_value
         
         # precioUnitario - Formato decimal estricto
         precio_unitario = SubElement(detalle, 'precioUnitario')
-        price_value = self._format_decimal_2025(getattr(item, 'unit_price', 0))
+        price_value = self._format_decimal(getattr(item, 'unit_price', 0))
         precio_unitario.text = price_value
         
         # descuento
         descuento = SubElement(detalle, 'descuento')
-        discount_value = self._format_decimal_2025(getattr(item, 'discount', 0))
+        discount_value = self._format_decimal(getattr(item, 'discount', 0))
         descuento.text = discount_value
         
         # precioTotalSinImpuesto
         precio_total_sin_impuesto = SubElement(detalle, 'precioTotalSinImpuesto')
-        subtotal_value = self._format_decimal_2025(getattr(item, 'subtotal', 0))
+        subtotal_value = self._format_decimal(getattr(item, 'subtotal', 0))
         precio_total_sin_impuesto.text = subtotal_value
         
-        # detallesAdicionales - NUEVO CAMPO 2025 (opcional)
+        # detallesAdicionales - Campo opcional
         if (hasattr(item, 'additional_details') and 
             item.additional_details and 
             isinstance(item.additional_details, dict)):
@@ -658,49 +668,49 @@ class XMLGeneratorSRI2025:
                         'valor': str(value).strip()[:300]
                     })
         
-        # impuestos - Estructura actualizada
+        # impuestos - Estructura de impuestos
         impuestos = SubElement(detalle, 'impuestos')
         if hasattr(item, 'taxes') and item.taxes.exists():
             for tax in item.taxes.all():
-                impuesto = self._create_tax_detail_2025(tax, item)
+                impuesto = self._create_tax_detail(tax, item)
                 impuestos.append(impuesto)
         else:
-            # Impuesto por defecto actualizado para 2025
-            impuesto = self._create_default_tax_2025(item)
+            # Impuesto por defecto
+            impuesto = self._create_default_tax(item)
             impuestos.append(impuesto)
         
         return detalle
     
-    def _create_tax_detail_2025(self, tax, item):
-        """Crea detalle de impuesto actualizado para 2025"""
+    def _create_tax_detail(self, tax, item):
+        """Crea detalle de impuesto"""
         impuesto = Element('impuesto')
         
         SubElement(impuesto, 'codigo').text = str(getattr(tax, 'tax_code', '2'))
         SubElement(impuesto, 'codigoPorcentaje').text = str(getattr(tax, 'percentage_code', '4'))
-        SubElement(impuesto, 'tarifa').text = self._format_decimal_2025(getattr(tax, 'rate', 15))
-        SubElement(impuesto, 'baseImponible').text = self._format_decimal_2025(
+        SubElement(impuesto, 'tarifa').text = self._format_decimal(getattr(tax, 'rate', 15))
+        SubElement(impuesto, 'baseImponible').text = self._format_decimal(
             getattr(tax, 'taxable_base', getattr(item, 'subtotal', 0))
         )
-        SubElement(impuesto, 'valor').text = self._format_decimal_2025(getattr(tax, 'tax_amount', 0))
+        SubElement(impuesto, 'valor').text = self._format_decimal(getattr(tax, 'tax_amount', 0))
         
         return impuesto
     
-    def _create_default_tax_2025(self, item):
-        """Crea impuesto por defecto actualizado (IVA 15% - código 4)"""
+    def _create_default_tax(self, item):
+        """Crea impuesto por defecto (IVA 15% - código 4)"""
         impuesto = Element('impuesto')
         
         SubElement(impuesto, 'codigo').text = '2'  # IVA
-        SubElement(impuesto, 'codigoPorcentaje').text = '4'  # 15% (código actualizado 2025)
+        SubElement(impuesto, 'codigoPorcentaje').text = '4'  # 15% (código actualizado)
         SubElement(impuesto, 'tarifa').text = '15.00'
         
         subtotal = float(getattr(item, 'subtotal', 0))
-        SubElement(impuesto, 'baseImponible').text = self._format_decimal_2025(subtotal)
-        SubElement(impuesto, 'valor').text = self._format_decimal_2025(subtotal * 0.15)
+        SubElement(impuesto, 'baseImponible').text = self._format_decimal(subtotal)
+        SubElement(impuesto, 'valor').text = self._format_decimal(subtotal * 0.15)
         
         return impuesto
     
-    def _create_detalle_generico_2025(self):
-        """Detalle genérico actualizado para 2025"""
+    def _create_detalle_generico(self):
+        """Detalle genérico cuando no hay items"""
         detalle = Element('detalle')
         
         SubElement(detalle, 'codigoPrincipal').text = 'PROD001'
@@ -708,9 +718,9 @@ class XMLGeneratorSRI2025:
         SubElement(detalle, 'cantidad').text = '1.00'
         
         subtotal = float(self.document.subtotal_without_tax)
-        SubElement(detalle, 'precioUnitario').text = self._format_decimal_2025(subtotal)
+        SubElement(detalle, 'precioUnitario').text = self._format_decimal(subtotal)
         SubElement(detalle, 'descuento').text = '0.00'
-        SubElement(detalle, 'precioTotalSinImpuesto').text = self._format_decimal_2025(subtotal)
+        SubElement(detalle, 'precioTotalSinImpuesto').text = self._format_decimal(subtotal)
         
         # Impuestos por defecto
         impuestos = SubElement(detalle, 'impuestos')
@@ -718,16 +728,16 @@ class XMLGeneratorSRI2025:
         SubElement(impuesto, 'codigo').text = '2'
         SubElement(impuesto, 'codigoPorcentaje').text = '4'
         SubElement(impuesto, 'tarifa').text = '15.00'
-        SubElement(impuesto, 'baseImponible').text = self._format_decimal_2025(subtotal)
-        SubElement(impuesto, 'valor').text = self._format_decimal_2025(float(self.document.total_tax))
+        SubElement(impuesto, 'baseImponible').text = self._format_decimal(subtotal)
+        SubElement(impuesto, 'valor').text = self._format_decimal(float(self.document.total_tax))
         impuestos.append(impuesto)
         
         return detalle
     
-    # ========== MÉTODOS DE UTILIDAD ACTUALIZADOS 2025 ==========
+    # ========== MÉTODOS DE UTILIDAD ==========
     
-    def _format_decimal_2025(self, value, max_decimals=2):
-        """Formatea decimales según especificaciones 2025 - VERSIÓN SIMPLIFICADA"""
+    def _format_decimal(self, value, max_decimals=2):
+        """Formatea decimales según especificaciones SRI"""
         try:
             if value is None:
                 return "0.00"
@@ -755,8 +765,8 @@ class XMLGeneratorSRI2025:
             logger.warning(f"Error formateando decimal {value}: {e}")
             return "0.00" if max_decimals == 2 else "0.00"
     
-    def _get_taxes_summary_2025(self):
-        """Resumen de impuestos actualizado para 2025"""
+    def _get_taxes_summary(self):
+        """Resumen de impuestos"""
         taxes_summary = {}
         
         if hasattr(self.document, 'taxes') and self.document.taxes.exists():
@@ -769,7 +779,7 @@ class XMLGeneratorSRI2025:
                         'codigo': str(tax.tax_code),
                         'codigoPorcentaje': str(tax.percentage_code),
                         'tarifa': Decimal(str(tax.rate)),
-                        'descuentoAdicional': Decimal('0')  # Nuevo campo 2025
+                        'descuentoAdicional': Decimal('0')
                     }
                 
                 taxes_summary[key]['base'] += Decimal(str(tax.taxable_base))
@@ -779,7 +789,7 @@ class XMLGeneratorSRI2025:
                 if hasattr(tax, 'additional_discount') and tax.additional_discount:
                     taxes_summary[key]['descuentoAdicional'] += Decimal(str(tax.additional_discount))
         else:
-            # Impuesto por defecto actualizado
+            # Impuesto por defecto
             taxes_summary[('2', '4')] = {
                 'base': Decimal(str(self.document.subtotal_without_tax)),
                 'valor': Decimal(str(self.document.total_tax)),
@@ -791,8 +801,8 @@ class XMLGeneratorSRI2025:
         
         return taxes_summary
     
-    def _create_info_adicional_2025(self):
-        """Información adicional con validaciones estrictas 2025"""
+    def _create_info_adicional(self):
+        """Información adicional con validaciones estrictas"""
         info_adicional = Element('infoAdicional')
         added_fields = 0
         
@@ -807,7 +817,7 @@ class XMLGeneratorSRI2025:
                     len(str(key).strip()) > 0 and 
                     len(str(value).strip()) > 0):
                     
-                    # Validar longitud según especificaciones 2025
+                    # Validar longitud según especificaciones
                     key_clean = str(key).strip()[:50]
                     value_clean = str(value).strip()[:300]
                     
@@ -843,7 +853,7 @@ class XMLGeneratorSRI2025:
                 telefono.text = str(self.document.customer_phone).strip()[:50]
                 added_fields += 1
         
-        # Observaciones (nuevo campo común 2025)
+        # Observaciones
         if (hasattr(self.document, 'observations') and 
             self.document.observations and 
             str(self.document.observations).strip()):
@@ -854,11 +864,11 @@ class XMLGeneratorSRI2025:
             observaciones.text = str(self.document.observations).strip()[:300]
             added_fields += 1
         
-        logger.info(f"Campos adicionales agregados (2025): {added_fields}")
+        logger.info(f"Campos adicionales agregados: {added_fields}")
         return info_adicional
     
-    def _prettify_xml_2025(self, elem):
-        """Formateo XML optimizado para 2025"""
+    def _prettify_xml(self, elem):
+        """Formateo XML optimizado"""
         try:
             # Convertir a bytes con codificación UTF-8
             rough_string = tostring(elem, encoding='utf-8')
@@ -872,7 +882,7 @@ class XMLGeneratorSRI2025:
             # Filtrar líneas vacías
             filtered_lines = [line for line in xml_lines if line.strip()]
             
-            # Asegurar declaración XML correcta para 2025
+            # Asegurar declaración XML correcta
             if filtered_lines and filtered_lines[0].startswith('<?xml'):
                 final_xml = '\n'.join(filtered_lines)
             else:
@@ -885,15 +895,15 @@ class XMLGeneratorSRI2025:
             return final_xml
             
         except Exception as e:
-            logger.error(f"Error formateando XML 2025: {str(e)}")
+            logger.error(f"Error formateando XML: {str(e)}")
             # Fallback a XML básico sin formato
             xml_str = tostring(elem, encoding='utf-8').decode('utf-8')
             return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
     
-    # ========== MÉTODOS ADICIONALES PARA OTROS TIPOS DE DOCUMENTO ==========
+    # ========== MÉTODOS PARA OTROS TIPOS DE DOCUMENTO ==========
     
-    def _create_info_nota_credito_2025(self):
-        """Información de nota de crédito actualizada v2.1.0"""
+    def _create_info_nota_credito(self):
+        """Información de nota de crédito v1.1.0"""
         info_nota_credito = Element('infoNotaCredito')
         
         # Campos básicos
@@ -938,30 +948,30 @@ class XMLGeneratorSRI2025:
             )
         
         # Totales
-        SubElement(info_nota_credito, 'totalSinImpuestos').text = self._format_decimal_2025(
+        SubElement(info_nota_credito, 'totalSinImpuestos').text = self._format_decimal(
             self.document.subtotal_without_tax
         )
         
         # Impuestos
         total_con_impuestos = SubElement(info_nota_credito, 'totalConImpuestos')
-        taxes_summary = self._get_taxes_summary_2025()
+        taxes_summary = self._get_taxes_summary()
         for tax_data in taxes_summary.values():
             total_impuesto = SubElement(total_con_impuestos, 'totalImpuesto')
             SubElement(total_impuesto, 'codigo').text = str(tax_data['codigo'])
             SubElement(total_impuesto, 'codigoPorcentaje').text = str(tax_data['codigoPorcentaje'])
-            SubElement(total_impuesto, 'baseImponible').text = self._format_decimal_2025(tax_data['base'])
-            SubElement(total_impuesto, 'tarifa').text = self._format_decimal_2025(tax_data['tarifa'])
-            SubElement(total_impuesto, 'valor').text = self._format_decimal_2025(tax_data['valor'])
+            SubElement(total_impuesto, 'baseImponible').text = self._format_decimal(tax_data['base'])
+            SubElement(total_impuesto, 'tarifa').text = self._format_decimal(tax_data['tarifa'])
+            SubElement(total_impuesto, 'valor').text = self._format_decimal(tax_data['valor'])
         
-        SubElement(info_nota_credito, 'valorModificacion').text = self._format_decimal_2025(
+        SubElement(info_nota_credito, 'valorModificacion').text = self._format_decimal(
             self.document.total_amount
         )
         SubElement(info_nota_credito, 'moneda').text = "DOLAR"
         
         return info_nota_credito
     
-    def _create_detalle_nota_credito_2025(self, item):
-        """Detalle de nota de crédito v2.1.0"""
+    def _create_detalle_nota_credito(self, item):
+        """Detalle de nota de crédito v1.1.0"""
         detalle = Element('detalle')
         
         SubElement(detalle, 'codigoPrincipal').text = str(getattr(item, 'main_code', 'NOTAC001'))[:25]
@@ -970,87 +980,222 @@ class XMLGeneratorSRI2025:
             SubElement(detalle, 'codigoAuxiliar').text = str(item.auxiliary_code)[:25]
         
         SubElement(detalle, 'descripcion').text = str(getattr(item, 'description', 'Ítem de nota de crédito'))[:300]
-        SubElement(detalle, 'cantidad').text = self._format_decimal_2025(getattr(item, 'quantity', 1), max_decimals=6)
-        SubElement(detalle, 'precioUnitario').text = self._format_decimal_2025(getattr(item, 'unit_price', 0))
-        SubElement(detalle, 'descuento').text = self._format_decimal_2025(getattr(item, 'discount', 0))
-        SubElement(detalle, 'precioTotalSinImpuesto').text = self._format_decimal_2025(getattr(item, 'subtotal', 0))
+        SubElement(detalle, 'cantidad').text = self._format_decimal(getattr(item, 'quantity', 1), max_decimals=6)
+        SubElement(detalle, 'precioUnitario').text = self._format_decimal(getattr(item, 'unit_price', 0))
+        SubElement(detalle, 'descuento').text = self._format_decimal(getattr(item, 'discount', 0))
+        SubElement(detalle, 'precioTotalSinImpuesto').text = self._format_decimal(getattr(item, 'subtotal', 0))
         
         return detalle
     
-    def _create_detalle_generico_nota_credito_2025(self):
-        """Detalle genérico de nota de crédito v2.1.0"""
+    def _create_detalle_generico_nota_credito(self):
+        """Detalle genérico de nota de crédito v1.1.0"""
         detalle = Element('detalle')
         
         SubElement(detalle, 'codigoPrincipal').text = 'NOTAC001'
         SubElement(detalle, 'descripcion').text = str(getattr(self.document, 'reason_description', 'Nota de crédito'))
         SubElement(detalle, 'cantidad').text = '1.00'
-        SubElement(detalle, 'precioUnitario').text = self._format_decimal_2025(self.document.subtotal_without_tax)
+        SubElement(detalle, 'precioUnitario').text = self._format_decimal(self.document.subtotal_without_tax)
         SubElement(detalle, 'descuento').text = '0.00'
-        SubElement(detalle, 'precioTotalSinImpuesto').text = self._format_decimal_2025(self.document.subtotal_without_tax)
+        SubElement(detalle, 'precioTotalSinImpuesto').text = self._format_decimal(self.document.subtotal_without_tax)
         
         return detalle
     
-    # Agregar métodos similares para los otros tipos de documentos...
-    # (nota de débito, retención, liquidación de compra)
-    # Por brevedad, incluyo solo las estructuras principales
+    def _create_info_nota_debito(self):
+        """Información de nota de débito v1.0.0"""
+        info_nota_debito = Element('infoNotaDebito')
+        
+        SubElement(info_nota_debito, 'fechaEmision').text = self.document.issue_date.strftime('%d/%m/%Y')
+        SubElement(info_nota_debito, 'dirEstablecimiento').text = (
+            self.company.address[:300] if self.company.address else 'Dirección no especificada'
+        )
+        
+        if (hasattr(self.sri_config, 'special_taxpayer') and self.sri_config.special_taxpayer):
+            SubElement(info_nota_debito, 'contribuyenteEspecial').text = str(self.sri_config.special_taxpayer_number)
+        
+        SubElement(info_nota_debito, 'obligadoContabilidad').text = 'SI' if self.sri_config.accounting_required else 'NO'
+        
+        SubElement(info_nota_debito, 'tipoIdentificacionComprador').text = str(
+            getattr(self.document, 'customer_identification_type', '05')
+        )
+        SubElement(info_nota_debito, 'razonSocialComprador').text = str(
+            getattr(self.document, 'customer_name', 'Cliente')
+        )[:300]
+        SubElement(info_nota_debito, 'identificacionComprador').text = str(
+            getattr(self.document, 'customer_identification', '9999999999999')
+        )
+        
+        if hasattr(self.document, 'original_document') and self.document.original_document:
+            SubElement(info_nota_debito, 'codDocModificado').text = '01'
+            SubElement(info_nota_debito, 'numDocModificado').text = self.document.original_document.document_number
+            SubElement(info_nota_debito, 'fechaEmisionDocSustento').text = (
+                self.document.original_document.issue_date.strftime('%d/%m/%Y')
+            )
+        
+        SubElement(info_nota_debito, 'totalSinImpuestos').text = self._format_decimal(self.document.subtotal_without_tax)
+        
+        # Impuestos
+        impuestos = SubElement(info_nota_debito, 'impuestos')
+        taxes_summary = self._get_taxes_summary()
+        for tax_data in taxes_summary.values():
+            impuesto = SubElement(impuestos, 'impuesto')
+            SubElement(impuesto, 'codigo').text = str(tax_data['codigo'])
+            SubElement(impuesto, 'codigoPorcentaje').text = str(tax_data['codigoPorcentaje'])
+            SubElement(impuesto, 'baseImponible').text = self._format_decimal(tax_data['base'])
+            SubElement(impuesto, 'tarifa').text = self._format_decimal(tax_data['tarifa'])
+            SubElement(impuesto, 'valor').text = self._format_decimal(tax_data['valor'])
+        
+        SubElement(info_nota_debito, 'valorTotal').text = self._format_decimal(self.document.total_amount)
+        
+        return info_nota_debito
     
-    def _create_info_nota_debito_2025(self):
-        """Información de nota de débito actualizada"""
-        # Implementación similar a nota de crédito
-        pass
+    def _create_motivo_nota_debito(self, motive):
+        """Motivo de nota de débito"""
+        motivo = Element('motivo')
+        SubElement(motivo, 'razon').text = str(getattr(motive, 'reason', 'Motivo'))[:300]
+        SubElement(motivo, 'valor').text = self._format_decimal(getattr(motive, 'amount', 0))
+        return motivo
     
-    def _create_motivo_nota_debito_2025(self, motive):
-        """Motivo de nota de débito actualizado"""
-        # Implementación actualizada
-        pass
+    def _create_motivo_item(self, item):
+        """Motivo desde item"""
+        motivo = Element('motivo')
+        SubElement(motivo, 'razon').text = str(getattr(item, 'description', 'Motivo'))[:300]
+        SubElement(motivo, 'valor').text = self._format_decimal(getattr(item, 'subtotal', 0))
+        return motivo
     
-    def _create_motivo_item_2025(self, item):
-        """Motivo desde item actualizado"""
-        # Implementación actualizada
-        pass
+    def _create_motivo_generico(self):
+        """Motivo genérico"""
+        motivo = Element('motivo')
+        SubElement(motivo, 'razon').text = 'Nota de débito'
+        SubElement(motivo, 'valor').text = self._format_decimal(self.document.total_amount)
+        return motivo
     
-    def _create_motivo_generico_2025(self):
-        """Motivo genérico actualizado"""
-        # Implementación actualizada
-        pass
+    def _create_info_comp_retencion(self):
+        """Información de retención v2.0.0"""
+        info_comp_retencion = Element('infoCompRetencion')
+        
+        SubElement(info_comp_retencion, 'fechaEmision').text = self.document.issue_date.strftime('%d/%m/%Y')
+        SubElement(info_comp_retencion, 'dirEstablecimiento').text = (
+            self.company.address[:300] if self.company.address else 'Dirección no especificada'
+        )
+        
+        if (hasattr(self.sri_config, 'special_taxpayer') and self.sri_config.special_taxpayer):
+            SubElement(info_comp_retencion, 'contribuyenteEspecial').text = str(self.sri_config.special_taxpayer_number)
+        
+        SubElement(info_comp_retencion, 'obligadoContabilidad').text = 'SI' if self.sri_config.accounting_required else 'NO'
+        
+        SubElement(info_comp_retencion, 'tipoIdentificacionSujetoRetenido').text = str(
+            getattr(self.document, 'customer_identification_type', '05')
+        )
+        SubElement(info_comp_retencion, 'razonSocialSujetoRetenido').text = str(
+            getattr(self.document, 'customer_name', 'Cliente')
+        )[:300]
+        SubElement(info_comp_retencion, 'identificacionSujetoRetenido').text = str(
+            getattr(self.document, 'customer_identification', '9999999999999')
+        )
+        
+        SubElement(info_comp_retencion, 'periodoFiscal').text = self.document.issue_date.strftime('%m/%Y')
+        
+        return info_comp_retencion
     
-    def _create_info_comp_retencion_2025(self):
-        """Información de retención actualizada"""
-        # Implementación actualizada
-        pass
+    def _create_impuesto_retencion(self, detail):
+        """Impuesto de retención"""
+        impuesto = Element('impuesto')
+        
+        SubElement(impuesto, 'codigo').text = str(getattr(detail, 'tax_code', '1'))
+        SubElement(impuesto, 'codigoRetencion').text = str(getattr(detail, 'retention_code', '332'))
+        SubElement(impuesto, 'baseImponible').text = self._format_decimal(getattr(detail, 'taxable_base', 0))
+        SubElement(impuesto, 'porcentajeRetener').text = self._format_decimal(getattr(detail, 'rate', 0))
+        SubElement(impuesto, 'valorRetenido').text = self._format_decimal(getattr(detail, 'retention_amount', 0))
+        
+        if hasattr(detail, 'modified_document') and detail.modified_document:
+            SubElement(impuesto, 'codDocSustento').text = '01'
+            SubElement(impuesto, 'numDocSustento').text = detail.modified_document.document_number
+            SubElement(impuesto, 'fechaEmisionDocSustento').text = detail.modified_document.issue_date.strftime('%d/%m/%Y')
+        
+        return impuesto
     
-    def _create_impuesto_retencion_2025(self, detail):
-        """Impuesto de retención actualizado"""
-        # Implementación actualizada
-        pass
+    def _create_impuesto_retencion_generico(self):
+        """Impuesto de retención genérico"""
+        impuesto = Element('impuesto')
+        
+        SubElement(impuesto, 'codigo').text = '1'
+        SubElement(impuesto, 'codigoRetencion').text = '332'
+        SubElement(impuesto, 'baseImponible').text = self._format_decimal(self.document.subtotal_without_tax)
+        SubElement(impuesto, 'porcentajeRetener').text = '2.00'
+        SubElement(impuesto, 'valorRetenido').text = self._format_decimal(self.document.total_amount)
+        
+        return impuesto
     
-    def _create_impuesto_retencion_generico_2025(self):
-        """Impuesto de retención genérico actualizado"""
-        # Implementación actualizada
-        pass
+    def _create_info_liquidacion_compra(self):
+        """Información de liquidación de compra v1.1.0"""
+        info_liquidacion = Element('infoLiquidacionCompra')
+        
+        SubElement(info_liquidacion, 'fechaEmision').text = self.document.issue_date.strftime('%d/%m/%Y')
+        SubElement(info_liquidacion, 'dirEstablecimiento').text = (
+            self.company.address[:300] if self.company.address else 'Dirección no especificada'
+        )
+        
+        if (hasattr(self.sri_config, 'special_taxpayer') and self.sri_config.special_taxpayer):
+            SubElement(info_liquidacion, 'contribuyenteEspecial').text = str(self.sri_config.special_taxpayer_number)
+        
+        SubElement(info_liquidacion, 'obligadoContabilidad').text = 'SI' if self.sri_config.accounting_required else 'NO'
+        
+        SubElement(info_liquidacion, 'tipoIdentificacionProveedor').text = str(
+            getattr(self.document, 'customer_identification_type', '05')
+        )
+        SubElement(info_liquidacion, 'razonSocialProveedor').text = str(
+            getattr(self.document, 'customer_name', 'Proveedor')
+        )[:300]
+        SubElement(info_liquidacion, 'identificacionProveedor').text = str(
+            getattr(self.document, 'customer_identification', '9999999999999')
+        )
+        
+        if hasattr(self.document, 'customer_address') and self.document.customer_address:
+            SubElement(info_liquidacion, 'direccionProveedor').text = str(self.document.customer_address)[:300]
+        
+        SubElement(info_liquidacion, 'totalSinImpuestos').text = self._format_decimal(self.document.subtotal_without_tax)
+        SubElement(info_liquidacion, 'totalDescuento').text = self._format_decimal(getattr(self.document, 'total_discount', 0))
+        
+        # Impuestos
+        total_con_impuestos = SubElement(info_liquidacion, 'totalConImpuestos')
+        taxes_summary = self._get_taxes_summary()
+        for tax_data in taxes_summary.values():
+            total_impuesto = SubElement(total_con_impuestos, 'totalImpuesto')
+            SubElement(total_impuesto, 'codigo').text = str(tax_data['codigo'])
+            SubElement(total_impuesto, 'codigoPorcentaje').text = str(tax_data['codigoPorcentaje'])
+            SubElement(total_impuesto, 'baseImponible').text = self._format_decimal(tax_data['base'])
+            SubElement(total_impuesto, 'tarifa').text = self._format_decimal(tax_data['tarifa'])
+            SubElement(total_impuesto, 'valor').text = self._format_decimal(tax_data['valor'])
+        
+        SubElement(info_liquidacion, 'importeTotal').text = self._format_decimal(self.document.total_amount)
+        SubElement(info_liquidacion, 'moneda').text = "DOLAR"
+        
+        # Pagos
+        if hasattr(self.document, 'payment_methods') and self.document.payment_methods.exists():
+            pagos = SubElement(info_liquidacion, 'pagos')
+            for payment in self.document.payment_methods.all():
+                pago = SubElement(pagos, 'pago')
+                SubElement(pago, 'formaPago').text = str(getattr(payment, 'payment_method_code', '01'))
+                SubElement(pago, 'total').text = self._format_decimal(getattr(payment, 'amount', 0))
+        
+        return info_liquidacion
     
-    def _create_info_liquidacion_compra_2025(self):
-        """Información de liquidación de compra v2.1.0"""
-        # Implementación actualizada
-        pass
+    def _create_detalle_liquidacion(self, item):
+        """Detalle de liquidación de compra"""
+        return self._create_detalle_factura(item)
     
-    def _create_detalle_liquidacion_2025(self, item):
-        """Detalle de liquidación actualizado"""
-        # Implementación actualizada
-        pass
+    # ========== MÉTODOS DE ARCHIVO ==========
     
-    # ========== MÉTODOS DE ARCHIVO ACTUALIZADOS ==========
-    
-    def get_xml_path_2025(self):
-        """Obtiene la ruta del archivo XML con estructura 2025"""
+    def get_xml_path(self):
+        """Obtiene la ruta del archivo XML"""
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = f"{self.document.access_key}_{timestamp}.xml"
         return os.path.join(self.xml_base_dir, filename)
     
-    def save_xml_to_file_2025(self, xml_content):
-        """Guarda XML con validaciones 2025"""
+    def save_xml_to_file(self, xml_content):
+        """Guarda XML con validaciones"""
         try:
-            xml_path = self.get_xml_path_2025()
+            xml_path = self.get_xml_path()
             
             # Escribir sin BOM usando modo binario
             with open(xml_path, 'wb') as f:
@@ -1060,16 +1205,17 @@ class XMLGeneratorSRI2025:
             with open(xml_path, 'rb') as f:
                 saved_content = f.read()
                 if saved_content.startswith(b'\xef\xbb\xbf'):
-                    raise ValueError("ERROR 2025: Archivo guardado con BOM")
+                    raise ValueError("ERROR: Archivo guardado con BOM")
             
-            logger.info(f"XML 2025 guardado correctamente en: {xml_path}")
+            logger.info(f"XML guardado correctamente en: {xml_path}")
             return xml_path
             
         except Exception as e:
-            logger.error(f"Error guardando XML 2025: {str(e)}")
+            logger.error(f"Error guardando XML: {str(e)}")
             raise
 
-# ========== FIN DE LA CLASE XMLGeneratorSRI2025 ==========
+
+# ========== FIN DE LA CLASE ==========
 
 # Mantener compatibilidad con código existente
 XMLGenerator = XMLGeneratorSRI2025
