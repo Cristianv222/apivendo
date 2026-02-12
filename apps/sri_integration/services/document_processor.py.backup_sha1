@@ -310,7 +310,7 @@ class DocumentProcessor:
         
         # 1. Calcular digest del documento
         document_canonical = self._canonicalize_element(document_root, comprobante_id)
-        document_digest = hashlib.sha256(document_canonical).digest()
+        document_digest = hashlib.sha1(document_canonical).digest()
         document_digest_b64 = base64.b64encode(document_digest).decode()
         
         # 2. Crear SignedProperties
@@ -325,7 +325,7 @@ class DocumentProcessor:
             exclusive=False,
             with_comments=False
         )
-        signed_props_digest = hashlib.sha256(signed_props_canonical).digest()
+        signed_props_digest = hashlib.sha1(signed_props_canonical).digest()
         signed_props_digest_b64 = base64.b64encode(signed_props_digest).decode()
         
         # 4. Crear SignedInfo
@@ -345,7 +345,7 @@ class DocumentProcessor:
         signature_bytes = private_key.sign(
             signed_info_canonical,
             padding.PKCS1v15(),
-            hashes.SHA256()  # SHA-256 para producción
+            hashes.SHA1()  # SHA-1 según facturador oficial
         )
         signature_value = base64.b64encode(signature_bytes).decode()
         
@@ -397,7 +397,7 @@ class DocumentProcessor:
         
         # SignatureMethod
         sig_method = etree.SubElement(signed_info, f"{{{ds_ns}}}SignatureMethod")
-        sig_method.set("Algorithm", "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256")
+        sig_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#rsa-sha1")
         
         # Reference 1: Documento - CON TRANSFORMACIÓN ENVELOPED-SIGNATURE
         ref1 = etree.SubElement(signed_info, f"{{{ds_ns}}}Reference")
@@ -410,9 +410,12 @@ class DocumentProcessor:
         transform_env = etree.SubElement(transforms1, f"{{{ds_ns}}}Transform")
         transform_env.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#enveloped-signature")
         
+        # ✅ Segunda transformación - canonicalización
+        transform_c14n = etree.SubElement(transforms1, f"{{{ds_ns}}}Transform")
+        transform_c14n.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
         
         digest_method1 = etree.SubElement(ref1, f"{{{ds_ns}}}DigestMethod")
-        digest_method1.set("Algorithm", "http://www.w3.org/2001/04/xmlenc#sha256")
+        digest_method1.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")
         
         digest_value1 = etree.SubElement(ref1, f"{{{ds_ns}}}DigestValue")
         digest_value1.text = doc_digest
@@ -420,14 +423,14 @@ class DocumentProcessor:
         # Reference 2: SignedProperties
         ref2 = etree.SubElement(signed_info, f"{{{ds_ns}}}Reference")
         ref2.set("URI", f"#{signed_props_id}")
-        ref2.set("Type", "http://uri.etsi.org/01903#SignedProperties")
+        ref2.set("Type", "http://www.w3.org/2000/09/xmldsig#SignatureProperties")
         
         transforms2 = etree.SubElement(ref2, f"{{{ds_ns}}}Transforms")
         transform2 = etree.SubElement(transforms2, f"{{{ds_ns}}}Transform")
         transform2.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
         
         digest_method2 = etree.SubElement(ref2, f"{{{ds_ns}}}DigestMethod")
-        digest_method2.set("Algorithm", "http://www.w3.org/2001/04/xmlenc#sha256")
+        digest_method2.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")
         
         digest_value2 = etree.SubElement(ref2, f"{{{ds_ns}}}DigestValue")
         digest_value2.text = props_digest
@@ -457,10 +460,10 @@ class DocumentProcessor:
         # CertDigest con SHA-1
         cert_digest = etree.SubElement(cert_elem, f"{{{xades_ns}}}CertDigest")
         cert_digest_method = etree.SubElement(cert_digest, f"{{{ds_ns}}}DigestMethod")
-        cert_digest_method.set("Algorithm", "http://www.w3.org/2001/04/xmlenc#sha256")
+        cert_digest_method.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#sha1")
         
         cert_der = certificate.public_bytes(serialization.Encoding.DER)
-        cert_hash = hashlib.sha256(cert_der).digest()
+        cert_hash = hashlib.sha1(cert_der).digest()
         cert_digest_value = etree.SubElement(cert_digest, f"{{{ds_ns}}}DigestValue")
         cert_digest_value.text = base64.b64encode(cert_hash).decode()
         
@@ -479,13 +482,10 @@ class DocumentProcessor:
         data_obj_format.set("ObjectReference", f"#{reference_id}")
         
         description = etree.SubElement(data_obj_format, f"{{{xades_ns}}}Description")
-        description.text = "FIRMA DIGITAL SRI"
+        description.text = "contenido comprobante"
         
         mime_type = etree.SubElement(data_obj_format, f"{{{xades_ns}}}MimeType")
         mime_type.text = "text/xml"
-        
-        encoding = etree.SubElement(data_obj_format, f"{{{xades_ns}}}Encoding")
-        encoding.text = "UTF-8"
         
         return signed_props
     

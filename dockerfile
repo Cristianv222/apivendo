@@ -70,7 +70,7 @@ RUN chown -R appuser:appuser /app && \
     chmod 644 /app/logs/celery.log
 
 # Cambiar a usuario no root
-USER appuser
+#USER appuser
 
 # Entrypoint garantiza directorios en runtime (después de volúmenes)
 ENTRYPOINT ["/app/entrypoint.sh"]
