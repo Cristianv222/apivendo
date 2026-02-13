@@ -8,7 +8,7 @@ CORRECCIONES APLICADAS:
 2. remove_blank_text=False para preservar XML original del generador
 3. SHA-256 consistente en TODOS los algoritmos (digest, firma, certificado)
 4. Transformación enveloped-signature + C14N en Reference del documento
-5. SIN Transforms en Reference de SignedProperties (igual que facturador SRI)
+5. SIN Transforms en Reference de SignedProperties (igual que facturador SRI) ← CRÍTICO
 6. Type correcto: http://uri.etsi.org/01903#SignedProperties
 7. Digest del documento calculado correctamente (canonicalización del root completo)
 8. SignedDataObjectProperties con Description, MimeType y Encoding correctos
@@ -353,7 +353,7 @@ class DocumentProcessor:
           - DigestMethod: SHA-256
 
         Reference 2 (SignedProperties):
-          - SIN Transforms (igual que el facturador oficial del SRI)
+          - SIN Transforms (el digest ya fue calculado con C14N directamente)
           - Type: http://uri.etsi.org/01903#SignedProperties
           - DigestMethod: SHA-256
         """
@@ -389,15 +389,12 @@ class DocumentProcessor:
         dv1.text = doc_digest
 
         # --- Reference 2: SignedProperties ---
-        # Se DEBE usar la misma transformación usada al calcular el hash (C14N)
+        # CRÍTICO: SIN Transforms - el digest ya fue calculado con C14N directamente
+        # Si agregamos Transform aquí, el SRI intentará aplicar C14N sobre algo ya
+        # canonicalizado, causando que los hashes no coincidan → Error 39
         ref2 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
         ref2.set("URI", f"#{signed_props_id}")
         ref2.set("Type", TYPE_SIGNED_PROPS)
-
-        # Agregar Transform C14N para SignedProperties
-        transforms_sp = etree.SubElement(ref2, f"{{{DS_NS}}}Transforms")
-        t_c14n_sp = etree.SubElement(transforms_sp, f"{{{DS_NS}}}Transform")
-        t_c14n_sp.set("Algorithm", ALG_C14N)
 
         dm2 = etree.SubElement(ref2, f"{{{DS_NS}}}DigestMethod")
         dm2.set("Algorithm", ALG_SHA256)
@@ -798,10 +795,11 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processor_version': 'v2.0_XADES_BES_SHA256',
+            'processor_version': 'v2.0_XADES_BES_SHA256_FIXED',
             'signature_method': 'RSA-SHA256',
             'digest_method': 'SHA-256',
-            'transforms': ['enveloped-signature', 'C14N'],
+            'transforms_document': ['enveloped-signature', 'C14N'],
+            'transforms_signed_properties': 'NONE',
         }
 
     def validate_company_setup(self):
