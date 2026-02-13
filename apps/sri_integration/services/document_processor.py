@@ -5,9 +5,9 @@ RESUELVE: Error 39 FIRMA INVALIDA
 
 BASADO EN: XML del facturador oficial del SRI (descompilado)
 CORRECCIONES DEFINITIVAS:
-1. X509IssuerName con formato EXACTO del SRI (OID 2.5.4.97 al inicio)
+1. Elimina espacios en blanco que alteran el digest
 2. Transform C14N en Reference del documento
-3. Description: "FIRMA DIGITAL SRI" (no "contenido comprobante")
+3. X509IssuerName con formato correcto para Security Data
 4. IDs con formato UUID del facturador oficial
 """
 
@@ -226,122 +226,122 @@ class DocumentProcessor:
             logger.error(f"Error signing XML for document {document.id}: {str(e)}")
             return False, f"XML_SIGNING_ERROR: {str(e)}"
 
-   def _create_xades_bes_signature(self, xml_content, cert_data):
-    """
-    Crear firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
-    FIX DEFINITIVO: Elimina TODOS los espacios en blanco que causan Error 39.
-    """
-    try:
-        # --- PASO 1: Limpiar y parsear XML SIN espacios en blanco ---
-        xml_content = self._pre_clean_xml(xml_content)
+    def _create_xades_bes_signature(self, xml_content, cert_data):
+        """
+        Crear firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
+        FIX DEFINITIVO: Elimina TODOS los espacios en blanco que causan Error 39.
+        """
+        try:
+            # --- PASO 1: Limpiar y parsear XML SIN espacios en blanco ---
+            xml_content = self._pre_clean_xml(xml_content)
 
-        # Parser que ELIMINA espacios en blanco (CRÍTICO para el digest)
-        parser = etree.XMLParser(
-            remove_blank_text=True,  # ← FIX CRÍTICO
-            strip_cdata=False,
-            resolve_entities=False,
-            remove_comments=False,
-            recover=False
-        )
-        root = etree.fromstring(xml_content.encode('utf-8'), parser)
+            # Parser que ELIMINA espacios en blanco (CRÍTICO para el digest)
+            parser = etree.XMLParser(
+                remove_blank_text=True,  # ← FIX CRÍTICO
+                strip_cdata=False,
+                resolve_entities=False,
+                remove_comments=False,
+                recover=False
+            )
+            root = etree.fromstring(xml_content.encode('utf-8'), parser)
 
-        # Limpiar TODOS los tail con solo espacios en blanco
-        def clean_whitespace(elem):
-            """Elimina espacios/saltos de línea de tail recursivamente."""
-            if elem.tail is not None and not elem.tail.strip():
-                elem.tail = None
-            for child in elem:
-                clean_whitespace(child)
-        
-        clean_whitespace(root)
-        
-        logger.info("XML limpiado de espacios en blanco")
+            # Limpiar TODOS los tail con solo espacios en blanco
+            def clean_whitespace(elem):
+                """Elimina espacios/saltos de línea de tail recursivamente."""
+                if elem.tail is not None and not elem.tail.strip():
+                    elem.tail = None
+                for child in elem:
+                    clean_whitespace(child)
+            
+            clean_whitespace(root)
+            
+            logger.info("XML limpiado de espacios en blanco")
 
-        # --- PASO 2: Asegurar ID en comprobante ---
-        comprobante_uri = self._ensure_comprobante_id(root)
+            # --- PASO 2: Asegurar ID en comprobante ---
+            comprobante_uri = self._ensure_comprobante_id(root)
 
-        # --- PASO 3: Generar IDs ---
-        base_uuid = str(uuid.uuid4())
-        sig_id = f"xmldsig-{base_uuid}"
-        signed_props_id = f"{sig_id}-signedprops"
-        sig_value_id = f"{sig_id}-sigvalue"
-        ref_id = f"{sig_id}-ref0"
-        
-        logger.info(f"IDs generados - Base UUID: {base_uuid}")
+            # --- PASO 3: Generar IDs ---
+            base_uuid = str(uuid.uuid4())
+            sig_id = f"xmldsig-{base_uuid}"
+            signed_props_id = f"{sig_id}-signedprops"
+            sig_value_id = f"{sig_id}-sigvalue"
+            ref_id = f"{sig_id}-ref0"
+            
+            logger.info(f"IDs generados - Base UUID: {base_uuid}")
 
-        certificate = cert_data.certificate
-        private_key = cert_data.private_key
+            certificate = cert_data.certificate
+            private_key = cert_data.private_key
 
-        # --- PASO 4: Digest del documento (ANTES de agregar firma) ---
-        doc_canonical = etree.tostring(
-            root, 
-            method='c14n', 
-            exclusive=False,
-            with_comments=False
-        )
-        doc_digest_b64 = base64.b64encode(hashlib.sha256(doc_canonical).digest()).decode()
-        
-        logger.info(f"Document digest: {len(doc_canonical)} bytes")
+            # --- PASO 4: Digest del documento (ANTES de agregar firma) ---
+            doc_canonical = etree.tostring(
+                root, 
+                method='c14n', 
+                exclusive=False,
+                with_comments=False
+            )
+            doc_digest_b64 = base64.b64encode(hashlib.sha256(doc_canonical).digest()).decode()
+            
+            logger.info(f"Document digest: {len(doc_canonical)} bytes")
 
-        # --- PASO 5: Crear SignedProperties ---
-        signed_properties = self._create_signed_properties(
-            signed_props_id, sig_id, ref_id, certificate
-        )
+            # --- PASO 5: Crear SignedProperties ---
+            signed_properties = self._create_signed_properties(
+                signed_props_id, sig_id, ref_id, certificate
+            )
 
-        # --- PASO 6: Digest de SignedProperties ---
-        sp_canonical = etree.tostring(
-            signed_properties, 
-            method='c14n', 
-            exclusive=False,
-            with_comments=False
-        )
-        sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
-        
-        logger.info(f"SignedProperties digest: {len(sp_canonical)} bytes")
+            # --- PASO 6: Digest de SignedProperties ---
+            sp_canonical = etree.tostring(
+                signed_properties, 
+                method='c14n', 
+                exclusive=False,
+                with_comments=False
+            )
+            sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
+            
+            logger.info(f"SignedProperties digest: {len(sp_canonical)} bytes")
 
-        # --- PASO 7: Crear SignedInfo ---
-        signed_info = self._create_signed_info(
-            doc_digest_b64, sp_digest_b64,
-            comprobante_uri, signed_props_id, ref_id
-        )
+            # --- PASO 7: Crear SignedInfo ---
+            signed_info = self._create_signed_info(
+                doc_digest_b64, sp_digest_b64,
+                comprobante_uri, signed_props_id, ref_id
+            )
 
-        # --- PASO 8: Firmar SignedInfo ---
-        si_canonical = etree.tostring(
-            signed_info, method='c14n', exclusive=False, with_comments=False
-        )
-        signature_bytes = private_key.sign(
-            si_canonical,
-            padding.PKCS1v15(),
-            hashes.SHA256()
-        )
-        signature_value_b64 = base64.b64encode(signature_bytes).decode()
+            # --- PASO 8: Firmar SignedInfo ---
+            si_canonical = etree.tostring(
+                signed_info, method='c14n', exclusive=False, with_comments=False
+            )
+            signature_bytes = private_key.sign(
+                si_canonical,
+                padding.PKCS1v15(),
+                hashes.SHA256()
+            )
+            signature_value_b64 = base64.b64encode(signature_bytes).decode()
 
-        # --- PASO 9: Ensamblar Signature ---
-        signature_element = self._assemble_signature(
-            sig_id, sig_value_id, signed_info, signature_value_b64,
-            certificate, signed_properties
-        )
+            # --- PASO 9: Ensamblar Signature ---
+            signature_element = self._assemble_signature(
+                sig_id, sig_value_id, signed_info, signature_value_b64,
+                certificate, signed_properties
+            )
 
-        # --- PASO 10: Insertar firma SIN espacios ---
-        root.append(signature_element)
-        signature_element.tail = None  # Sin espacios después
+            # --- PASO 10: Insertar firma SIN espacios ---
+            root.append(signature_element)
+            signature_element.tail = None  # Sin espacios después
 
-        # --- PASO 11: Serializar SIN pretty_print ---
-        signed_xml_bytes = etree.tostring(
-            root,
-            encoding='utf-8',
-            method='xml',
-            xml_declaration=False,
-            pretty_print=False  # ← CRÍTICO
-        )
+            # --- PASO 11: Serializar SIN pretty_print ---
+            signed_xml_bytes = etree.tostring(
+                root,
+                encoding='utf-8',
+                method='xml',
+                xml_declaration=False,
+                pretty_print=False  # ← CRÍTICO
+            )
 
-        logger.info(f"XML firmado: {len(signed_xml_bytes)} bytes")
-        
-        return signed_xml_bytes
+            logger.info(f"XML firmado: {len(signed_xml_bytes)} bytes")
+            
+            return signed_xml_bytes
 
-    except Exception as e:
-        logger.error(f"Error creating XAdES-BES signature: {str(e)}")
-        raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
+        except Exception as e:
+            logger.error(f"Error creating XAdES-BES signature: {str(e)}")
+            raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
 
     # ========================================================================
     # Componentes de la firma
@@ -424,7 +424,7 @@ class DocumentProcessor:
         issuer_serial = etree.SubElement(cert_elem, f"{{{XADES_NS}}}IssuerSerial")
 
         issuer_name = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509IssuerName")
-        # CRÍTICO: Formato EXACTO del facturador oficial
+        # Formato correcto para Security Data
         issuer_name.text = self._format_issuer_name(certificate)
 
         serial_number = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509SerialNumber")
@@ -436,7 +436,7 @@ class DocumentProcessor:
         dof.set("ObjectReference", f"#{reference_id}")
 
         desc = etree.SubElement(dof, f"{{{XADES_NS}}}Description")
-        desc.text = "FIRMA DIGITAL SRI"  # Exactamente como el facturador oficial
+        desc.text = "FIRMA DIGITAL SRI"
 
         mime = etree.SubElement(dof, f"{{{XADES_NS}}}MimeType")
         mime.text = "text/xml"
@@ -521,65 +521,42 @@ class DocumentProcessor:
 
     def _format_issuer_name(self, certificate):
         """
-        Formatear X509IssuerName EXACTAMENTE como el facturador oficial del SRI.
-        
-        Formato del facturador oficial:
-        2.5.4.97=#0c0f...,CN=...,OU=...,O=...,L=...,C=...
-        
-        El OID 2.5.4.97 es organizationIdentifier y debe ir primero en formato hex.
+        Formatear X509IssuerName en formato estándar RFC4514.
+        Para Security Data NO necesita el formato especial con OID 2.5.4.97.
         """
         try:
             issuer = certificate.issuer
-            parts = []
             
-            # Primero buscar el OID 2.5.4.97 (organizationIdentifier)
-            org_identifier = None
-            for attr in issuer:
-                if attr.oid.dotted_string == '2.5.4.97':
-                    # Codificar en formato hex como el facturador oficial
-                    value_bytes = attr.value.encode('utf-8')
-                    # Formato: 0c (UTF8String) + longitud + datos
-                    hex_value = '0c' + format(len(value_bytes), '02x') + value_bytes.hex()
-                    org_identifier = f"2.5.4.97=#{hex_value}"
-                    break
-            
-            # Luego agregar los demás atributos en orden estándar
-            attr_order = ['CN', 'OU', 'O', 'L', 'C']
+            # Para Security Data, usar formato estándar CN,OU,O,C
+            attr_order = ['CN', 'OU', 'O', 'C']
             attr_map = {}
             
             for attr in issuer:
                 oid = attr.oid
                 val = attr.value
                 
-                # Mapear OIDs a nombres
                 if oid == x509.oid.NameOID.COMMON_NAME:
                     attr_map['CN'] = val
                 elif oid == x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME:
                     attr_map['OU'] = val
                 elif oid == x509.oid.NameOID.ORGANIZATION_NAME:
                     attr_map['O'] = val
-                elif oid == x509.oid.NameOID.LOCALITY_NAME:
-                    attr_map['L'] = val
                 elif oid == x509.oid.NameOID.COUNTRY_NAME:
                     attr_map['C'] = val
             
-            # Construir el string
-            if org_identifier:
-                parts.append(org_identifier)
-            
+            parts = []
             for key in attr_order:
                 if key in attr_map:
                     parts.append(f"{key}={attr_map[key]}")
             
             issuer_string = ','.join(parts)
             
-            logger.info(f"X509IssuerName (SRI format): {issuer_string}")
+            logger.info(f"X509IssuerName (Security Data format): {issuer_string}")
             
             return issuer_string
 
         except Exception as e:
             logger.error(f"Error formatting issuer name: {e}")
-            # Fallback al formato estándar
             return certificate.issuer.rfc4514_string()
 
     # ========================================================================
@@ -791,7 +768,7 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processor_version': 'v5.0_SRI_OFFICIAL_FORMAT',
+            'processor_version': 'v5.0_WHITESPACE_FIX',
         }
 
     def validate_company_setup(self):
