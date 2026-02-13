@@ -5,6 +5,9 @@ Cliente SOAP para integración con el SRI - VERSIÓN COMPLETA CORREGIDA
 ✅ ELIMINA SOLO LOS ERRORES DE IMPORT DE ZEEP
 ✅ CORRIGE PROBLEMAS ESPECÍFICOS SIN PERDER FUNCIONALIDAD
 ✅ RESUELVE ERROR 39 MANTENIENDO TODO EL CÓDIGO ORIGINAL
+✅ FIX CRÍTICO #1: Parseo de autorizaciones Zeep (response.autorizaciones.autorizacion)
+✅ FIX CRÍTICO #2: Fallback a requests cuando Zeep falla en autorización
+✅ FIX #3: Extracción de errores Zeep con estructura anidada (.mensajes.mensaje)
 """
 
 import logging
@@ -91,6 +94,10 @@ class SRISOAPClient:
         
         logger.info(f"SRI SOAP Client initialized for {self.environment} environment")
         logger.info(f"Using {'Zeep' if ZEEP_AVAILABLE else 'Requests fallback'} for SOAP communication")
+    
+    # ========================================================================
+    # RECEPCIÓN DE COMPROBANTES
+    # ========================================================================
     
     def send_document_to_reception(self, document, signed_xml_content):
         """
@@ -195,15 +202,8 @@ class SRISOAPClient:
                     document.status = "ERROR"
                     document.save()
                     
-                    # ✅ EXTRAER MENSAJES DE ERROR ZEEP
-                    error_messages = []
-                    if hasattr(response, 'comprobantes') and response.comprobantes:
-                        for comprobante in response.comprobantes:
-                            if hasattr(comprobante, 'mensajes') and comprobante.mensajes:
-                                for mensaje in comprobante.mensajes:
-                                    if hasattr(mensaje, 'mensaje'):
-                                        error_messages.append(mensaje.mensaje)
-                    
+                    # ✅ FIX #3: EXTRAER MENSAJES DE ERROR ZEEP CON ESTRUCTURA ANIDADA
+                    error_messages = self._extract_zeep_comprobante_errors(response)
                     error_text = "; ".join(error_messages) if error_messages else "Document rejected by SRI"
                     
                     self._log_sri_response(
@@ -224,6 +224,39 @@ class SRISOAPClient:
         except Exception as e:
             logger.error(f"❌ [SRI_ZEEP] Error: {str(e)}")
             return False, f"Zeep error: {str(e)}"
+    
+    def _extract_zeep_comprobante_errors(self, response):
+        """
+        ✅ FIX #3: EXTRAER ERRORES DE RECEPCIÓN DESDE RESPUESTA ZEEP
+        Maneja estructura anidada: comprobantes.comprobante[].mensajes.mensaje[]
+        """
+        error_messages = []
+        try:
+            if hasattr(response, 'comprobantes') and response.comprobantes:
+                comprobantes_obj = response.comprobantes
+                # Puede ser .comprobante (lista) o directamente iterable
+                items = getattr(comprobantes_obj, 'comprobante', comprobantes_obj)
+                if not isinstance(items, list):
+                    items = [items]
+                for comp in items:
+                    if hasattr(comp, 'mensajes') and comp.mensajes:
+                        mensajes_obj = comp.mensajes
+                        mensajes = getattr(mensajes_obj, 'mensaje', mensajes_obj)
+                        if not isinstance(mensajes, list):
+                            mensajes = [mensajes]
+                        for msg in mensajes:
+                            ident = getattr(msg, 'identificador', 'N/A')
+                            texto = getattr(msg, 'mensaje', '')
+                            info = getattr(msg, 'informacionAdicional', '')
+                            tipo = getattr(msg, 'tipo', '')
+                            error = f"[{tipo}] Error {ident}: {texto}"
+                            if info:
+                                error += f" - {info}"
+                            error_messages.append(error)
+                            logger.info(f"🔍 [SRI_ZEEP] Comprobante error: {error}")
+        except Exception as e:
+            logger.error(f"❌ [SRI_ZEEP] Error extracting comprobante errors: {e}")
+        return error_messages
     
     def _send_with_requests_robust(self, document, signed_xml_content):
         """
@@ -727,24 +760,40 @@ class SRISOAPClient:
             logger.error(f"❌ [SRI_FIXED] XML validation error: {e}")
             return False
     
+    # ========================================================================
+    # AUTORIZACIÓN DE COMPROBANTES - SECCIÓN CON FIXES CRÍTICOS #1 Y #2
+    # ========================================================================
+    
     def get_document_authorization(self, document):
         """
         Consulta la autorización de un documento en el SRI
-        ✅ MÉTODO ULTRA CORREGIDO - RESUELVE EL NAMESPACE ERROR
-        MANTIENE TODA LA FUNCIONALIDAD ORIGINAL
+        
+        ✅ FIX CRÍTICO #2: Lógica de fallback corregida
+        ANTES: if success or "not found" not in message.lower()  ← NUNCA hacía fallback
+        AHORA: Solo retorna sin fallback si es error DEFINITIVO del SRI (NO AUTORIZADO)
         """
         try:
-            logger.info(f"🔍 [SRI_AUTH_ULTRA] Getting authorization for document {document.document_number}")
+            logger.info(f"🔍 [SRI_AUTH] Getting authorization for document {document.document_number}")
             
             # ✅ INTENTAR ZEEP PRIMERO SI ESTÁ DISPONIBLE
             if ZEEP_AVAILABLE:
                 try:
                     logger.info("🔧 [SRI_AUTH] Attempting Zeep authorization method")
                     success, message = self._get_auth_with_zeep(document)
-                    if success or "not found" not in message.lower():
+                    
+                    # ✅ FIX #2: Si Zeep tuvo éxito, retornar directamente
+                    if success:
                         return success, message
-                    else:
-                        logger.warning(f"⚠️ [SRI_AUTH] Zeep failed: {message}, falling back to requests")
+                    
+                    # ✅ FIX #2: Si es error DEFINITIVO del SRI (NO AUTORIZADO), retornar sin fallback
+                    msg_lower = message.lower()
+                    if 'no autorizado' in msg_lower or 'not authorized' in msg_lower:
+                        logger.warning(f"⚠️ [SRI_AUTH] SRI definitive rejection via Zeep: {message}")
+                        return success, message
+                    
+                    # ✅ FIX #2: Cualquier OTRO error de Zeep (parseo, conexión, etc) → intentar con requests
+                    logger.warning(f"⚠️ [SRI_AUTH] Zeep inconclusive: {message}, falling back to requests")
+                    
                 except Exception as zeep_error:
                     logger.warning(f"⚠️ [SRI_AUTH] Zeep error: {zeep_error}, falling back to requests")
             
@@ -767,7 +816,14 @@ class SRISOAPClient:
     
     def _get_auth_with_zeep(self, document):
         """
-        ✅ AUTORIZACIÓN CON ZEEP - MANTIENE FUNCIONALIDAD ORIGINAL
+        ✅ FIX CRÍTICO #1: AUTORIZACIÓN CON ZEEP - PARSEO CORREGIDO
+        
+        ANTES (ROTO):
+            for autorizacion in response.autorizaciones:  ← iteraba sobre contenedor, no lista
+        
+        AHORA (CORREGIDO):
+            La estructura real de Zeep es: response.autorizaciones.autorizacion → [lista]
+            Se accede correctamente a .autorizacion dentro del contenedor
         """
         try:
             logger.info("🔧 [SRI_AUTH_ZEEP] Getting authorization using Zeep")
@@ -784,73 +840,116 @@ class SRISOAPClient:
             logger.info(f"🔧 [SRI_AUTH_ZEEP] Calling autorizacionComprobante with access key: {document.access_key}")
             response = client.service.autorizacionComprobante(claveAccesoComprobante=document.access_key)
             
-            # ✅ PROCESAR RESPUESTA ZEEP
-            if hasattr(response, 'autorizaciones') and response.autorizaciones:
-                for autorizacion in response.autorizaciones:
-                    if hasattr(autorizacion, 'estado'):
-                        estado = autorizacion.estado
-                        numero_autorizacion = getattr(autorizacion, 'numeroAutorizacion', '')
-                        fecha_autorizacion_str = getattr(autorizacion, 'fechaAutorizacion', '')
-                        
-                        # ✅ PARSEAR FECHA
-                        fecha_autorizacion = self._parse_authorization_date(fecha_autorizacion_str)
-                        
-                        # Preparar datos de respuesta
-                        response_data = {
-                            'estado': estado,
-                            'numeroAutorizacion': numero_autorizacion,
-                            'fechaAutorizacion': fecha_autorizacion_str,
-                            'response': str(response),
-                            'method': 'zeep'
-                        }
-                        
-                        # ✅ LOG CORREGIDO
-                        self._log_sri_response(
-                            document,
-                            'AUTHORIZATION',
-                            estado[:10],  # ✅ Limitar a 10 caracteres
-                            f"Authorization response (Zeep): {estado}",
-                            response_data
-                        )
-                        
-                        if estado == 'AUTORIZADO':
-                            document.status = 'AUTHORIZED'
-                            document.sri_authorization_code = numero_autorizacion
-                            document.sri_authorization_date = fecha_autorizacion
-                            document.sri_response = response_data
-                            document.save()
-                            logger.info(f"🎉 [SRI_AUTH_ZEEP] Document AUTHORIZED: {numero_autorizacion}")
-                            return True, f'Document authorized (Zeep): {numero_autorizacion}'
-                            
-                        elif estado == 'NO AUTORIZADO':
-                            # ✅ EXTRAER ERRORES ZEEP
-                            error_messages = []
-                            if hasattr(autorizacion, 'mensajes') and autorizacion.mensajes:
-                                for mensaje in autorizacion.mensajes:
-                                    if hasattr(mensaje, 'mensaje'):
-                                        error_messages.append(mensaje.mensaje)
-                            
-                            error_text = "; ".join(error_messages) if error_messages else "Document not authorized"
-                            
-                            # ✅ NO cambiar a ERROR si estaba en SENT
-                            if document.status != 'SENT':
-                                document.status = 'REJECTED'
-                            document.sri_response = response_data
-                            document.save()
-                            
-                            logger.warning(f"⚠️ [SRI_AUTH_ZEEP] Document not authorized: {error_text}")
-                            return False, f'Document not authorized (Zeep): {error_text}'
-                            
-                        else:
-                            # ✅ MANTENER SENT si estaba en ese estado
-                            if document.status != 'SENT':
-                                document.status = 'PENDING'
-                            document.sri_response = response_data
-                            document.save()
-                            logger.info(f"🔄 [SRI_AUTH_ZEEP] Document in process: {estado}")
-                            return False, f'Document in process (Zeep): {estado}'
+            # =================================================================
+            # ✅ FIX CRÍTICO #1: PARSEO CORRECTO DE AUTORIZACIONES
+            #
+            # La estructura real de Zeep para el servicio de autorización SRI:
+            #   response.autorizaciones           → objeto contenedor (NO iterable directo)
+            #   response.autorizaciones.autorizacion → [lista de autorizaciones]
+            #
+            # El código original hacía:
+            #   for autorizacion in response.autorizaciones:  ← NUNCA encontraba nada
+            #
+            # Ahora se accede correctamente a la lista interna:
+            # =================================================================
             
-            return False, 'No authorization found in Zeep response'
+            logger.info(f"🔧 [SRI_AUTH_ZEEP] Response type: {type(response)}")
+            
+            autorizaciones_list = None
+            
+            if hasattr(response, 'autorizaciones') and response.autorizaciones is not None:
+                autorizaciones_obj = response.autorizaciones
+                logger.info(f"🔧 [SRI_AUTH_ZEEP] autorizaciones type: {type(autorizaciones_obj)}")
+                
+                # Caso 1: response.autorizaciones.autorizacion (estructura normal del SRI)
+                if hasattr(autorizaciones_obj, 'autorizacion'):
+                    autorizaciones_list = autorizaciones_obj.autorizacion
+                    if not isinstance(autorizaciones_list, list):
+                        autorizaciones_list = [autorizaciones_list]
+                    logger.info(f"🔧 [SRI_AUTH_ZEEP] Found {len(autorizaciones_list)} auth(s) via .autorizacion")
+                
+                # Caso 2: response.autorizaciones es directamente iterable (algunos WSDL)
+                elif hasattr(autorizaciones_obj, '__iter__'):
+                    autorizaciones_list = list(autorizaciones_obj)
+                    logger.info(f"🔧 [SRI_AUTH_ZEEP] Found {len(autorizaciones_list)} auth(s) via iteration")
+                
+                # Caso 3: response.autorizaciones es un solo objeto con estado
+                elif hasattr(autorizaciones_obj, 'estado'):
+                    autorizaciones_list = [autorizaciones_obj]
+                    logger.info("🔧 [SRI_AUTH_ZEEP] Found single authorization object")
+            
+            if not autorizaciones_list:
+                logger.warning("⚠️ [SRI_AUTH_ZEEP] No authorizations found in Zeep response")
+                if hasattr(response, 'autorizaciones') and response.autorizaciones is not None:
+                    logger.warning(f"⚠️ [SRI_AUTH_ZEEP] autorizaciones attrs: {dir(response.autorizaciones)}")
+                else:
+                    logger.warning(f"⚠️ [SRI_AUTH_ZEEP] response attrs: {dir(response)}")
+                return False, 'No authorization data in Zeep response'
+            
+            # ✅ PROCESAR AUTORIZACIONES (lógica original preservada, solo cambió el acceso a la lista)
+            for autorizacion in autorizaciones_list:
+                if not hasattr(autorizacion, 'estado'):
+                    logger.warning(f"⚠️ [SRI_AUTH_ZEEP] Auth object without estado, skipping: {autorizacion}")
+                    continue
+                
+                estado = autorizacion.estado
+                numero_autorizacion = str(getattr(autorizacion, 'numeroAutorizacion', '') or '')
+                fecha_autorizacion_str = str(getattr(autorizacion, 'fechaAutorizacion', '') or '')
+                
+                # ✅ PARSEAR FECHA
+                fecha_autorizacion = self._parse_authorization_date(fecha_autorizacion_str)
+                
+                # Preparar datos de respuesta
+                response_data = {
+                    'estado': estado,
+                    'numeroAutorizacion': numero_autorizacion,
+                    'fechaAutorizacion': fecha_autorizacion_str,
+                    'response': str(response),
+                    'method': 'zeep'
+                }
+                
+                # ✅ LOG CORREGIDO
+                self._log_sri_response(
+                    document,
+                    'AUTHORIZATION',
+                    estado[:10],  # ✅ Limitar a 10 caracteres
+                    f"Authorization response (Zeep): {estado}",
+                    response_data
+                )
+                
+                if estado == 'AUTORIZADO':
+                    document.status = 'AUTHORIZED'
+                    document.sri_authorization_code = numero_autorizacion
+                    document.sri_authorization_date = fecha_autorizacion
+                    document.sri_response = response_data
+                    document.save()
+                    logger.info(f"🎉 [SRI_AUTH_ZEEP] Document AUTHORIZED: {numero_autorizacion}")
+                    return True, f'Document authorized (Zeep): {numero_autorizacion}'
+                    
+                elif estado == 'NO AUTORIZADO':
+                    # ✅ FIX #3: EXTRAER ERRORES ZEEP CON ESTRUCTURA ANIDADA
+                    error_messages = self._extract_zeep_auth_errors(autorizacion)
+                    error_text = "; ".join(error_messages) if error_messages else "Document not authorized"
+                    
+                    # ✅ NO cambiar a ERROR si estaba en SENT
+                    if document.status != 'SENT':
+                        document.status = 'REJECTED'
+                    document.sri_response = response_data
+                    document.save()
+                    
+                    logger.warning(f"⚠️ [SRI_AUTH_ZEEP] Document not authorized: {error_text}")
+                    return False, f'Document not authorized (Zeep): {error_text}'
+                    
+                else:
+                    # ✅ MANTENER SENT si estaba en ese estado
+                    if document.status != 'SENT':
+                        document.status = 'PENDING'
+                    document.sri_response = response_data
+                    document.save()
+                    logger.info(f"🔄 [SRI_AUTH_ZEEP] Document in process: {estado}")
+                    return False, f'Document in process (Zeep): {estado}'
+            
+            return False, 'No valid authorization entries found in Zeep response'
             
         except Fault as zeep_fault:
             logger.error(f"❌ [SRI_AUTH_ZEEP] SOAP Fault: {zeep_fault}")
@@ -858,6 +957,36 @@ class SRISOAPClient:
         except Exception as e:
             logger.error(f"❌ [SRI_AUTH_ZEEP] Error: {str(e)}")
             return False, f"Zeep authorization error: {str(e)}"
+    
+    def _extract_zeep_auth_errors(self, autorizacion_obj):
+        """
+        ✅ FIX #3: EXTRAER ERRORES DE AUTORIZACIÓN DESDE OBJETO ZEEP
+        Maneja estructura anidada: autorizacion.mensajes.mensaje → [lista]
+        
+        ANTES: iteraba directamente sobre autorizacion.mensajes (contenedor)
+        AHORA: accede a autorizacion.mensajes.mensaje (la lista real)
+        """
+        error_messages = []
+        try:
+            if hasattr(autorizacion_obj, 'mensajes') and autorizacion_obj.mensajes:
+                mensajes_obj = autorizacion_obj.mensajes
+                # Estructura: auth.mensajes.mensaje → lista
+                mensajes = getattr(mensajes_obj, 'mensaje', mensajes_obj)
+                if not isinstance(mensajes, list):
+                    mensajes = [mensajes]
+                for msg in mensajes:
+                    ident = getattr(msg, 'identificador', 'N/A')
+                    texto = getattr(msg, 'mensaje', '')
+                    info = getattr(msg, 'informacionAdicional', '')
+                    tipo = getattr(msg, 'tipo', '')
+                    error = f"[{tipo}] Error {ident}: {texto}"
+                    if info:
+                        error += f" - {info}"
+                    error_messages.append(error)
+                    logger.info(f"🔍 [SRI_AUTH_ZEEP] Auth error detail: {error}")
+        except Exception as e:
+            logger.error(f"❌ [SRI_AUTH_ZEEP] Error extracting auth errors: {e}")
+        return error_messages
     
     def _get_auth_with_requests_ultra_fixed(self, document):
         """
@@ -1098,7 +1227,7 @@ class SRISOAPClient:
     
     def _extract_authorization_errors_ultra_fixed(self, autorizacion_elem):
         """
-        ✅ EXTRAER ERRORES DE AUTORIZACIÓN - VERSIÓN ULTRA MEJORADA
+        ✅ EXTRAER ERRORES DE AUTORIZACIÓN XML - VERSIÓN ULTRA MEJORADA
         MANTIENE TODA LA FUNCIONALIDAD ORIGINAL
         """
         error_messages = []
@@ -1111,13 +1240,15 @@ class SRISOAPClient:
                 identificador_elem = mensaje_elem.find('.//identificador')
                 mensaje_text_elem = mensaje_elem.find('.//mensaje')
                 info_adicional_elem = mensaje_elem.find('.//informacionAdicional')
+                tipo_elem = mensaje_elem.find('.//tipo')
                 
                 if mensaje_text_elem is not None:
                     identificador = identificador_elem.text if identificador_elem is not None else "N/A"
                     mensaje_text = mensaje_text_elem.text
                     info_adicional = info_adicional_elem.text if info_adicional_elem is not None else ""
+                    tipo = tipo_elem.text if tipo_elem is not None else ""
                     
-                    error_detail = f"Error {identificador}: {mensaje_text}"
+                    error_detail = f"[{tipo}] Error {identificador}: {mensaje_text}"
                     if info_adicional:
                         error_detail += f" - {info_adicional}"
                     
@@ -1128,6 +1259,10 @@ class SRISOAPClient:
             logger.error(f"❌ [SRI_AUTH_ULTRA] Error extracting authorization errors: {e}")
         
         return error_messages
+    
+    # ========================================================================
+    # UTILIDADES COMUNES
+    # ========================================================================
     
     def _parse_authorization_date(self, fecha_str):
         """
@@ -1206,7 +1341,7 @@ class SRISOAPClient:
                         'environment': self.environment,
                         'document_number': getattr(document, 'document_number', 'N/A'),
                         'access_key': getattr(document, 'access_key', 'N/A'),
-                        'sri_version': '2025.3_FINAL_FIX_LOGGING_CORRECTED_COMPLETE'
+                        'sri_version': '2025.4_AUTH_PARSING_FIXED'
                     }
                 )
             except Exception as audit_error:
@@ -1218,6 +1353,10 @@ class SRISOAPClient:
             logger.error(f"❌ [SRI_LOG_FIXED] Error logging SRI response: {str(e)}")
             # ✅ NO FALLAR si no se puede registrar el log
             pass
+    
+    # ========================================================================
+    # MÉTODOS DE SERVICIO, STATUS Y CONECTIVIDAD
+    # ========================================================================
     
     def check_sri_service_status(self):
         """
@@ -1306,34 +1445,30 @@ class SRISOAPClient:
                 }
         
         results['system_info'] = {
-            'sri_client_version': '2025.3_COMPLETE_FIXED_ALL_FUNCTIONS_MAINTAINED',
+            'sri_client_version': '2025.4_AUTH_PARSING_FIXED',
             'zeep_available': ZEEP_AVAILABLE,
             'zeep_status': 'Available and functional' if ZEEP_AVAILABLE else 'Not available - using requests fallback',
             'environment': self.environment,
             'company_ruc': getattr(self.company, 'ruc', 'N/A'),
-            'total_lines_of_code': '1200+ lines (ALL ORIGINAL FUNCTIONALITY MAINTAINED)',
             'fixes_applied': [
-                'ZEEP_IMPORT_ERRORS_COMPLETELY_RESOLVED',
-                'FUNCTIONAL_DUMMY_CLASSES_FOR_ZEEP_FALLBACK',
-                'DUAL_METHOD_APPROACH_ZEEP_AND_REQUESTS',
-                'NAMESPACE_XMLNS_EMPTY_APPLIED_FOR_AUTHORIZATION',
-                'SRI_RESPONSE_LOGGING_FIELD_LIMITS_CORRECTED',
-                'SOAP_FAULT_ANALYSIS_ENHANCED_AND_MAINTAINED', 
-                'STATUS_PRESERVATION_IMPLEMENTED_COMPLETELY',
-                'XML_VALIDATION_IMPROVED_AND_MAINTAINED',
-                'ERROR_HANDLING_ULTRA_ROBUST_MAINTAINED',
-                'AUTHORIZATION_ERROR_EXTRACTION_MAINTAINED',
-                'BACKOFF_RETRY_STRATEGY_MAINTAINED',
-                'SERVICE_STATUS_CHECKING_MAINTAINED',
-                'CONNECTION_TESTING_MAINTAINED',
-                'ALL_ORIGINAL_METHODS_AND_FUNCTIONALITY_PRESERVED',
-                'ERROR_39_RESOLUTION_COMPLETE_WITH_FULL_FEATURES'
+                'FIX_1_ZEEP_AUTH_AUTORIZACIONES_PARSING',
+                'FIX_2_AUTH_FALLBACK_LOGIC_CORRECTED',
+                'FIX_3_ZEEP_NESTED_ERROR_EXTRACTION',
+                'ZEEP_IMPORT_ERRORS_RESOLVED',
+                'DUAL_METHOD_ZEEP_AND_REQUESTS',
+                'NAMESPACE_XMLNS_EMPTY_FOR_AUTH',
+                'SRI_RESPONSE_LOGGING_FIELD_LIMITS',
+                'STATUS_PRESERVATION_SENT_TO_ERROR',
+                'BACKOFF_RETRY_STRATEGY',
+                'ALL_ORIGINAL_METHODS_PRESERVED',
             ]
         }
         
         return results
     
-    # ✅ MÉTODOS ADICIONALES PARA COMPATIBILIDAD Y FUNCIONALIDAD COMPLETA
+    # ========================================================================
+    # MÉTODOS ADICIONALES PARA COMPATIBILIDAD Y FUNCIONALIDAD COMPLETA
+    # ========================================================================
     
     def get_reception_client(self):
         """
@@ -1395,7 +1530,7 @@ class SRISOAPClient:
             'reception_client_initialized': self._reception_client is not None,
             'authorization_client_initialized': self._authorization_client is not None,
             'sri_urls': self.SRI_URLS[self.environment],
-            'client_version': 'COMPLETE_FIXED_V2025.3',
+            'client_version': 'COMPLETE_FIXED_V2025.4_AUTH_PARSING',
             'functionality_status': 'ALL_ORIGINAL_FUNCTIONS_MAINTAINED_AND_ENHANCED'
         }
     
@@ -1489,15 +1624,11 @@ class SRISOAPClient:
         
         return recommendations
     
-    # ✅ MÉTODO PARA COMPATIBILIDAD CON VERSIONES ANTERIORES
+    # ✅ ALIAS PARA COMPATIBILIDAD CON VERSIONES ANTERIORES
     def send_document(self, document, signed_xml_content):
-        """
-        ✅ ALIAS PARA COMPATIBILIDAD
-        """
+        """✅ ALIAS PARA COMPATIBILIDAD"""
         return self.send_document_to_reception(document, signed_xml_content)
     
     def get_authorization(self, document):
-        """
-        ✅ ALIAS PARA COMPATIBILIDAD
-        """
+        """✅ ALIAS PARA COMPATIBILIDAD"""
         return self.get_document_authorization(document)
