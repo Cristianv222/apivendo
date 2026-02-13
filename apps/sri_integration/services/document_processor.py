@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Procesador principal de documentos electrónicos - VERSIÓN FINAL v5.0
+Procesador principal de documentos electrónicos - VERSIÓN 5.1
 RESUELVE: Error 39 FIRMA INVALIDA
 
-BASADO EN: XML del facturador oficial del SRI (descompilado)
-CORRECCIONES DEFINITIVAS:
-1. Elimina espacios en blanco que alteran el digest
-2. Transform C14N en Reference del documento
-3. X509IssuerName con formato correcto para Security Data
-4. IDs con formato UUID del facturador oficial
+FIX CRÍTICO v5.1: Namespace 'etsi' en lugar de 'xades' para QualifyingProperties
 """
 
 import logging
@@ -229,15 +224,14 @@ class DocumentProcessor:
     def _create_xades_bes_signature(self, xml_content, cert_data):
         """
         Crear firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
-        FIX DEFINITIVO: Elimina TODOS los espacios en blanco que causan Error 39.
+        FIX v5.1: Namespace 'etsi' en QualifyingProperties
         """
         try:
             # --- PASO 1: Limpiar y parsear XML SIN espacios en blanco ---
             xml_content = self._pre_clean_xml(xml_content)
 
-            # Parser que ELIMINA espacios en blanco (CRÍTICO para el digest)
             parser = etree.XMLParser(
-                remove_blank_text=True,  # ← FIX CRÍTICO
+                remove_blank_text=True,
                 strip_cdata=False,
                 resolve_entities=False,
                 remove_comments=False,
@@ -245,7 +239,6 @@ class DocumentProcessor:
             )
             root = etree.fromstring(xml_content.encode('utf-8'), parser)
 
-            # Limpiar TODOS los tail con solo espacios en blanco
             def clean_whitespace(elem):
                 """Elimina espacios/saltos de línea de tail recursivamente."""
                 if elem.tail is not None and not elem.tail.strip():
@@ -272,7 +265,7 @@ class DocumentProcessor:
             certificate = cert_data.certificate
             private_key = cert_data.private_key
 
-            # --- PASO 4: Digest del documento (ANTES de agregar firma) ---
+            # --- PASO 4: Digest del documento ---
             doc_canonical = etree.tostring(
                 root, 
                 method='c14n', 
@@ -324,7 +317,7 @@ class DocumentProcessor:
 
             # --- PASO 10: Insertar firma SIN espacios ---
             root.append(signature_element)
-            signature_element.tail = None  # Sin espacios después
+            signature_element.tail = None
 
             # --- PASO 11: Serializar SIN pretty_print ---
             signed_xml_bytes = etree.tostring(
@@ -332,7 +325,7 @@ class DocumentProcessor:
                 encoding='utf-8',
                 method='xml',
                 xml_declaration=False,
-                pretty_print=False  # ← CRÍTICO
+                pretty_print=False
             )
 
             logger.info(f"XML firmado: {len(signed_xml_bytes)} bytes")
@@ -357,7 +350,7 @@ class DocumentProcessor:
         sig_method = etree.SubElement(signed_info, f"{{{DS_NS}}}SignatureMethod")
         sig_method.set("Algorithm", ALG_RSA_SHA256)
 
-        # Reference 1: Documento (CON Transform C14N - esto faltaba!)
+        # Reference 1: Documento
         ref1 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
         ref1.set("Id", reference_id)
         ref1.set("URI", comprobante_uri)
@@ -367,8 +360,6 @@ class DocumentProcessor:
         t_env = etree.SubElement(transforms, f"{{{DS_NS}}}Transform")
         t_env.set("Algorithm", ALG_ENVELOPED)
 
-        # CRÍTICO: Agregar Transform C14N (esto faltaba en tu versión)
-        # El facturador oficial SÍ lo incluye
         t_c14n = etree.SubElement(transforms, f"{{{DS_NS}}}Transform")
         t_c14n.set("Algorithm", ALG_C14N)
 
@@ -378,7 +369,7 @@ class DocumentProcessor:
         dv1 = etree.SubElement(ref1, f"{{{DS_NS}}}DigestValue")
         dv1.text = doc_digest
 
-        # Reference 2: SignedProperties (SIN Transforms)
+        # Reference 2: SignedProperties
         ref2 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
         ref2.set("Type", TYPE_SIGNED_PROPS)
         ref2.set("URI", f"#{signed_props_id}")
@@ -392,21 +383,19 @@ class DocumentProcessor:
         return signed_info
 
     def _create_signed_properties(self, signed_props_id, signature_id,
-                              reference_id, certificate):
-    """Crear SignedProperties con prefijo 'etsi' como el facturador oficial."""
-    # CRÍTICO: Usar prefijo 'etsi' en lugar de 'xades'
-    signed_props = etree.Element(
-        f"{{{XADES_NS}}}SignedProperties",
-        nsmap={'etsi': XADES_NS}  # ← CAMBIO: etsi
-    )
-    signed_props.set("Id", signed_props_id)
+                                  reference_id, certificate):
+        """Crear SignedProperties con prefijo 'etsi' como el facturador oficial."""
+        # CRÍTICO: Usar prefijo 'etsi' en lugar de 'xades'
+        signed_props = etree.Element(
+            f"{{{XADES_NS}}}SignedProperties",
+            nsmap={'etsi': XADES_NS}
+        )
+        signed_props.set("Id", signed_props_id)
 
-    sig_props = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedSignatureProperties")
+        sig_props = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedSignatureProperties")
 
-        # SigningTime con formato del facturador oficial
         signing_time = etree.SubElement(sig_props, f"{{{XADES_NS}}}SigningTime")
         now_ec = datetime.now(ECUADOR_TZ)
-        # Formato con milisegundos como el facturador oficial
         signing_time.text = now_ec.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '-05:00'
 
         signing_cert = etree.SubElement(sig_props, f"{{{XADES_NS}}}SigningCertificate")
@@ -424,7 +413,6 @@ class DocumentProcessor:
         issuer_serial = etree.SubElement(cert_elem, f"{{{XADES_NS}}}IssuerSerial")
 
         issuer_name = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509IssuerName")
-        # Formato correcto para Security Data
         issuer_name.text = self._format_issuer_name(certificate)
 
         serial_number = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509SerialNumber")
@@ -446,7 +434,7 @@ class DocumentProcessor:
 
         return signed_props
 
-        def _assemble_signature(self, sig_id, sig_value_id, signed_info, signature_value_b64,
+    def _assemble_signature(self, sig_id, sig_value_id, signed_info, signature_value_b64,
                             certificate, signed_properties):
         """Ensamblar Signature EXACTAMENTE como el facturador oficial."""
         signature = etree.Element(
@@ -470,11 +458,11 @@ class DocumentProcessor:
 
         obj = etree.SubElement(signature, f"{{{DS_NS}}}Object")
         
-        # CRÍTICO: Usar 'etsi' como prefijo, NO 'xades'
+        # CRÍTICO: Usar 'etsi' como prefijo
         qp = etree.SubElement(
             obj, 
             f"{{{XADES_NS}}}QualifyingProperties",
-            nsmap={'etsi': XADES_NS}  # ← CAMBIO CRÍTICO: etsi en lugar de xades
+            nsmap={'etsi': XADES_NS}
         )
         qp.set("Target", f"#{sig_id}")
         qp.append(signed_properties)
@@ -520,14 +508,10 @@ class DocumentProcessor:
         return f"#{comp_id}"
 
     def _format_issuer_name(self, certificate):
-        """
-        Formatear X509IssuerName en formato estándar RFC4514.
-        Para Security Data NO necesita el formato especial con OID 2.5.4.97.
-        """
+        """Formatear X509IssuerName en formato estándar RFC4514."""
         try:
             issuer = certificate.issuer
             
-            # Para Security Data, usar formato estándar CN,OU,O,C
             attr_order = ['CN', 'OU', 'O', 'C']
             attr_map = {}
             
@@ -551,7 +535,7 @@ class DocumentProcessor:
             
             issuer_string = ','.join(parts)
             
-            logger.info(f"X509IssuerName (Security Data format): {issuer_string}")
+            logger.info(f"X509IssuerName: {issuer_string}")
             
             return issuer_string
 
@@ -560,7 +544,7 @@ class DocumentProcessor:
             return certificate.issuer.rfc4514_string()
 
     # ========================================================================
-    # Resto de métodos (sin cambios)
+    # Resto de métodos
     # ========================================================================
     def _generate_xml(self, document):
         """Generar XML del documento."""
@@ -768,7 +752,7 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processor_version': 'v5.0_WHITESPACE_FIX',
+            'processor_version': 'v5.1_NAMESPACE_ETSI_FIX',
         }
 
     def validate_company_setup(self):
