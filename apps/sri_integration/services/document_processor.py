@@ -541,19 +541,17 @@ class DocumentProcessor:
     def _format_issuer_name(self, certificate):
         """
         Formatear el issuer name del certificado.
-        Mantiene el formato original según el proveedor.
+        Se debe usar el formato RFC 4514 exacto para evitar errores de validación (Error 39).
         """
         try:
+            # Opción A: Usar RFC 4514 directamente (Estándar)
+            # Esto maneja caracteres especiales y orden correcto (CN=...,OU=...,O=...,C=...)
             issuer_string = certificate.issuer.rfc4514_string()
-
-            # UANATACA: mantener formato exacto (incluye OID especiales)
-            if "UANATACA" in issuer_string:
-                return issuer_string
-
-            # Security Data y otros: limpiar caracteres problemáticos
-            issuer_string = re.sub(r"[<>\"']", "", issuer_string)
-            issuer_string = re.sub(r"\s+", " ", issuer_string)
-            return issuer_string.strip()
+            
+            # Log para debug
+            logger.info(f"Issuer Name (RFC4514): {issuer_string}")
+            
+            return issuer_string
 
         except Exception as e:
             logger.error(f"Error formatting issuer name: {e}")
