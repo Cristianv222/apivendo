@@ -226,109 +226,122 @@ class DocumentProcessor:
             logger.error(f"Error signing XML for document {document.id}: {str(e)}")
             return False, f"XML_SIGNING_ERROR: {str(e)}"
 
-    def _create_xades_bes_signature(self, xml_content, cert_data):
-        """
-        Crear firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
-        Basado en el XML de ejemplo proporcionado.
-        """
-        try:
-            # --- PASO 1: Parsear XML ---
-            xml_content = self._pre_clean_xml(xml_content)
+   def _create_xades_bes_signature(self, xml_content, cert_data):
+    """
+    Crear firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
+    FIX DEFINITIVO: Elimina TODOS los espacios en blanco que causan Error 39.
+    """
+    try:
+        # --- PASO 1: Limpiar y parsear XML SIN espacios en blanco ---
+        xml_content = self._pre_clean_xml(xml_content)
 
-            parser = etree.XMLParser(
-                remove_blank_text=False,
-                strip_cdata=False,
-                resolve_entities=False,
-                remove_comments=False,
-                recover=False
-            )
-            root = etree.fromstring(xml_content.encode('utf-8'), parser)
+        # Parser que ELIMINA espacios en blanco (CRÍTICO para el digest)
+        parser = etree.XMLParser(
+            remove_blank_text=True,  # ← FIX CRÍTICO
+            strip_cdata=False,
+            resolve_entities=False,
+            remove_comments=False,
+            recover=False
+        )
+        root = etree.fromstring(xml_content.encode('utf-8'), parser)
 
-            # --- PASO 2: Asegurar ID en comprobante ---
-            comprobante_uri = self._ensure_comprobante_id(root)
+        # Limpiar TODOS los tail con solo espacios en blanco
+        def clean_whitespace(elem):
+            """Elimina espacios/saltos de línea de tail recursivamente."""
+            if elem.tail is not None and not elem.tail.strip():
+                elem.tail = None
+            for child in elem:
+                clean_whitespace(child)
+        
+        clean_whitespace(root)
+        
+        logger.info("XML limpiado de espacios en blanco")
 
-            # --- PASO 3: Generar IDs con UUID (como el facturador oficial) ---
-            base_uuid = str(uuid.uuid4())
-            sig_id = f"xmldsig-{base_uuid}"
-            signed_props_id = f"{sig_id}-signedprops"
-            sig_value_id = f"{sig_id}-sigvalue"
-            ref_id = f"{sig_id}-ref0"
-            
-            logger.info(f"IDs generados - Base UUID: {base_uuid}")
+        # --- PASO 2: Asegurar ID en comprobante ---
+        comprobante_uri = self._ensure_comprobante_id(root)
 
-            certificate = cert_data.certificate
-            private_key = cert_data.private_key
+        # --- PASO 3: Generar IDs ---
+        base_uuid = str(uuid.uuid4())
+        sig_id = f"xmldsig-{base_uuid}"
+        signed_props_id = f"{sig_id}-signedprops"
+        sig_value_id = f"{sig_id}-sigvalue"
+        ref_id = f"{sig_id}-ref0"
+        
+        logger.info(f"IDs generados - Base UUID: {base_uuid}")
 
-            # --- PASO 4: Digest del documento ---
-            doc_canonical = etree.tostring(
-                root, 
-                method='c14n', 
-                exclusive=False,
-                with_comments=False
-            )
-            doc_digest_b64 = base64.b64encode(hashlib.sha256(doc_canonical).digest()).decode()
-            
-            logger.info(f"Document digest: {len(doc_canonical)} bytes")
+        certificate = cert_data.certificate
+        private_key = cert_data.private_key
 
-            # --- PASO 5: Crear SignedProperties ---
-            signed_properties = self._create_signed_properties(
-                signed_props_id, sig_id, ref_id, certificate
-            )
+        # --- PASO 4: Digest del documento (ANTES de agregar firma) ---
+        doc_canonical = etree.tostring(
+            root, 
+            method='c14n', 
+            exclusive=False,
+            with_comments=False
+        )
+        doc_digest_b64 = base64.b64encode(hashlib.sha256(doc_canonical).digest()).decode()
+        
+        logger.info(f"Document digest: {len(doc_canonical)} bytes")
 
-            # --- PASO 6: Digest de SignedProperties ---
-            sp_canonical = etree.tostring(
-                signed_properties, 
-                method='c14n', 
-                exclusive=False,
-                with_comments=False
-            )
-            sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
-            
-            logger.info(f"SignedProperties digest: {len(sp_canonical)} bytes")
+        # --- PASO 5: Crear SignedProperties ---
+        signed_properties = self._create_signed_properties(
+            signed_props_id, sig_id, ref_id, certificate
+        )
 
-            # --- PASO 7: Crear SignedInfo ---
-            signed_info = self._create_signed_info(
-                doc_digest_b64, sp_digest_b64,
-                comprobante_uri, signed_props_id, ref_id
-            )
+        # --- PASO 6: Digest de SignedProperties ---
+        sp_canonical = etree.tostring(
+            signed_properties, 
+            method='c14n', 
+            exclusive=False,
+            with_comments=False
+        )
+        sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
+        
+        logger.info(f"SignedProperties digest: {len(sp_canonical)} bytes")
 
-            # --- PASO 8: Firmar SignedInfo ---
-            si_canonical = etree.tostring(
-                signed_info, method='c14n', exclusive=False, with_comments=False
-            )
-            signature_bytes = private_key.sign(
-                si_canonical,
-                padding.PKCS1v15(),
-                hashes.SHA256()
-            )
-            signature_value_b64 = base64.b64encode(signature_bytes).decode()
+        # --- PASO 7: Crear SignedInfo ---
+        signed_info = self._create_signed_info(
+            doc_digest_b64, sp_digest_b64,
+            comprobante_uri, signed_props_id, ref_id
+        )
 
-            # --- PASO 9: Ensamblar Signature ---
-            signature_element = self._assemble_signature(
-                sig_id, sig_value_id, signed_info, signature_value_b64,
-                certificate, signed_properties
-            )
+        # --- PASO 8: Firmar SignedInfo ---
+        si_canonical = etree.tostring(
+            signed_info, method='c14n', exclusive=False, with_comments=False
+        )
+        signature_bytes = private_key.sign(
+            si_canonical,
+            padding.PKCS1v15(),
+            hashes.SHA256()
+        )
+        signature_value_b64 = base64.b64encode(signature_bytes).decode()
 
-            # --- PASO 10: Insertar en documento ---
-            root.append(signature_element)
-            signature_element.tail = None
+        # --- PASO 9: Ensamblar Signature ---
+        signature_element = self._assemble_signature(
+            sig_id, sig_value_id, signed_info, signature_value_b64,
+            certificate, signed_properties
+        )
 
-            # --- PASO 11: Serializar ---
-            signed_xml_bytes = etree.tostring(
-                root,
-                encoding='utf-8',
-                method='xml',
-                xml_declaration=False,  # SRI no usa declaración XML en firmados
-                pretty_print=False
-            )
+        # --- PASO 10: Insertar firma SIN espacios ---
+        root.append(signature_element)
+        signature_element.tail = None  # Sin espacios después
 
-            logger.info(f"XML firmado: {len(signed_xml_bytes)} bytes")
-            
-            return signed_xml_bytes
+        # --- PASO 11: Serializar SIN pretty_print ---
+        signed_xml_bytes = etree.tostring(
+            root,
+            encoding='utf-8',
+            method='xml',
+            xml_declaration=False,
+            pretty_print=False  # ← CRÍTICO
+        )
 
-        except Exception as e:
-            logger.error(f"Error creating XAdES-BES signature: {str(e)}")
-            raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
+        logger.info(f"XML firmado: {len(signed_xml_bytes)} bytes")
+        
+        return signed_xml_bytes
+
+    except Exception as e:
+        logger.error(f"Error creating XAdES-BES signature: {str(e)}")
+        raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
 
     # ========================================================================
     # Componentes de la firma
