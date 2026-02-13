@@ -1,13 +1,24 @@
 # -*- coding: utf-8 -*-
 """
-Procesador principal de documentos electrónicos - VERSIÓN FINAL CORREGIDA
-RESUELVE: Error 39 FIRMA INVALIDA
-FIX 1: Agrega transformación enveloped-signature
-FIX 2: Usa pretty_print en lugar de canonicalización post-firma
+Procesador principal de documentos electrónicos - VERSIÓN CORREGIDA
+RESUELVE: Error 39 FIRMA INVALIDA (firma y/o certificados alterados)
+
+CORRECCIONES APLICADAS:
+1. pretty_print=False para no alterar XML después de firmar
+2. remove_blank_text=False para preservar XML original del generador
+3. SHA-256 consistente en TODOS los algoritmos (digest, firma, certificado)
+4. Transformación enveloped-signature + C14N en Reference del documento
+5. SIN Transforms en Reference de SignedProperties (igual que facturador SRI)
+6. Type correcto: http://uri.etsi.org/01903#SignedProperties
+7. Digest del documento calculado correctamente (canonicalización del root completo)
+8. SignedDataObjectProperties con Description, MimeType y Encoding correctos
+9. Verificación de expiración del certificado corregida (código alcanzable)
+10. No se modifica el XML después de firmarlo
 """
 
 import logging
 import os
+import time
 from datetime import datetime, timezone, timedelta
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -33,714 +44,740 @@ from cryptography import x509
 
 logger = logging.getLogger(__name__)
 
+# ============================================================================
+# Constantes de namespaces y algoritmos
+# ============================================================================
+DS_NS = "http://www.w3.org/2000/09/xmldsig#"
+XADES_NS = "http://uri.etsi.org/01903/v1.3.2#"
+
+ALG_C14N = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
+ALG_RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
+ALG_SHA256 = "http://www.w3.org/2001/04/xmlenc#sha256"
+ALG_ENVELOPED = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
+TYPE_SIGNED_PROPS = "http://uri.etsi.org/01903#SignedProperties"
+
+ECUADOR_TZ = timezone(timedelta(hours=-5))
+
 
 class DocumentProcessor:
     """
-    Procesador principal de documentos electrónicos del SRI
-    VERSIÓN FINAL: Con transformación enveloped-signature
+    Procesador principal de documentos electrónicos del SRI.
+    Implementa firma XAdES-BES compatible con el facturador oficial del SRI.
     """
-    
+
     def __init__(self, company):
         self.company = company
         self.sri_config = company.sri_configuration
         self.cert_manager = get_certificate_manager()
-        
+
+    # ========================================================================
+    # Flujo principal
+    # ========================================================================
     def process_document(self, document, send_email=True, certificate_password=None):
-        """Procesa completamente un documento electrónico"""
+        """Procesa completamente un documento electrónico."""
         try:
             with transaction.atomic():
                 logger.info(f"Iniciando procesamiento de documento {document.id}")
-                
-                # Verificar certificado disponible
+
+                # --- Validaciones previas ---
                 cert_data = self.cert_manager.get_certificate(self.company.id)
                 if not cert_data:
-                    error_msg = f"Certificate not available for company {self.company.id}"
-                    logger.error(error_msg)
-                    return False, error_msg
-                
-                # Validar certificado
-                is_valid, validation_message = self.cert_manager.validate_certificate(self.company.id)
+                    msg = f"Certificate not available for company {self.company.id}"
+                    logger.error(msg)
+                    return False, msg
+
+                is_valid, validation_msg = self.cert_manager.validate_certificate(self.company.id)
                 if not is_valid:
-                    logger.error(f"Certificate validation failed: {validation_message}")
-                    return False, f"Certificate validation failed: {validation_message}"
-                
-                # Verificar tipo de certificado
-                cert_check_success, cert_check_message = self._verify_certificate_type_universal(cert_data)
-                if not cert_check_success:
-                    logger.error(f"Certificate type check failed: {cert_check_message}")
-                    return False, cert_check_message
-                
+                    logger.error(f"Certificate validation failed: {validation_msg}")
+                    return False, f"Certificate validation failed: {validation_msg}"
+
+                ok, cert_msg = self._verify_certificate(cert_data)
+                if not ok:
+                    logger.error(f"Certificate check failed: {cert_msg}")
+                    return False, cert_msg
+
                 # 1. Generar XML
                 logger.info(f"Generando XML para documento {document.id}")
-                success, xml_content = self._generate_xml(document)
-                if not success:
+                ok, xml_content = self._generate_xml(document)
+                if not ok:
                     logger.error(f"XML generation failed: {xml_content}")
                     return False, f"XML generation failed: {xml_content}"
-                
-                # 2. Firmar XML con estructura corregida
+
+                # 2. Firmar XML
                 logger.info(f"Firmando XML para documento {document.id}")
-                success, signed_xml = self._sign_xml_corrected(document, xml_content)
-                if not success:
+                ok, signed_xml = self._sign_xml(document, xml_content)
+                if not ok:
                     logger.error(f"XML signing failed: {signed_xml}")
                     return False, f"XML signing failed: {signed_xml}"
-                
+
                 # 3. Enviar al SRI
                 logger.info(f"Enviando documento {document.id} al SRI")
-                success, sri_message = self._send_to_sri_enhanced(document, signed_xml)
-                if not success:
-                    logger.error(f"SRI submission failed: {sri_message}")
-                    return False, sri_message
-                
+                ok, sri_msg = self._send_to_sri(document, signed_xml)
+                if not ok:
+                    logger.error(f"SRI submission failed: {sri_msg}")
+                    return False, sri_msg
+
                 # 4. Consultar autorización
                 logger.info(f"Consultando autorización para documento {document.id}")
-                success, auth_message = self._check_authorization(document)
-                if not success:
-                    logger.warning(f"Authorization check failed: {auth_message}")
-                    if document.status == 'SENT':
-                        logger.info(f"Manteniendo status SENT aunque autorización falle")
-                
+                ok, auth_msg = self._check_authorization(document)
+                if not ok:
+                    logger.warning(f"Authorization check failed: {auth_msg}")
+
                 # 5. Generar PDF
-                success, pdf_message = self._generate_pdf(document)
-                if not success:
-                    logger.warning(f"PDF generation failed: {pdf_message}")
-                
-                # Recargar documento
+                ok, pdf_msg = self._generate_pdf(document)
+                if not ok:
+                    logger.warning(f"PDF generation failed: {pdf_msg}")
+
                 document.refresh_from_db()
-                
+
                 # 6. Enviar email si está autorizado
                 if document.status == 'AUTHORIZED' and send_email:
                     logger.info(f"Enviando email para documento {document.id}")
                     self._send_email(document)
-                
+
                 logger.info(f"Documento {document.id} procesado con estado: {document.status}")
                 return True, f"Document processed successfully with status: {document.status}"
-                
+
         except Exception as e:
             logger.error(f"Critical error processing document {document.id}: {str(e)}")
             document.status = 'ERROR'
             document.save()
             return False, f"PROCESSOR_CRITICAL_ERROR: {str(e)}"
-    
-    def _verify_certificate_type_universal(self, cert_data):
-        """Verificar certificado de manera tolerante"""
+
+    # ========================================================================
+    # Verificación de certificado
+    # ========================================================================
+    def _verify_certificate(self, cert_data):
+        """
+        Verificar que el certificado sea válido para firma digital
+        y que no esté expirado.
+        """
         try:
             certificate = cert_data.certificate
             issuer = certificate.issuer.rfc4514_string()
             logger.info(f"Proveedor del certificado: {issuer}")
-            
-            # Verificar Key Usage
+
+            # 1. Verificar validez temporal PRIMERO
+            now = datetime.now(timezone.utc)
+
+            not_valid_after = certificate.not_valid_after_utc if hasattr(
+                certificate, 'not_valid_after_utc'
+            ) else certificate.not_valid_after.replace(tzinfo=timezone.utc)
+
+            not_valid_before = certificate.not_valid_before_utc if hasattr(
+                certificate, 'not_valid_before_utc'
+            ) else certificate.not_valid_before.replace(tzinfo=timezone.utc)
+
+            if not_valid_after < now:
+                return False, f"Certificate expired on {not_valid_after}"
+
+            if not_valid_before > now:
+                return False, f"Certificate not valid until {not_valid_before}"
+
+            # 2. Verificar Key Usage
             try:
                 key_usage = certificate.extensions.get_extension_for_oid(
                     x509.oid.ExtensionOID.KEY_USAGE
                 ).value
-                
+
                 if key_usage.digital_signature:
                     logger.info("Certificate has Digital Signature capability")
                     return True, "Certificate valid for digital signature"
                 else:
                     logger.error("Certificate does NOT have Digital Signature capability")
-                    return False, "Certificate must have Digital Signature key usage for XML signing"
-                    
+                    return False, (
+                        "Certificate must have Digital Signature key usage. "
+                        "Verify you are using the Signing Key, not the Encryption Key."
+                    )
+
             except x509.ExtensionNotFound:
                 logger.warning("Key Usage extension not found - proceeding anyway")
-                return True, "Certificate Key Usage extension not found (proceeding anyway)"
-            
-            # Verificar validez temporal
-            now = datetime.now(timezone.utc)
-            if certificate.not_valid_after < now:
-                return False, f"Certificate expired on {certificate.not_valid_after}"
-            
-            if certificate.not_valid_before > now:
-                return False, f"Certificate not valid until {certificate.not_valid_before}"
-            
-            return True, "Certificate validation passed"
-                
+                return True, "Certificate Key Usage extension not found (proceeding)"
+
         except Exception as e:
-            logger.error(f"Error verifying certificate type: {e}")
+            logger.error(f"Error verifying certificate: {e}")
             return False, f"Certificate verification failed: {str(e)}"
-    
-    def _sign_xml_corrected(self, document, xml_content):
-        """Firma el XML con transformación enveloped-signature"""
+
+    # ========================================================================
+    # Firma XAdES-BES
+    # ========================================================================
+    def _sign_xml(self, document, xml_content):
+        """Firma el XML con XAdES-BES compatible con el SRI."""
         try:
-            logger.info(f"Iniciando firma XML corregida para documento {document.id}")
-            
-            # Obtener certificado
+            logger.info(f"Iniciando firma XML para documento {document.id}")
+
             cert_data = self.cert_manager.get_certificate(self.company.id)
             if not cert_data:
                 return False, "Certificate not available"
-            
-            # Firmar con implementación corregida
-            signed_xml = self._create_xades_bes_signature_fixed(xml_content, cert_data)
-            
+
+            signed_xml = self._create_xades_bes_signature(xml_content, cert_data)
+
             # Guardar XML firmado
             filename = f"{document.access_key}_signed.xml"
             document.signed_xml_file.save(
                 filename,
-                ContentFile(signed_xml.encode('utf-8')),
+                ContentFile(signed_xml),  # Ya es bytes
                 save=True
             )
-            
+
             document.status = 'SIGNED'
             document.save()
-            
             cert_data.update_usage()
-            
+
             logger.info(f"XML firmado correctamente para documento {document.id}")
-            return True, signed_xml
-            
+            return True, signed_xml.decode('utf-8')
+
         except Exception as e:
             logger.error(f"Error signing XML for document {document.id}: {str(e)}")
             return False, f"XML_SIGNING_ERROR: {str(e)}"
-    
-    def _create_xades_bes_signature_fixed(self, xml_content, cert_data):
+
+    def _create_xades_bes_signature(self, xml_content, cert_data):
         """
-        Crear firma XAdES-BES con transformación enveloped-signature - CORREGIDO FINAL
-        ✅ Incluye transformación enveloped-signature
-        ✅ Usa pretty_print en lugar de canonicalización post-firma
+        Crear firma XAdES-BES compatible con el facturador oficial del SRI.
+
+        Flujo:
+        1. Parsear XML sin modificar whitespace
+        2. Canonicalizar el documento (sin firma) → calcular digest
+        3. Crear SignedProperties → canonicalizar → calcular digest
+        4. Crear SignedInfo con ambos digests
+        5. Canonicalizar SignedInfo → firmar con RSA-SHA256
+        6. Ensamblar el nodo ds:Signature completo
+        7. Insertar en el documento
+        8. Serializar SIN modificar (pretty_print=False)
+
+        CRÍTICO: El XML NO se modifica después de insertar la firma.
         """
         try:
-            # ✅ PASO 1: Limpiar XML ANTES de parsear
-            xml_content = self._pre_clean_xml_if_needed(xml_content)
-            
-            # PASO 2: Parsear XML original
+            # --- PASO 1: Limpiar y parsear XML ---
+            xml_content = self._pre_clean_xml(xml_content)
+
+            # IMPORTANTE: remove_blank_text=False para preservar el XML tal cual
             parser = etree.XMLParser(
-                remove_blank_text=True,
+                remove_blank_text=False,
                 strip_cdata=False,
                 resolve_entities=False,
                 remove_comments=False,
                 recover=False
             )
-            
             root = etree.fromstring(xml_content.encode('utf-8'), parser)
-            
-            # PASO 3: Configurar elemento comprobante
-            comprobante_id = self._ensure_comprobante_id(root)
-            
-            # PASO 4: Generar IDs únicos
-            signature_id = f"Signature{uuid.uuid4().hex[:8]}"
-            signed_properties_id = f"{signature_id}-SignedProperties{uuid.uuid4().hex[:6]}"
-            reference_id = f"Reference-ID-{uuid.uuid4().hex[:6]}"
-            
-            # PASO 5: Extraer certificado
+
+            # --- PASO 2: Asegurar ID en el comprobante ---
+            comprobante_uri = self._ensure_comprobante_id(root)
+
+            # --- PASO 3: Generar IDs únicos para la firma ---
+            sig_id = f"Signature{uuid.uuid4().hex[:8]}"
+            signed_props_id = f"{sig_id}-SignedProperties{uuid.uuid4().hex[:6]}"
+            ref_id = f"Reference-ID-{uuid.uuid4().hex[:6]}"
+
             certificate = cert_data.certificate
-            
-            # PASO 6: Crear estructura de firma completa
-            signature_element = self._build_signature_structure_fixed(
-                signature_id,
-                signed_properties_id, 
-                reference_id,
-                comprobante_id,
-                certificate,
-                cert_data.private_key,
-                root
+            private_key = cert_data.private_key
+
+            # --- PASO 4: Calcular digest del documento ---
+            # Se canonicaliza el root completo (que aún NO tiene el nodo Signature).
+            # Esto replica lo que el verificador del SRI hará:
+            #   tomar documento → aplicar enveloped-signature (quitar Signature) → C14N → hash
+            doc_canonical = etree.tostring(root, method='c14n', exclusive=False, with_comments=False)
+            doc_digest_b64 = base64.b64encode(hashlib.sha256(doc_canonical).digest()).decode()
+
+            # --- PASO 5: Crear SignedProperties ---
+            signed_properties = self._create_signed_properties(
+                signed_props_id, sig_id, ref_id, certificate
             )
-            
-            # PASO 7: Insertar firma en documento
+
+            # Canonicalizar SignedProperties para calcular su digest
+            sp_canonical = etree.tostring(
+                signed_properties, method='c14n', exclusive=False, with_comments=False
+            )
+            sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
+
+            # --- PASO 6: Crear SignedInfo ---
+            signed_info = self._create_signed_info(
+                doc_digest_b64, sp_digest_b64,
+                comprobante_uri, signed_props_id, ref_id
+            )
+
+            # --- PASO 7: Firmar SignedInfo ---
+            si_canonical = etree.tostring(
+                signed_info, method='c14n', exclusive=False, with_comments=False
+            )
+            signature_bytes = private_key.sign(
+                si_canonical,
+                padding.PKCS1v15(),
+                hashes.SHA256()
+            )
+            signature_value_b64 = base64.b64encode(signature_bytes).decode()
+
+            # --- PASO 8: Ensamblar ds:Signature ---
+            signature_element = self._assemble_signature(
+                sig_id, signed_info, signature_value_b64,
+                certificate, signed_properties
+            )
+
+            # --- PASO 9: Insertar firma en documento ---
             root.append(signature_element)
-            
-            # ✅ PASO 8: Generar XML final CON pretty_print (NO canonicalización)
-            signed_xml = etree.tostring(
+
+            # --- PASO 10: Serializar XML final ---
+            # CRÍTICO: pretty_print=False para NO alterar el contenido firmado
+            signed_xml_bytes = etree.tostring(
                 root,
                 encoding='utf-8',
                 method='xml',
                 xml_declaration=True,
-                pretty_print=False  # ✅ SIN formato para no modificar la firma
-            ).decode('utf-8')
-            
-            # ✅ CRÍTICO: NO modificar el XML después de firmar
-            
-            logger.info("✅ XML firmado con transformación enveloped-signature")
-            logger.info("✅ XML con formato pretty_print sin romper firma")
-            return signed_xml
-            
+                pretty_print=False
+            )
+
+            logger.info("XML firmado exitosamente con XAdES-BES (SHA-256)")
+            return signed_xml_bytes
+
         except Exception as e:
             logger.error(f"Error creating XAdES-BES signature: {str(e)}")
             raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
-    
-    def _pre_clean_xml_if_needed(self, xml_content):
-        """Limpieza PRE-firma si es necesaria"""
-        try:
-            # Solo asegurar que tenga declaración XML correcta
-            if not xml_content.strip().startswith('<?xml'):
-                xml_content = '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_content
-            
-            # Eliminar BOM si existe
-            if xml_content.startswith('\ufeff'):
-                xml_content = xml_content[1:]
-            
-            return xml_content
-            
-        except Exception as e:
-            logger.warning(f"Error in pre-cleaning: {e}")
-            return xml_content
-    
-    def _ensure_comprobante_id(self, root):
-        """Asegurar que el comprobante tenga ID válido"""
-        comprobante_elements = [
-            'factura', 'notaCredito', 'notaDebito', 
-            'comprobanteRetencion', 'liquidacionCompra'
-        ]
-        
-        for element_name in comprobante_elements:
-            element = root.find(f'.//{element_name}')
-            if element is not None:
-                comp_id = element.get('id')
-                if not comp_id:
-                    comp_id = 'comprobante'
-                    element.set('id', comp_id)
-                
-                logger.info(f"Found comprobante element: {element_name} with ID: {comp_id}")
-                return f"#{comp_id}"
-        
-        # Fallback al elemento raíz
-        root_id = root.get('id')
-        if not root_id:
-            root_id = 'comprobante'
-            root.set('id', root_id)
-        
-        return f"#{root_id}"
-    
-    def _build_signature_structure_fixed(self, signature_id, signed_properties_id, reference_id, 
-                                       comprobante_id, certificate, private_key, document_root):
-        """Construir estructura completa de firma XAdES-BES"""
-        
-        # Namespaces
-        ds_ns = "http://www.w3.org/2000/09/xmldsig#"
-        xades_ns = "http://uri.etsi.org/01903/v1.3.2#"
-        
-        # 1. Calcular digest del documento
-        document_canonical = self._canonicalize_element(document_root, comprobante_id)
-        document_digest = hashlib.sha256(document_canonical).digest()
-        document_digest_b64 = base64.b64encode(document_digest).decode()
-        
-        # 2. Crear SignedProperties
-        signed_properties = self._create_signed_properties(
-            signed_properties_id, signature_id, reference_id, certificate, ds_ns, xades_ns
-        )
-        
-        # 3. Calcular digest de SignedProperties
-        signed_props_canonical = etree.tostring(
-            signed_properties,
-            method='c14n',
-            exclusive=False,
-            with_comments=False
-        )
-        signed_props_digest = hashlib.sha256(signed_props_canonical).digest()
-        signed_props_digest_b64 = base64.b64encode(signed_props_digest).decode()
-        
-        # 4. Crear SignedInfo
-        signed_info = self._create_signed_info(
-            document_digest_b64, signed_props_digest_b64, 
-            comprobante_id, signed_properties_id, reference_id, ds_ns
-        )
-        
-        # 5. Firmar SignedInfo
-        signed_info_canonical = etree.tostring(
-            signed_info,
-            method='c14n',
-            exclusive=False, 
-            with_comments=False
-        )
-        
-        signature_bytes = private_key.sign(
-            signed_info_canonical,
-            padding.PKCS1v15(),
-            hashes.SHA256()  # SHA-256 para producción
-        )
-        signature_value = base64.b64encode(signature_bytes).decode()
-        
-        # 6. Crear elemento Signature completo
-        signature = etree.Element(f"{{{ds_ns}}}Signature", nsmap={
-            'ds': ds_ns,
-            'etsi': xades_ns
-        })
-        signature.set("Id", signature_id)
-        
-        # SignedInfo
-        signature.append(signed_info)
-        
-        # SignatureValue
-        sig_value_elem = etree.SubElement(signature, f"{{{ds_ns}}}SignatureValue")
-        sig_value_elem.text = signature_value
-        
-        # KeyInfo
-        key_info = etree.SubElement(signature, f"{{{ds_ns}}}KeyInfo")
-        x509_data = etree.SubElement(key_info, f"{{{ds_ns}}}X509Data")
-        x509_cert = etree.SubElement(x509_data, f"{{{ds_ns}}}X509Certificate")
-        
-        # ✅ CRÍTICO: NO agregar atributo Id al X509Certificate
-        
-        # Certificado en base64
-        cert_der = certificate.public_bytes(serialization.Encoding.DER)
-        cert_b64 = base64.b64encode(cert_der).decode().replace('\n', '').replace('\r', '')
-        x509_cert.text = cert_b64
-        
-        # Object con QualifyingProperties
-        obj = etree.SubElement(signature, f"{{{ds_ns}}}Object")
-        qualifying_props = etree.SubElement(obj, f"{{{xades_ns}}}QualifyingProperties")
-        qualifying_props.set("Target", f"#{signature_id}")
-        qualifying_props.append(signed_properties)
-        
-        logger.info("✅ Signature structure built with enveloped-signature transformation")
-        return signature
-    
-    def _create_signed_info(self, doc_digest, props_digest, comprobante_id, 
-                          signed_props_id, reference_id, ds_ns):
+
+    # ========================================================================
+    # Componentes de la firma
+    # ========================================================================
+    def _create_signed_info(self, doc_digest, sp_digest, comprobante_uri,
+                            signed_props_id, reference_id):
         """
-        Crear SignedInfo con transformación enveloped-signature - FIX CRÍTICO
+        Crear el nodo SignedInfo.
+
+        Reference 1 (documento):
+          - Transform: enveloped-signature (quita el nodo Signature antes de hashear)
+          - Transform: C14N (canonicaliza)
+          - DigestMethod: SHA-256
+
+        Reference 2 (SignedProperties):
+          - SIN Transforms (igual que el facturador oficial del SRI)
+          - Type: http://uri.etsi.org/01903#SignedProperties
+          - DigestMethod: SHA-256
         """
-        signed_info = etree.Element(f"{{{ds_ns}}}SignedInfo")
-        
+        signed_info = etree.Element(f"{{{DS_NS}}}SignedInfo")
+
         # CanonicalizationMethod
-        canon_method = etree.SubElement(signed_info, f"{{{ds_ns}}}CanonicalizationMethod")
-        canon_method.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
-        
+        c14n_method = etree.SubElement(signed_info, f"{{{DS_NS}}}CanonicalizationMethod")
+        c14n_method.set("Algorithm", ALG_C14N)
+
         # SignatureMethod
-        sig_method = etree.SubElement(signed_info, f"{{{ds_ns}}}SignatureMethod")
-        sig_method.set("Algorithm", "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256")
-        
-        # Reference 1: Documento - CON TRANSFORMACIÓN ENVELOPED-SIGNATURE
-        ref1 = etree.SubElement(signed_info, f"{{{ds_ns}}}Reference")
-        ref1.set("URI", comprobante_id)
+        sig_method = etree.SubElement(signed_info, f"{{{DS_NS}}}SignatureMethod")
+        sig_method.set("Algorithm", ALG_RSA_SHA256)
+
+        # --- Reference 1: Documento ---
+        ref1 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
         ref1.set("Id", reference_id)
-        
-        transforms1 = etree.SubElement(ref1, f"{{{ds_ns}}}Transforms")
-        
-        # ✅ CRÍTICO: Primera transformación - enveloped-signature
-        transform_env = etree.SubElement(transforms1, f"{{{ds_ns}}}Transform")
-        transform_env.set("Algorithm", "http://www.w3.org/2000/09/xmldsig#enveloped-signature")
-        
-        
-        digest_method1 = etree.SubElement(ref1, f"{{{ds_ns}}}DigestMethod")
-        digest_method1.set("Algorithm", "http://www.w3.org/2001/04/xmlenc#sha256")
-        
-        digest_value1 = etree.SubElement(ref1, f"{{{ds_ns}}}DigestValue")
-        digest_value1.text = doc_digest
-        
-        # Reference 2: SignedProperties
-        ref2 = etree.SubElement(signed_info, f"{{{ds_ns}}}Reference")
+        ref1.set("URI", comprobante_uri)
+
+        transforms = etree.SubElement(ref1, f"{{{DS_NS}}}Transforms")
+
+        # Transformación 1: enveloped-signature
+        t_env = etree.SubElement(transforms, f"{{{DS_NS}}}Transform")
+        t_env.set("Algorithm", ALG_ENVELOPED)
+
+        # Transformación 2: C14N (canonicalización)
+        t_c14n = etree.SubElement(transforms, f"{{{DS_NS}}}Transform")
+        t_c14n.set("Algorithm", ALG_C14N)
+
+        dm1 = etree.SubElement(ref1, f"{{{DS_NS}}}DigestMethod")
+        dm1.set("Algorithm", ALG_SHA256)
+
+        dv1 = etree.SubElement(ref1, f"{{{DS_NS}}}DigestValue")
+        dv1.text = doc_digest
+
+        # --- Reference 2: SignedProperties ---
+        # SIN Transforms, igual que el facturador oficial del SRI
+        ref2 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
         ref2.set("URI", f"#{signed_props_id}")
-        ref2.set("Type", "http://uri.etsi.org/01903#SignedProperties")
-        
-        transforms2 = etree.SubElement(ref2, f"{{{ds_ns}}}Transforms")
-        transform2 = etree.SubElement(transforms2, f"{{{ds_ns}}}Transform")
-        transform2.set("Algorithm", "http://www.w3.org/TR/2001/REC-xml-c14n-20010315")
-        
-        digest_method2 = etree.SubElement(ref2, f"{{{ds_ns}}}DigestMethod")
-        digest_method2.set("Algorithm", "http://www.w3.org/2001/04/xmlenc#sha256")
-        
-        digest_value2 = etree.SubElement(ref2, f"{{{ds_ns}}}DigestValue")
-        digest_value2.text = props_digest
-        
+        ref2.set("Type", TYPE_SIGNED_PROPS)
+
+        dm2 = etree.SubElement(ref2, f"{{{DS_NS}}}DigestMethod")
+        dm2.set("Algorithm", ALG_SHA256)
+
+        dv2 = etree.SubElement(ref2, f"{{{DS_NS}}}DigestValue")
+        dv2.text = sp_digest
+
         return signed_info
-    
-    def _create_signed_properties(self, signed_props_id, signature_id, reference_id, 
-                                certificate, ds_ns, xades_ns):
-        """Crear SignedProperties con zona horaria local y SignedDataObjectProperties"""
-        
-        signed_props = etree.Element(f"{{{xades_ns}}}SignedProperties")
+
+    def _create_signed_properties(self, signed_props_id, signature_id,
+                                  reference_id, certificate):
+        """
+        Crear el nodo SignedProperties con:
+        - SigningTime en zona horaria Ecuador (-05:00)
+        - SigningCertificate con digest SHA-256
+        - SignedDataObjectProperties (Description, MimeType, Encoding)
+        """
+        signed_props = etree.Element(f"{{{XADES_NS}}}SignedProperties")
         signed_props.set("Id", signed_props_id)
-        
-        # SignedSignatureProperties
-        signed_sig_props = etree.SubElement(signed_props, f"{{{xades_ns}}}SignedSignatureProperties")
-        
-        # SigningTime con zona horaria local Ecuador (-05:00)
-        signing_time = etree.SubElement(signed_sig_props, f"{{{xades_ns}}}SigningTime")
-        ecuador_tz = timezone(timedelta(hours=-5))
-        now_ecuador = datetime.now(ecuador_tz)
-        signing_time.text = now_ecuador.strftime('%Y-%m-%dT%H:%M:%S-05:00')
-        
+
+        # --- SignedSignatureProperties ---
+        sig_props = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedSignatureProperties")
+
+        # SigningTime
+        signing_time = etree.SubElement(sig_props, f"{{{XADES_NS}}}SigningTime")
+        now_ec = datetime.now(ECUADOR_TZ)
+        signing_time.text = now_ec.strftime('%Y-%m-%dT%H:%M:%S-05:00')
+
         # SigningCertificate
-        signing_cert = etree.SubElement(signed_sig_props, f"{{{xades_ns}}}SigningCertificate")
-        cert_elem = etree.SubElement(signing_cert, f"{{{xades_ns}}}Cert")
-        
-        # CertDigest con SHA-1
-        cert_digest = etree.SubElement(cert_elem, f"{{{xades_ns}}}CertDigest")
-        cert_digest_method = etree.SubElement(cert_digest, f"{{{ds_ns}}}DigestMethod")
-        cert_digest_method.set("Algorithm", "http://www.w3.org/2001/04/xmlenc#sha256")
-        
+        signing_cert = etree.SubElement(sig_props, f"{{{XADES_NS}}}SigningCertificate")
+        cert_elem = etree.SubElement(signing_cert, f"{{{XADES_NS}}}Cert")
+
+        # CertDigest (SHA-256)
+        cert_digest = etree.SubElement(cert_elem, f"{{{XADES_NS}}}CertDigest")
+        cdm = etree.SubElement(cert_digest, f"{{{DS_NS}}}DigestMethod")
+        cdm.set("Algorithm", ALG_SHA256)
+
         cert_der = certificate.public_bytes(serialization.Encoding.DER)
         cert_hash = hashlib.sha256(cert_der).digest()
-        cert_digest_value = etree.SubElement(cert_digest, f"{{{ds_ns}}}DigestValue")
-        cert_digest_value.text = base64.b64encode(cert_hash).decode()
-        
+        cdv = etree.SubElement(cert_digest, f"{{{DS_NS}}}DigestValue")
+        cdv.text = base64.b64encode(cert_hash).decode()
+
         # IssuerSerial
-        issuer_serial = etree.SubElement(cert_elem, f"{{{xades_ns}}}IssuerSerial")
-        
-        x509_issuer_name = etree.SubElement(issuer_serial, f"{{{ds_ns}}}X509IssuerName")
-        x509_issuer_name.text = self._clean_issuer_name_for_sri(certificate)
-        
-        x509_serial_number = etree.SubElement(issuer_serial, f"{{{ds_ns}}}X509SerialNumber")
-        x509_serial_number.text = str(certificate.serial_number)
-        
-        # SignedDataObjectProperties
-        signed_data_props = etree.SubElement(signed_props, f"{{{xades_ns}}}SignedDataObjectProperties")
-        data_obj_format = etree.SubElement(signed_data_props, f"{{{xades_ns}}}DataObjectFormat")
-        data_obj_format.set("ObjectReference", f"#{reference_id}")
-        
-        description = etree.SubElement(data_obj_format, f"{{{xades_ns}}}Description")
-        description.text = "FIRMA DIGITAL SRI"
-        
-        mime_type = etree.SubElement(data_obj_format, f"{{{xades_ns}}}MimeType")
-        mime_type.text = "text/xml"
-        
-        encoding = etree.SubElement(data_obj_format, f"{{{xades_ns}}}Encoding")
+        issuer_serial = etree.SubElement(cert_elem, f"{{{XADES_NS}}}IssuerSerial")
+
+        issuer_name = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509IssuerName")
+        issuer_name.text = self._format_issuer_name(certificate)
+
+        serial_number = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509SerialNumber")
+        serial_number.text = str(certificate.serial_number)
+
+        # --- SignedDataObjectProperties ---
+        sdop = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedDataObjectProperties")
+        dof = etree.SubElement(sdop, f"{{{XADES_NS}}}DataObjectFormat")
+        dof.set("ObjectReference", f"#{reference_id}")
+
+        desc = etree.SubElement(dof, f"{{{XADES_NS}}}Description")
+        desc.text = "FIRMA DIGITAL SRI"
+
+        mime = etree.SubElement(dof, f"{{{XADES_NS}}}MimeType")
+        mime.text = "text/xml"
+
+        encoding = etree.SubElement(dof, f"{{{XADES_NS}}}Encoding")
         encoding.text = "UTF-8"
-        
+
         return signed_props
-    
-    def _clean_issuer_name_for_sri(self, certificate):
-        """Limpiar issuer name según proveedor de certificado"""
+
+    def _assemble_signature(self, sig_id, signed_info, signature_value_b64,
+                            certificate, signed_properties):
+        """
+        Ensamblar el nodo ds:Signature completo con:
+        - SignedInfo
+        - SignatureValue
+        - KeyInfo (X509Certificate)
+        - Object > QualifyingProperties > SignedProperties
+        """
+        signature = etree.Element(f"{{{DS_NS}}}Signature", nsmap={
+            'ds': DS_NS,
+            'etsi': XADES_NS
+        })
+        signature.set("Id", sig_id)
+
+        # SignedInfo (ya construido)
+        signature.append(signed_info)
+
+        # SignatureValue
+        sv = etree.SubElement(signature, f"{{{DS_NS}}}SignatureValue")
+        sv.text = signature_value_b64
+
+        # KeyInfo
+        key_info = etree.SubElement(signature, f"{{{DS_NS}}}KeyInfo")
+        x509_data = etree.SubElement(key_info, f"{{{DS_NS}}}X509Data")
+        x509_cert = etree.SubElement(x509_data, f"{{{DS_NS}}}X509Certificate")
+
+        cert_der = certificate.public_bytes(serialization.Encoding.DER)
+        x509_cert.text = base64.b64encode(cert_der).decode()
+
+        # Object > QualifyingProperties > SignedProperties
+        obj = etree.SubElement(signature, f"{{{DS_NS}}}Object")
+        qp = etree.SubElement(obj, f"{{{XADES_NS}}}QualifyingProperties")
+        qp.set("Target", f"#{sig_id}")
+        qp.append(signed_properties)
+
+        return signature
+
+    # ========================================================================
+    # Utilidades de firma
+    # ========================================================================
+    def _pre_clean_xml(self, xml_content):
+        """Limpieza mínima del XML antes de firmar."""
+        # Eliminar BOM si existe
+        if xml_content.startswith('\ufeff'):
+            xml_content = xml_content[1:]
+
+        # Asegurar declaración XML
+        if not xml_content.strip().startswith('<?xml'):
+            xml_content = '<?xml version="1.0" encoding="UTF-8"?>' + xml_content
+
+        return xml_content
+
+    def _ensure_comprobante_id(self, root):
+        """
+        Asegurar que el elemento raíz del comprobante tenga id="comprobante".
+        Retorna el URI con # (ej: "#comprobante").
+        """
+        comprobante_tags = [
+            'factura', 'notaCredito', 'notaDebito',
+            'comprobanteRetencion', 'liquidacionCompra'
+        ]
+
+        # Buscar el elemento del comprobante
+        target = None
+        for tag in comprobante_tags:
+            found = root.find(f'.//{tag}')
+            if found is not None:
+                target = found
+                break
+
+        # Si no se encontró, usar el root
+        if target is None:
+            target = root
+
+        # Asegurar que tenga id
+        comp_id = target.get('id')
+        if not comp_id:
+            comp_id = 'comprobante'
+            target.set('id', comp_id)
+
+        logger.info(f"Comprobante element: <{target.tag}> id=\"{comp_id}\"")
+        return f"#{comp_id}"
+
+    def _format_issuer_name(self, certificate):
+        """
+        Formatear el issuer name del certificado.
+        Mantiene el formato original según el proveedor.
+        """
         try:
             issuer_string = certificate.issuer.rfc4514_string()
-            
-            # Para UANATACA: mantener formato exacto
-            if "UANATACA" in issuer_string and "Barcelona" in issuer_string:
-                logger.info("Certificado UANATACA detectado - manteniendo formato exacto")
+
+            # UANATACA: mantener formato exacto (incluye OID especiales)
+            if "UANATACA" in issuer_string:
                 return issuer_string
-            else:
-                # Para otros proveedores: limpiar caracteres problemáticos
-                issuer_string = re.sub(r"[<>\"']", "", issuer_string)
-                issuer_string = re.sub(r"\s+", " ", issuer_string)
-                return issuer_string.strip()
-            
+
+            # Security Data y otros: limpiar caracteres problemáticos
+            issuer_string = re.sub(r"[<>\"']", "", issuer_string)
+            issuer_string = re.sub(r"\s+", " ", issuer_string)
+            return issuer_string.strip()
+
         except Exception as e:
-            logger.error(f"Error procesando issuer: {e}")
+            logger.error(f"Error formatting issuer name: {e}")
             return certificate.issuer.rfc4514_string()
-    
-    def _canonicalize_element(self, root, comprobante_id):
-        """Canonicalizar elemento específico"""
-        try:
-            if comprobante_id.startswith('#'):
-                element_id = comprobante_id[1:]
-                
-                # Buscar elemento por ID
-                if root.get('id') == element_id:
-                    target_element = root
-                else:
-                    target_element = root.find(f".//*[@id='{element_id}']")
-                
-                if target_element is not None:
-                    canonical = etree.tostring(
-                        target_element,
-                        method='c14n',
-                        exclusive=False,
-                        with_comments=False
-                    )
-                    return canonical
-            
-            # Fallback: canonicalizar documento completo
-            return etree.tostring(
-                root,
-                method='c14n', 
-                exclusive=False,
-                with_comments=False
-            )
-            
-        except Exception as e:
-            logger.error(f"Error canonicalizing: {e}")
-            raise Exception(f"CANONICALIZATION_FAILED: {str(e)}")
-    
-    def _send_to_sri_enhanced(self, document, signed_xml):
-        """Enviar documento al SRI con manejo mejorado"""
-        try:
-            logger.info(f"Enviando documento {document.id} al SRI")
-            logger.info(f"XML firmado tamaño: {len(signed_xml)} caracteres")
-            
-            sri_client = SRISOAPClient(self.company)
-            success, message = sri_client.send_document_to_reception(document, signed_xml)
-            
-            logger.info(f"SRI Response - Success: {success}, Message: {message}")
-            
-            document.refresh_from_db()
-            
-            if success:
-                logger.info("SRI reportó ÉXITO - actualizando status a SENT")
-                document.status = 'SENT'
-                document.save()
-                document.refresh_from_db()
-                logger.info(f"Status final verificado: {document.status}")
-                return True, message
-            else:
-                detailed_error = f"SRI_SUBMISSION_FAILED: {message}"
-                logger.error(detailed_error)
-                return False, detailed_error
-                
-        except Exception as e:
-            error_msg = f"PROCESSOR_SRI_EXCEPTION: {str(e)}"
-            logger.error(error_msg)
-            return False, error_msg
-    
+
+    # ========================================================================
+    # Generación XML
+    # ========================================================================
     def _generate_xml(self, document):
-        """Generar XML del documento"""
+        """Generar XML del documento."""
         try:
             logger.info(f"Generando XML para documento {document.id}, tipo: {document.document_type}")
-            
+
             xml_generator = XMLGenerator(document)
-            
-            if document.document_type == 'INVOICE':
-                xml_content = xml_generator.generate_invoice_xml()
-            elif document.document_type == 'CREDIT_NOTE':
-                xml_content = xml_generator.generate_credit_note_xml()
-            elif document.document_type == 'DEBIT_NOTE':
-                xml_content = xml_generator.generate_debit_note_xml()
-            elif document.document_type == 'RETENTION':
-                xml_content = xml_generator.generate_retention_xml()
-            elif document.document_type == 'PURCHASE_SETTLEMENT':
-                xml_content = xml_generator.generate_purchase_settlement_xml()
-            else:
+
+            generators = {
+                'INVOICE': xml_generator.generate_invoice_xml,
+                'CREDIT_NOTE': xml_generator.generate_credit_note_xml,
+                'DEBIT_NOTE': xml_generator.generate_debit_note_xml,
+                'RETENTION': xml_generator.generate_retention_xml,
+                'PURCHASE_SETTLEMENT': xml_generator.generate_purchase_settlement_xml,
+            }
+
+            gen_func = generators.get(document.document_type)
+            if not gen_func:
                 return False, f"Unsupported document type: {document.document_type}"
-            
-            # Guardar XML
+
+            xml_content = gen_func()
+
+            # Guardar XML sin firmar
             filename = f"{document.access_key}.xml"
             document.xml_file.save(
                 filename,
                 ContentFile(xml_content.encode('utf-8')),
                 save=True
             )
-            
+
             logger.info(f"XML generado, tamaño: {len(xml_content)} caracteres")
             return True, xml_content
-            
+
         except Exception as e:
             logger.error(f"Error generating XML: {str(e)}")
             return False, f"XML_GENERATION_ERROR: {str(e)}"
-    
+
+    # ========================================================================
+    # Envío al SRI
+    # ========================================================================
+    def _send_to_sri(self, document, signed_xml):
+        """Enviar documento al SRI."""
+        try:
+            # signed_xml puede ser str o bytes
+            if isinstance(signed_xml, bytes):
+                xml_str = signed_xml.decode('utf-8')
+            else:
+                xml_str = signed_xml
+
+            logger.info(f"Enviando documento {document.id} al SRI ({len(xml_str)} chars)")
+
+            sri_client = SRISOAPClient(self.company)
+            success, message = sri_client.send_document_to_reception(document, xml_str)
+
+            logger.info(f"SRI Response - Success: {success}, Message: {message}")
+
+            if success:
+                document.status = 'SENT'
+                document.save()
+                return True, message
+            else:
+                return False, f"SRI_SUBMISSION_FAILED: {message}"
+
+        except Exception as e:
+            msg = f"PROCESSOR_SRI_EXCEPTION: {str(e)}"
+            logger.error(msg)
+            return False, msg
+
+    # ========================================================================
+    # Consulta de autorización
+    # ========================================================================
     def _check_authorization(self, document, max_attempts=10, wait_seconds=30):
-        """Consultar autorización del documento"""
-        import time
-        
+        """Consultar autorización del documento con reintentos."""
         try:
             logger.info(f"Consultando autorización para documento {document.id}")
-            
+
             original_status = document.status
             sri_client = SRISOAPClient(self.company)
-            # Esperar 10 segundos antes de la primera consulta
-            logger.info("⏳ Esperando 10 segundos antes de consultar autorización...")
+
+            # Esperar antes de la primera consulta
+            logger.info("Esperando 10 segundos antes de consultar autorización...")
             time.sleep(10)
-            
+
             for attempt in range(max_attempts):
                 if attempt > 0:
                     logger.info(f"Esperando {wait_seconds}s antes del intento {attempt + 1}")
                     time.sleep(wait_seconds)
-                
+
                 success, message = sri_client.get_document_authorization(document)
-                
+
                 if success:
                     logger.info(f"Documento {document.id} autorizado por el SRI")
                     return True, message
-                
-                if 'proceso' in message.lower() or 'pendiente' in message.lower():
-                    logger.info(f"Documento aún en proceso, intento {attempt + 1}/{max_attempts}")
+
+                msg_lower = message.lower()
+                if 'proceso' in msg_lower or 'pendiente' in msg_lower:
+                    logger.info(f"Documento en proceso, intento {attempt + 1}/{max_attempts}")
                     continue
-                
+
+                # Error definitivo
                 logger.error(f"Error definitivo en autorización: {message}")
-                
-                if original_status in ['SENT', 'AUTHORIZED']:
+
+                # Preservar estado previo si era exitoso
+                if original_status in ('SENT', 'AUTHORIZED'):
                     document.status = original_status
                     document.save()
-                
+
                 return False, f"AUTHORIZATION_ERROR: {message}"
-            
+
+            # Timeout
             logger.warning(f"Timeout en autorización para documento {document.id}")
-            
-            if original_status in ['SENT', 'AUTHORIZED']:
+            if original_status in ('SENT', 'AUTHORIZED'):
                 document.status = original_status
                 document.save()
-            
+
             return False, f"AUTHORIZATION_TIMEOUT: Timeout after {max_attempts} attempts"
-            
+
         except Exception as e:
             logger.error(f"Error checking authorization: {str(e)}")
             return False, f"AUTHORIZATION_EXCEPTION: {str(e)}"
-    
+
+    # ========================================================================
+    # Generación PDF
+    # ========================================================================
     def _generate_pdf(self, document):
-        """Generar PDF del documento"""
+        """Generar PDF del documento."""
         try:
             logger.info(f"Generando PDF para documento {document.id}")
-            
+
             pdf_generator = PDFGenerator(document)
-            
-            if document.document_type == 'INVOICE':
-                pdf_content = pdf_generator.generate_invoice_pdf()
-            elif document.document_type == 'CREDIT_NOTE':
-                pdf_content = pdf_generator.generate_credit_note_pdf()
-            elif document.document_type == 'DEBIT_NOTE':
-                pdf_content = pdf_generator.generate_debit_note_pdf()
-            else:
+
+            generators = {
+                'INVOICE': pdf_generator.generate_invoice_pdf,
+                'CREDIT_NOTE': pdf_generator.generate_credit_note_pdf,
+                'DEBIT_NOTE': pdf_generator.generate_debit_note_pdf,
+            }
+
+            gen_func = generators.get(document.document_type)
+            if not gen_func:
                 logger.warning(f"PDF generation not implemented for {document.document_type}")
                 return False, f"PDF generation not implemented for {document.document_type}"
-            
-            # Guardar PDF
+
+            pdf_content = gen_func()
+
             filename = f"{document.access_key}.pdf"
             document.pdf_file.save(
                 filename,
                 ContentFile(pdf_content),
                 save=True
             )
-            
+
             logger.info(f"PDF generado para documento {document.id}")
             return True, "PDF generated successfully"
-            
+
         except Exception as e:
             logger.error(f"Error generating PDF: {str(e)}")
             return False, f"PDF_GENERATION_ERROR: {str(e)}"
 
+    # ========================================================================
+    # Envío de email
+    # ========================================================================
     def _send_email(self, document):
-        """Enviar documento por email"""
+        """Enviar documento por email."""
         try:
             logger.info(f"Enviando email para documento {document.id}")
-            
+
             if not document.customer_email:
                 return False, "Customer email not provided"
-            
+
             if not self.sri_config.email_enabled:
                 return False, "Email sending is disabled"
-            
+
             email_service = EmailService(self.company)
             success, message = email_service.send_document_email(document)
-            
+
             if success:
                 document.email_sent = True
                 document.email_sent_date = django_timezone.now()
                 document.save()
                 logger.info(f"Email enviado para documento {document.id}")
-            
+
             return success, message
-            
+
         except Exception as e:
             logger.error(f"Error sending email: {str(e)}")
             return False, f"EMAIL_EXCEPTION: {str(e)}"
-    
-    # Métodos de compatibilidad
+
+    # ========================================================================
+    # Métodos auxiliares
+    # ========================================================================
     def process_document_legacy(self, document, certificate_password, send_email=True):
-        """Método legacy para compatibilidad"""
-        logger.warning(f"Using legacy process_document method for document {document.id}")
+        """Método legacy para compatibilidad."""
+        logger.warning(f"Using legacy method for document {document.id}")
         return self.process_document(document, send_email, certificate_password)
-    
+
     def reprocess_document(self, document):
-        """Reprocesar documento que falló"""
+        """Reprocesar documento que falló."""
         try:
-            if document.status in ['AUTHORIZED', 'SENT']:
+            if document.status in ('AUTHORIZED', 'SENT'):
                 return False, "Document is already processed"
-            
+
             logger.info(f"Reprocesando documento {document.id}")
-            
-            # Resetear estado
+
             document.status = 'GENERATED'
             document.sri_authorization_code = ''
             document.sri_authorization_date = None
             document.sri_response = {}
             document.save()
-            
+
             return self.process_document(document)
-            
+
         except Exception as e:
             logger.error(f"Error reprocessing document: {str(e)}")
             return False, f"REPROCESS_ERROR: {str(e)}"
-    
+
     def get_document_status(self, document):
-        """Obtener estado detallado del documento"""
+        """Obtener estado detallado del documento."""
         return {
             'id': document.id,
             'document_number': document.document_number,
@@ -752,49 +789,43 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processing_method': 'SRI_Compatible_ENVELOPED_SIGNATURE_FIXED',
-            'processor_version': 'FINAL_FIX_ERROR_39_FIRMA_INVALIDA',
-            'fixes_applied': [
-                'ENVELOPED_SIGNATURE_TRANSFORMATION_ADDED',
-                'PRETTY_PRINT_WITHOUT_POST_CANONICALIZATION',
-                'NO_MODIFICATIONS_AFTER_SIGNING',
-                'REMOVED_ID_ATTRIBUTE_FROM_X509CERTIFICATE',
-                'SHA1_ALGORITHMS_EXACT_MATCH',
-                'CORRECT_CANONICALIZATION'
-            ]
+            'processor_version': 'v2.0_XADES_BES_SHA256',
+            'signature_method': 'RSA-SHA256',
+            'digest_method': 'SHA-256',
+            'transforms': ['enveloped-signature', 'C14N'],
         }
-    
+
     def validate_company_setup(self):
-        """Validar configuración de la empresa"""
+        """Validar configuración de la empresa."""
         try:
-            validation_errors = []
-            
+            errors = []
+
             # Verificar configuración SRI
             try:
                 sri_config = self.company.sri_configuration
                 if not sri_config.is_active:
-                    validation_errors.append("SRI configuration is not active")
+                    errors.append("SRI configuration is not active")
                 if not sri_config.establishment_code:
-                    validation_errors.append("Establishment code not configured")
+                    errors.append("Establishment code not configured")
                 if not sri_config.emission_point:
-                    validation_errors.append("Emission point not configured")
-            except:
-                validation_errors.append("SRI configuration not found")
-            
+                    errors.append("Emission point not configured")
+            except Exception:
+                errors.append("SRI configuration not found")
+
             # Verificar certificado
             cert_data = self.cert_manager.get_certificate(self.company.id)
             if not cert_data:
-                validation_errors.append("Digital certificate not available")
+                errors.append("Digital certificate not available")
             else:
-                is_valid, cert_message = self.cert_manager.validate_certificate(self.company.id)
+                is_valid, cert_msg = self.cert_manager.validate_certificate(self.company.id)
                 if not is_valid:
-                    validation_errors.append(f"Certificate validation failed: {cert_message}")
-            
-            if validation_errors:
-                return False, validation_errors
-            
+                    errors.append(f"Certificate validation failed: {cert_msg}")
+
+            if errors:
+                return False, errors
+
             return True, "Company setup is valid"
-            
+
         except Exception as e:
             logger.error(f"Error validating company setup: {str(e)}")
             return False, [f"Error validating setup: {str(e)}"]
