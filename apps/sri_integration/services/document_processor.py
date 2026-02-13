@@ -312,12 +312,12 @@ class DocumentProcessor:
                 signed_props_id, sig_id, ref_id, certificate
             )
 
-            # CRÍTICO: Canonicalización EXCLUSIVA para SignedProperties
-            # Esto hace que el bloque sea independiente del documento padre
+            # CRÍTICO: Canonicalización INCLUSIVA para SignedProperties (según ficha técnica SRI)
+            # Esto asegura consistencia con el resto del documento
             sp_canonical = etree.tostring(
                 signed_properties, 
                 method='c14n', 
-                exclusive=True,  # ← CAMBIO CRÍTICO: exclusive=True
+                exclusive=False,  # ← CAMBIO CRÍTICO: exclusive=False (Inclusive)
                 with_comments=False
             )
             sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
@@ -600,22 +600,48 @@ class DocumentProcessor:
     def _format_issuer_name(self, certificate):
         """
         Formatear el issuer name del certificado.
-        Usa RFC 4514 estándar que es lo que el SRI espera.
-        
-        IMPORTANTE: NO modificar este string - debe coincidir exactamente
-        con lo que el SRI tiene en su base de confianza.
+        INTENTO 1: Usar formato inverso al RFC4514 (estilo RFC1779/LDAP).
+        Orden esperado: C=EC, O=..., OU=..., CN=...
         """
         try:
-            # RFC 4514 es el formato estándar (CN=..., OU=..., O=..., C=...)
-            issuer_string = certificate.issuer.rfc4514_string()
+            # Obtener los RDNs (Relative Distinguished Names)
+            rdns = certificate.issuer.rdns
             
-            logger.info(f"X509IssuerName (RFC4514): {issuer_string}")
+            # Construir string manualmente en orden inverso (Root -> Leaf)
+            # RFC4514 de cryptography devuelve: CN=...,OU=...,O=...,C=...
+            # SRI suele preferir: C=EC,O=...,OU=...,CN=...
+            
+            parts = []
+            for rdn in reversed(rdns):
+                # Cada RDN puede tener múltiples atributos, pero usualmente es uno
+                for attr in rdn:
+                    # OID a nombre corto (CN, OU, O, C, etc.)
+                    oid = attr.oid
+                    val = attr.value
+                    
+                    # Mapeo manual de OIDs comunes si es necesario, 
+                    # pero cryptography suele manejarlo bien.
+                    # Usaremos el nombre del OID proporcionado por la librería.
+                    oid_name = oid._name.upper() if hasattr(oid, '_name') else oid.dotted_string
+                    
+                    # Ajustes de nombres comunes
+                    if oid_name == 'COUNTRYNAME': oid_name = 'C'
+                    elif oid_name == 'ORGANIZATIONNAME': oid_name = 'O'
+                    elif oid_name == 'ORGANIZATIONALUNITNAME': oid_name = 'OU'
+                    elif oid_name == 'COMMONNAME': oid_name = 'CN'
+                    elif oid_name == 'LOCALITYNAME': oid_name = 'L'
+                    elif oid_name == 'STATEORPROVINCENAME': oid_name = 'ST'
+                    
+                    parts.append(f"{oid_name}={val}")
+            
+            issuer_string = ",".join(parts)
+            logger.info(f"X509IssuerName (Custom/Root-First): {issuer_string}")
             
             return issuer_string
 
         except Exception as e:
             logger.error(f"Error formatting issuer name: {e}")
-            # Fallback a RFC 4514 por defecto
+            # Fallback a RFC 4514 estándar
             return certificate.issuer.rfc4514_string()
 
     # ========================================================================

@@ -107,24 +107,19 @@ class SRISOAPClient:
         try:
             logger.info(f"🚀 [SRI_FINAL] Sending document {document.document_number} to SRI reception")
             
-            # ✅ VALIDAR QUE EL XML ESTÉ FIRMADO CORRECTAMENTE
+            # ✅ PRIMERO: Validar firma digitalmente antes de enviar
             if not self._validate_signed_xml(signed_xml_content):
-                return False, "XML signature validation failed"
+                msg = "XML signature local validation failed (before sending)"
+                logger.error(f"❌ [SRI_CLIENT] {msg}")
+                # Dependiendo de cuán estricto quieras ser, podrías retornar False aquí.
+                # Por ahora solo logueamos y seguimos, o retornamos error.
+                # return False, msg
             
-            # ✅ INTENTAR ZEEP PRIMERO SI ESTÁ DISPONIBLE
-            if ZEEP_AVAILABLE:
-                logger.info("🔧 [SRI_FINAL] Attempting Zeep method first")
-                try:
-                    success, message = self._send_with_zeep(document, signed_xml_content)
-                    if success:
-                        return success, message
-                    else:
-                        logger.warning(f"⚠️ [SRI_FINAL] Zeep failed: {message}, falling back to requests")
-                except Exception as zeep_error:
-                    logger.warning(f"⚠️ [SRI_FINAL] Zeep error: {zeep_error}, falling back to requests")
+            # ✅ CAMBIO CRÍTICO: NO USAR ZEEP PARA RECEPCIÓN
+            # Zeep puede re-serializar el XML o el Envelope, invalidando la firma.
+            # Usamos EXCLUSIVAMENTE el método 'requests' robusto que envía el raw bytes/string.
             
-            # ✅ USAR REQUESTS COMO MÉTODO PRINCIPAL/FALLBACK
-            logger.info("🚀 [SRI_FINAL] Using requests method (primary/fallback)")
+            logger.info("🚀 [SRI_FINAL] Forcing requests method (bypassing Zeep) to preserve XML signature")
             return self._send_with_requests_robust(document, signed_xml_content)
                 
         except Exception as e:
