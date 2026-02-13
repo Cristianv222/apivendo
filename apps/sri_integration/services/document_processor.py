@@ -383,10 +383,15 @@ class DocumentProcessor:
         dv1.text = doc_digest
 
         # --- Reference 2: SignedProperties ---
-        # SIN Transforms, igual que el facturador oficial del SRI
+        # Se DEBE usar la misma transformación usada al calcular el hash (C14N)
         ref2 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
         ref2.set("URI", f"#{signed_props_id}")
         ref2.set("Type", TYPE_SIGNED_PROPS)
+
+        # Agregar Transform C14N para SignedProperties
+        transforms_sp = etree.SubElement(ref2, f"{{{DS_NS}}}Transforms")
+        t_c14n_sp = etree.SubElement(transforms_sp, f"{{{DS_NS}}}Transform")
+        t_c14n_sp.set("Algorithm", ALG_C14N)
 
         dm2 = etree.SubElement(ref2, f"{{{DS_NS}}}DigestMethod")
         dm2.set("Algorithm", ALG_SHA256)
