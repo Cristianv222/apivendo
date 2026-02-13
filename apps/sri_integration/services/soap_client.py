@@ -169,18 +169,17 @@ class SRISOAPClient:
             wsdl_url = self.SRI_URLS[self.environment]['reception']
             client = Client(wsdl_url, transport=transport, settings=settings)
             
-            # ✅ PREPARAR XML (MODIFICADO: NO ELIMINAR DECLARACIÓN)
-            # Usar el XML firmado exacto
-            xml_clean = signed_xml_content.strip()
-            
-            # ✅ CODIFICAR EN BASE64
-            # Asegurar bytes antes de b64
-            if isinstance(xml_clean, str):
-                xml_bytes = xml_clean.encode('utf-8')
+            # ✅ PREPARAR XML (PRESERVACIÓN DE FIRMA)
+            # Asegurar bytes
+            if isinstance(signed_xml_content, str):
+                xml_bytes = signed_xml_content.encode('utf-8')
             else:
-                xml_bytes = xml_clean
-                
+                xml_bytes = signed_xml_content
+
+            # ✅ CODIFICAR EN BASE64
             xml_b64 = base64.b64encode(xml_bytes).decode('ascii')
+            # Limpieza de base64 por seguridad
+            xml_b64 = xml_b64.replace('\n', '').replace('\r', '')
             
             # ✅ LLAMADA ZEEP
             logger.info(f"🔧 [SRI_ZEEP] Calling validarComprobante with Zeep")
@@ -270,33 +269,27 @@ class SRISOAPClient:
         try:
             logger.info("🔧 [SRI_ROBUST] Using ultra-robust requests method")
             
-            # ===== PASO 1: LIMPIAR XML (MODIFICADO: NO ELIMINAR DECLARACIÓN) =====
-            # CRÍTICO PARA FIRMA: No se debe alterar el XML firmado, ni quitar la declaración
-            # si esta fue incluida en el cálculo del digest o si la canonicalización la requiere.
-            xml_clean = signed_xml_content.strip()
+            # ===== PASO 1: PREPARACIÓN DE XML (PRESERVACIÓN DE FIRMA) =====
+            # CRÍTICO: El XML firmado NO DEBE SER MODIFICADO EN ABSOLUTO.
+            # Cualquier cambio (espacios, saltos de línea, declaraciones) invalida la firma.
             
-            xml_size_original = len(xml_clean)
-            logger.info(f"✅ [SRI_ROBUST] XML prepared, size: {xml_size_original} chars")
+            # Asegurar bytes
+            if isinstance(signed_xml_content, str):
+                xml_bytes = signed_xml_content.encode('utf-8')
+            else:
+                xml_bytes = signed_xml_content
             
-            # ===== PASO 2: ENCODING CON DEBUG =====
+            xml_size_original = len(xml_bytes)
+            logger.info(f"✅ [SRI_ROBUST] XML bytes prepared, size: {xml_size_original}")
+
+            # ===== PASO 2: ENCODING BASE64 =====
             try:
-                # Usar el XML exactamente como viene, solo asegurando utf-8
-                if isinstance(xml_clean, str):
-                    xml_bytes = xml_clean.encode('utf-8')
-                else:
-                    xml_bytes = xml_clean
-                    
+                # Codificación directa de los bytes
                 xml_b64 = base64.b64encode(xml_bytes).decode('ascii')
-                logger.info(f"✅ [SRI_ROBUST] Base64 encoding successful, size: {len(xml_b64)} chars")
+                # Eliminar saltos de línea si existen en el b64 (RFC 2045 vs SOAP)
+                xml_b64 = xml_b64.replace('\n', '').replace('\r', '')
                 
-                # ✅ DEBUG: Verificar que el Base64 sea válido
-                try:
-                    test_decode = base64.b64decode(xml_b64).decode('utf-8')
-                    logger.info(f"✅ [SRI_ROBUST] Base64 decode test successful")
-                except Exception as decode_error:
-                    logger.error(f"❌ [SRI_ROBUST] Base64 decode test failed: {decode_error}")
-                    return False, f"Invalid Base64 encoding: {decode_error}"
-                    
+                logger.info(f"✅ [SRI_ROBUST] Base64 encoded successfully, size: {len(xml_b64)}")
             except Exception as e:
                 logger.error(f"❌ [SRI_ROBUST] Encoding error: {str(e)}")
                 return False, f"XML encoding error: {str(e)}"
