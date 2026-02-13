@@ -392,16 +392,16 @@ class DocumentProcessor:
         return signed_info
 
     def _create_signed_properties(self, signed_props_id, signature_id,
-                                  reference_id, certificate):
-        """Crear SignedProperties EXACTAMENTE como el facturador oficial."""
-        # Crear con namespaces explícitos
-        signed_props = etree.Element(
-            f"{{{XADES_NS}}}SignedProperties",
-            nsmap={'xades': XADES_NS, 'xades141': XADES141_NS}
-        )
-        signed_props.set("Id", signed_props_id)
+                              reference_id, certificate):
+    """Crear SignedProperties con prefijo 'etsi' como el facturador oficial."""
+    # CRÍTICO: Usar prefijo 'etsi' en lugar de 'xades'
+    signed_props = etree.Element(
+        f"{{{XADES_NS}}}SignedProperties",
+        nsmap={'etsi': XADES_NS}  # ← CAMBIO: etsi
+    )
+    signed_props.set("Id", signed_props_id)
 
-        sig_props = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedSignatureProperties")
+    sig_props = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedSignatureProperties")
 
         # SigningTime con formato del facturador oficial
         signing_time = etree.SubElement(sig_props, f"{{{XADES_NS}}}SigningTime")
@@ -446,7 +446,7 @@ class DocumentProcessor:
 
         return signed_props
 
-    def _assemble_signature(self, sig_id, sig_value_id, signed_info, signature_value_b64,
+        def _assemble_signature(self, sig_id, sig_value_id, signed_info, signature_value_b64,
                             certificate, signed_properties):
         """Ensamblar Signature EXACTAMENTE como el facturador oficial."""
         signature = etree.Element(
@@ -470,11 +470,11 @@ class DocumentProcessor:
 
         obj = etree.SubElement(signature, f"{{{DS_NS}}}Object")
         
-        # QualifyingProperties con namespaces como el facturador oficial
+        # CRÍTICO: Usar 'etsi' como prefijo, NO 'xades'
         qp = etree.SubElement(
             obj, 
             f"{{{XADES_NS}}}QualifyingProperties",
-            nsmap={'xades': XADES_NS, 'xades141': XADES141_NS}
+            nsmap={'etsi': XADES_NS}  # ← CAMBIO CRÍTICO: etsi en lugar de xades
         )
         qp.set("Target", f"#{sig_id}")
         qp.append(signed_properties)
