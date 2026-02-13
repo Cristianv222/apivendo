@@ -224,12 +224,6 @@ class DocumentProcessor:
             document.save()
             cert_data.update_usage()
 
-            # DEBUG: Guardar XML firmado para análisis
-            debug_path = f"/tmp/signed_debug_{document.id}.xml"
-            with open(debug_path, 'wb') as debug_f:
-                debug_f.write(signed_xml)
-            logger.info(f"DEBUG: XML guardado en {debug_path}")
-            
             logger.info(f"XML firmado correctamente para documento {document.id}")
             return True, signed_xml.decode('utf-8')
 
