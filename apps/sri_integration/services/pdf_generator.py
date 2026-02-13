@@ -152,6 +152,124 @@ class PDFGenerator:
         except Exception as e:
             logger.error(f"Error generating invoice PDF: {str(e)}")
             raise ValueError(f"Error generating invoice PDF: {str(e)}")
+
+    def generate_credit_note_pdf(self):
+        """
+        Genera PDF para nota de crédito
+        """
+        try:
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                buffer, pagesize=A4,
+                rightMargin=20*mm, leftMargin=20*mm,
+                topMargin=20*mm, bottomMargin=20*mm
+            )
+            story = []
+            
+            story.extend(self._build_header())
+            story.extend(self._build_invoice_info()) # Info tributaria común
+            story.extend(self._build_modified_doc_info()) # Info documento modificado
+            story.extend(self._build_customer_info())
+            story.extend(self._build_invoice_details()) # Reusa detalles (items)
+            story.extend(self._build_invoice_totals())
+            story.extend(self._build_additional_info())
+            story.extend(self._build_authorization_info())
+            story.extend(self._build_footer())
+            
+            doc.build(story)
+            pdf_content = buffer.getvalue()
+            buffer.close()
+            return pdf_content
+        except Exception as e:
+            logger.error(f"Error generating credit note PDF: {str(e)}")
+            raise ValueError(f"Error generating credit note PDF: {str(e)}")
+
+    def generate_debit_note_pdf(self):
+        """
+        Genera PDF para nota de débito
+        """
+        try:
+            buffer = io.BytesIO()
+            doc = SimpleDocTemplate(
+                buffer, pagesize=A4,
+                rightMargin=20*mm, leftMargin=20*mm,
+                topMargin=20*mm, bottomMargin=20*mm
+            )
+            story = []
+            
+            story.extend(self._build_header())
+            story.extend(self._build_invoice_info())
+            story.extend(self._build_modified_doc_info())
+            story.extend(self._build_customer_info())
+            story.extend(self._build_debit_note_reasons()) # Motivos en lugar de items
+            story.extend(self._build_invoice_totals()) # Totales funcionan igual
+            story.extend(self._build_additional_info())
+            story.extend(self._build_authorization_info())
+            story.extend(self._build_footer())
+            
+            doc.build(story)
+            pdf_content = buffer.getvalue()
+            buffer.close()
+            return pdf_content
+        except Exception as e:
+            logger.error(f"Error generating debit note PDF: {str(e)}")
+            raise ValueError(f"Error generating debit note PDF: {str(e)}")
+
+    def _build_modified_doc_info(self):
+        """
+        Construye información del documento modificado (para NC/ND)
+        """
+        elements = []
+        if hasattr(self.document, 'modified_document_number') and self.document.modified_document_number:
+            elements.append(Paragraph("DOCUMENTO MODIFICADO", self.styles['SectionTitle']))
+            
+            data = [
+                [f"Comprobante Modificado ({self.document.get_modified_document_type_display()}):", self.document.modified_document_number],
+                ["Fecha Emisión (Sustento):", self.document.modified_document_date.strftime('%d/%m/%Y') if self.document.modified_document_date else ""],
+                ["Razón de Modificación:", getattr(self.document, 'modification_reason', '')]
+            ]
+            
+            table = Table(data, colWidths=[2.5*inch, 3*inch])
+            table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ]))
+            elements.append(table)
+            elements.append(Spacer(1, 5*mm))
+        return elements
+
+    def _build_debit_note_reasons(self):
+        """
+        Construye tabla de motivos para Nota de Débito
+        """
+        elements = []
+        elements.append(Paragraph("RAZONES DE LA MODIFICACIÓN", self.styles['SectionTitle']))
+        
+        headers = ["Razón", "Valor"]
+        table_data = [headers]
+        
+        # Asumiendo que usamos 'items' o 'motives'
+        items = getattr(self.document, 'items', None) or getattr(self.document, 'motives', None)
+        if items and items.exists():
+            for item in items.all():
+                desc = getattr(item, 'description', getattr(item, 'reason', ''))
+                val = getattr(item, 'value', getattr(item, 'subtotal', 0))
+                row = [desc, f"${val:.2f}"]
+                table_data.append(row)
+        
+        table = Table(table_data, colWidths=[4*inch, 1.5*inch])
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 5*mm))
+        return elements
     
     def _build_header(self):
         """
