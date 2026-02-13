@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Procesador principal de documentos electrónicos - VERSIÓN CORREGIDA
+Procesador principal de documentos electrónicos - VERSIÓN CORREGIDA v3.0
 RESUELVE: Error 39 FIRMA INVALIDA (firma y/o certificados alterados)
 
-CORRECCIONES APLICADAS:
-1. pretty_print=False para no alterar XML después de firmar
-2. remove_blank_text=False para preservar XML original del generador
-3. SHA-256 consistente en TODOS los algoritmos (digest, firma, certificado)
-4. Transformación enveloped-signature + C14N en Reference del documento
-5. SIN Transforms en Reference de SignedProperties (igual que facturador SRI) ← CRÍTICO
-6. Type correcto: http://uri.etsi.org/01903#SignedProperties
-7. Digest del documento calculado correctamente (canonicalización del root completo)
-8. SignedDataObjectProperties con Description, MimeType y Encoding correctos
-9. Verificación de expiración del certificado corregida (código alcanzable)
-10. No se modifica el XML después de firmarlo
+CORRECCIONES APLICADAS v3.0:
+1. Namespaces declarados en root ANTES de calcular hashes
+2. Canonicalización EXCLUSIVA para SignedProperties (exclusive=True)
+3. Sin espacios en blanco después de </ds:Signature>
+4. IDs con formato fijo más compatible (sin UUIDs complejos)
+5. Serialización final con pretty_print=False estricto
+6. X509IssuerName con formato RFC4514 verificado
+7. Nodo Signature insertado como último hijo sin espacios adicionales
+8. Digest del documento calculado ANTES de insertar firma
+9. SignedProperties con canonicalización exclusiva independiente
+10. Eliminación de saltos de línea y espacios problemáticos
 """
 
 import logging
@@ -240,24 +240,19 @@ class DocumentProcessor:
     def _create_xades_bes_signature(self, xml_content, cert_data):
         """
         Crear firma XAdES-BES compatible con el facturador oficial del SRI.
-
-        Flujo:
-        1. Parsear XML sin modificar whitespace
-        2. Canonicalizar el documento (sin firma) → calcular digest
-        3. Crear SignedProperties → canonicalizar → calcular digest
-        4. Crear SignedInfo con ambos digests
-        5. Canonicalizar SignedInfo → firmar con RSA-SHA256
-        6. Ensamblar el nodo ds:Signature completo
-        7. Insertar en el documento
-        8. Serializar SIN modificar (pretty_print=False)
-
-        CRÍTICO: El XML NO se modifica después de insertar la firma.
+        
+        CORRECCIONES CRÍTICAS v3.0:
+        1. Declarar namespaces ds y etsi en el root ANTES de calcular hashes
+        2. Usar canonicalización EXCLUSIVA (exclusive=True) para SignedProperties
+        3. IDs más simples y compatibles
+        4. Sin espacios en blanco después del nodo Signature
+        5. Serialización final SIN pretty_print
         """
         try:
             # --- PASO 1: Limpiar y parsear XML ---
             xml_content = self._pre_clean_xml(xml_content)
 
-            # IMPORTANTE: remove_blank_text=False para preservar el XML tal cual
+            # Parser estricto sin modificar whitespace
             parser = etree.XMLParser(
                 remove_blank_text=False,
                 strip_cdata=False,
@@ -267,50 +262,75 @@ class DocumentProcessor:
             )
             root = etree.fromstring(xml_content.encode('utf-8'), parser)
 
-            # --- PASO 2: Asegurar ID en el comprobante ---
+            # --- PASO 2: DECLARAR NAMESPACES EN ROOT (CRÍTICO) ---
+            # El SRI requiere que los namespaces de firma estén declarados globalmente
+            nsmap = root.nsmap.copy() if root.nsmap else {}
+            if 'ds' not in nsmap:
+                nsmap['ds'] = DS_NS
+            if 'etsi' not in nsmap:
+                nsmap['etsi'] = XADES_NS
+            
+            # Recrear root con namespaces completos
+            new_root = etree.Element(root.tag, nsmap=nsmap, attrib=root.attrib)
+            new_root.text = root.text
+            new_root.tail = root.tail
+            for child in root:
+                new_root.append(child)
+            root = new_root
+            
+            logger.info(f"Namespaces declarados en root: {list(root.nsmap.keys())}")
+
+            # --- PASO 3: Asegurar ID en el comprobante ---
             comprobante_uri = self._ensure_comprobante_id(root)
 
-            # --- PASO 3: Generar IDs únicos para la firma ---
-            sig_id = f"Signature{uuid.uuid4().hex[:8]}"
-            signed_props_id = f"{sig_id}-SignedProperties{uuid.uuid4().hex[:6]}"
-            ref_id = f"Reference-ID-{uuid.uuid4().hex[:6]}"
+            # --- PASO 4: Generar IDs más simples (sin UUIDs complejos) ---
+            # Usar IDs más cortos y compatibles como sugiere Gemini
+            timestamp = int(time.time() * 1000) % 100000000  # 8 dígitos
+            sig_id = f"Signature{timestamp}"
+            signed_props_id = f"SignedPropertiesSRI{timestamp}"
+            ref_id = f"Reference-ID-{timestamp}"
+            
+            logger.info(f"IDs generados - Sig: {sig_id}, Props: {signed_props_id}, Ref: {ref_id}")
 
             certificate = cert_data.certificate
             private_key = cert_data.private_key
 
-            # --- PASO 4: Calcular digest del documento ---
-            # Se canonicaliza el root completo (que aún NO tiene el nodo Signature).
-            # Esto replica lo que el verificador del SRI hará:
-            #   tomar documento → aplicar enveloped-signature (quitar Signature) → C14N → hash
-            doc_canonical = etree.tostring(root, method='c14n', exclusive=False, with_comments=False)
+            # --- PASO 5: Calcular digest del documento ---
+            # Canonicalizar el root ANTES de agregar la firma
+            doc_canonical = etree.tostring(
+                root, 
+                method='c14n', 
+                exclusive=False, 
+                with_comments=False
+            )
             doc_digest_b64 = base64.b64encode(hashlib.sha256(doc_canonical).digest()).decode()
+            
+            logger.info(f"Document digest calculado (C14N {len(doc_canonical)} bytes)")
 
-            # --- PASO 5: Crear SignedProperties ---
+            # --- PASO 6: Crear SignedProperties ---
             signed_properties = self._create_signed_properties(
                 signed_props_id, sig_id, ref_id, certificate
             )
 
-            # CRÍTICO: Canonicalizar SignedProperties con contexto de namespaces
-            # El SRI valida el digest usando la representación C14N exacta
-            # que incluye declaraciones de namespace heredadas
+            # CRÍTICO: Canonicalización EXCLUSIVA para SignedProperties
+            # Esto hace que el bloque sea independiente del documento padre
             sp_canonical = etree.tostring(
                 signed_properties, 
                 method='c14n', 
-                exclusive=False,  # Non-exclusive para incluir namespaces padre
+                exclusive=True,  # ← CAMBIO CRÍTICO: exclusive=True
                 with_comments=False
             )
             sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
             
-            # DEBUG: Verificar canonicalización
-            logger.debug(f"SignedProperties C14N length: {len(sp_canonical)} bytes")
+            logger.info(f"SignedProperties digest (C14N exclusive, {len(sp_canonical)} bytes)")
 
-            # --- PASO 6: Crear SignedInfo ---
+            # --- PASO 7: Crear SignedInfo ---
             signed_info = self._create_signed_info(
                 doc_digest_b64, sp_digest_b64,
                 comprobante_uri, signed_props_id, ref_id
             )
 
-            # --- PASO 7: Firmar SignedInfo ---
+            # --- PASO 8: Firmar SignedInfo ---
             si_canonical = etree.tostring(
                 signed_info, method='c14n', exclusive=False, with_comments=False
             )
@@ -321,26 +341,48 @@ class DocumentProcessor:
             )
             signature_value_b64 = base64.b64encode(signature_bytes).decode()
 
-            # --- PASO 8: Ensamblar ds:Signature ---
+            # --- PASO 9: Ensamblar ds:Signature ---
             signature_element = self._assemble_signature(
                 sig_id, signed_info, signature_value_b64,
                 certificate, signed_properties
             )
 
-            # --- PASO 9: Insertar firma en documento ---
+            # --- PASO 10: Insertar firma como ÚLTIMO HIJO sin espacios ---
+            # CRÍTICO: No debe haber espacios ni saltos de línea después de Signature
             root.append(signature_element)
+            
+            # Asegurar que no haya tail (espacios después de la firma)
+            signature_element.tail = None
 
-            # --- PASO 10: Serializar XML final ---
-            # CRÍTICO: pretty_print=False para NO alterar el contenido firmado
+            # --- PASO 11: Serializar XML final SIN pretty_print ---
+            # CRÍTICO: pretty_print=False para no alterar el contenido firmado
             signed_xml_bytes = etree.tostring(
                 root,
                 encoding='utf-8',
                 method='xml',
                 xml_declaration=True,
-                pretty_print=False
+                pretty_print=False  # ← CRÍTICO: NO formatear
             )
+            
+            # --- PASO 12: Eliminar espacios problemáticos ---
+            # Remover cualquier espacio/salto de línea antes de </factura> o similar
+            signed_xml_str = signed_xml_bytes.decode('utf-8')
+            
+            # Encontrar el tag de cierre del root
+            root_tag = root.tag.split('}')[-1] if '}' in root.tag else root.tag
+            
+            # Eliminar espacios antes del cierre
+            signed_xml_str = re.sub(
+                rf'\s+(</{root_tag}>)',
+                r'\1',
+                signed_xml_str
+            )
+            
+            signed_xml_bytes = signed_xml_str.encode('utf-8')
 
-            logger.info("XML firmado exitosamente con XAdES-BES (SHA-256)")
+            logger.info("XML firmado exitosamente con XAdES-BES (SHA-256, exclusive C14N)")
+            logger.info(f"Tamaño XML firmado: {len(signed_xml_bytes)} bytes")
+            
             return signed_xml_bytes
 
         except Exception as e:
@@ -397,9 +439,7 @@ class DocumentProcessor:
         dv1.text = doc_digest
 
         # --- Reference 2: SignedProperties ---
-        # CRÍTICO: SIN Transforms - el digest ya fue calculado con C14N directamente
-        # Si agregamos Transform aquí, el SRI intentará aplicar C14N sobre algo ya
-        # canonicalizado, causando que los hashes no coincidan → Error 39
+        # CRÍTICO: SIN Transforms - el digest ya fue calculado con C14N exclusivo
         ref2 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
         ref2.set("Type", TYPE_SIGNED_PROPS)
         ref2.set("URI", f"#{signed_props_id}")
@@ -560,20 +600,22 @@ class DocumentProcessor:
     def _format_issuer_name(self, certificate):
         """
         Formatear el issuer name del certificado.
-        Se debe usar el formato RFC 4514 exacto para evitar errores de validación (Error 39).
+        Usa RFC 4514 estándar que es lo que el SRI espera.
+        
+        IMPORTANTE: NO modificar este string - debe coincidir exactamente
+        con lo que el SRI tiene en su base de confianza.
         """
         try:
-            # Opción A: Usar RFC 4514 directamente (Estándar)
-            # Esto maneja caracteres especiales y orden correcto (CN=...,OU=...,O=...,C=...)
+            # RFC 4514 es el formato estándar (CN=..., OU=..., O=..., C=...)
             issuer_string = certificate.issuer.rfc4514_string()
             
-            # Log para debug
-            logger.info(f"Issuer Name (RFC4514): {issuer_string}")
+            logger.info(f"X509IssuerName (RFC4514): {issuer_string}")
             
             return issuer_string
 
         except Exception as e:
             logger.error(f"Error formatting issuer name: {e}")
+            # Fallback a RFC 4514 por defecto
             return certificate.issuer.rfc4514_string()
 
     # ========================================================================
@@ -806,11 +848,13 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processor_version': 'v2.0_XADES_BES_SHA256_FIXED',
+            'processor_version': 'v3.0_XADES_BES_FIXED_NAMESPACES_EXCLUSIVE_C14N',
             'signature_method': 'RSA-SHA256',
             'digest_method': 'SHA-256',
             'transforms_document': ['enveloped-signature', 'C14N'],
             'transforms_signed_properties': 'NONE',
+            'c14n_signed_properties': 'EXCLUSIVE',
+            'namespaces_in_root': True,
         }
 
     def validate_company_setup(self):
