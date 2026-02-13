@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Procesador principal de documentos electrónicos - VERSIÓN 5.1
+Procesador principal de documentos electrónicos - VERSIÓN 5.2 FINAL
 RESUELVE: Error 39 FIRMA INVALIDA
 
-FIX CRÍTICO v5.1: Namespace 'etsi' en lugar de 'xades' para QualifyingProperties
+FIX DEFINITIVO v5.2: 
+- Namespace 'etsi' solo en QualifyingProperties y SignedProperties (raíz)
+- Elementos hijos SIN prefijo (heredan namespace por defecto)
 """
 
 import logging
@@ -224,7 +226,7 @@ class DocumentProcessor:
     def _create_xades_bes_signature(self, xml_content, cert_data):
         """
         Crear firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
-        FIX v5.1: Namespace 'etsi' en QualifyingProperties
+        FIX v5.2: Elementos hijos SIN prefijo en SignedProperties
         """
         try:
             # --- PASO 1: Limpiar y parsear XML SIN espacios en blanco ---
@@ -384,52 +386,65 @@ class DocumentProcessor:
 
     def _create_signed_properties(self, signed_props_id, signature_id,
                                   reference_id, certificate):
-        """Crear SignedProperties con prefijo 'etsi' como el facturador oficial."""
-        # CRÍTICO: Usar prefijo 'etsi' en lugar de 'xades'
+        """
+        Crear SignedProperties EXACTAMENTE como facturador oficial.
+        CRÍTICO: Solo el elemento raíz tiene prefijo 'etsi:', los hijos NO tienen prefijo.
+        """
+        # Crear elemento raíz con namespace etsi
+        # Usamos QName para crear el elemento con el prefijo correcto
+        ETSI = "{http://uri.etsi.org/01903/v1.3.2#}"
+        
+        # Crear SignedProperties con prefijo etsi y namespace por defecto
         signed_props = etree.Element(
-            f"{{{XADES_NS}}}SignedProperties",
-            nsmap={'etsi': XADES_NS}
+            etree.QName(XADES_NS, "SignedProperties"),
+            nsmap={
+                None: XADES_NS,  # Namespace por defecto (SIN prefijo para hijos)
+                'etsi': XADES_NS,  # Prefijo etsi para elemento raíz
+                'ds': DS_NS
+            }
         )
         signed_props.set("Id", signed_props_id)
 
-        sig_props = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedSignatureProperties")
+        # CRÍTICO: Hijos usan namespace XADES_NS pero SIN prefijo
+        # Se crea con QName(XADES_NS, nombre) pero NO se le pone prefijo
+        sig_props = etree.SubElement(signed_props, etree.QName(XADES_NS, "SignedSignatureProperties"))
 
-        signing_time = etree.SubElement(sig_props, f"{{{XADES_NS}}}SigningTime")
+        signing_time = etree.SubElement(sig_props, etree.QName(XADES_NS, "SigningTime"))
         now_ec = datetime.now(ECUADOR_TZ)
         signing_time.text = now_ec.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '-05:00'
 
-        signing_cert = etree.SubElement(sig_props, f"{{{XADES_NS}}}SigningCertificate")
-        cert_elem = etree.SubElement(signing_cert, f"{{{XADES_NS}}}Cert")
+        signing_cert = etree.SubElement(sig_props, etree.QName(XADES_NS, "SigningCertificate"))
+        cert_elem = etree.SubElement(signing_cert, etree.QName(XADES_NS, "Cert"))
 
-        cert_digest = etree.SubElement(cert_elem, f"{{{XADES_NS}}}CertDigest")
-        cdm = etree.SubElement(cert_digest, f"{{{DS_NS}}}DigestMethod")
+        cert_digest = etree.SubElement(cert_elem, etree.QName(XADES_NS, "CertDigest"))
+        cdm = etree.SubElement(cert_digest, etree.QName(DS_NS, "DigestMethod"))
         cdm.set("Algorithm", ALG_SHA256)
 
         cert_der = certificate.public_bytes(serialization.Encoding.DER)
         cert_hash = hashlib.sha256(cert_der).digest()
-        cdv = etree.SubElement(cert_digest, f"{{{DS_NS}}}DigestValue")
+        cdv = etree.SubElement(cert_digest, etree.QName(DS_NS, "DigestValue"))
         cdv.text = base64.b64encode(cert_hash).decode()
 
-        issuer_serial = etree.SubElement(cert_elem, f"{{{XADES_NS}}}IssuerSerial")
+        issuer_serial = etree.SubElement(cert_elem, etree.QName(XADES_NS, "IssuerSerial"))
 
-        issuer_name = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509IssuerName")
+        issuer_name = etree.SubElement(issuer_serial, etree.QName(DS_NS, "X509IssuerName"))
         issuer_name.text = self._format_issuer_name(certificate)
 
-        serial_number = etree.SubElement(issuer_serial, f"{{{DS_NS}}}X509SerialNumber")
+        serial_number = etree.SubElement(issuer_serial, etree.QName(DS_NS, "X509SerialNumber"))
         serial_number.text = str(certificate.serial_number)
 
         # SignedDataObjectProperties
-        sdop = etree.SubElement(signed_props, f"{{{XADES_NS}}}SignedDataObjectProperties")
-        dof = etree.SubElement(sdop, f"{{{XADES_NS}}}DataObjectFormat")
+        sdop = etree.SubElement(signed_props, etree.QName(XADES_NS, "SignedDataObjectProperties"))
+        dof = etree.SubElement(sdop, etree.QName(XADES_NS, "DataObjectFormat"))
         dof.set("ObjectReference", f"#{reference_id}")
 
-        desc = etree.SubElement(dof, f"{{{XADES_NS}}}Description")
+        desc = etree.SubElement(dof, etree.QName(XADES_NS, "Description"))
         desc.text = "FIRMA DIGITAL SRI"
 
-        mime = etree.SubElement(dof, f"{{{XADES_NS}}}MimeType")
+        mime = etree.SubElement(dof, etree.QName(XADES_NS, "MimeType"))
         mime.text = "text/xml"
 
-        encoding = etree.SubElement(dof, f"{{{XADES_NS}}}Encoding")
+        encoding = etree.SubElement(dof, etree.QName(XADES_NS, "Encoding"))
         encoding.text = "UTF-8"
 
         return signed_props
@@ -458,10 +473,10 @@ class DocumentProcessor:
 
         obj = etree.SubElement(signature, f"{{{DS_NS}}}Object")
         
-        # CRÍTICO: Usar 'etsi' como prefijo
+        # QualifyingProperties con prefijo etsi
         qp = etree.SubElement(
             obj, 
-            f"{{{XADES_NS}}}QualifyingProperties",
+            etree.QName(XADES_NS, "QualifyingProperties"),
             nsmap={'etsi': XADES_NS}
         )
         qp.set("Target", f"#{sig_id}")
@@ -752,7 +767,7 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processor_version': 'v5.1_NAMESPACE_ETSI_FIX',
+            'processor_version': 'v5.2_FINAL_NO_PREFIX_FIX',
         }
 
     def validate_company_setup(self):
