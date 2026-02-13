@@ -290,11 +290,19 @@ class DocumentProcessor:
                 signed_props_id, sig_id, ref_id, certificate
             )
 
-            # Canonicalizar SignedProperties para calcular su digest
+            # CRÍTICO: Canonicalizar SignedProperties con contexto de namespaces
+            # El SRI valida el digest usando la representación C14N exacta
+            # que incluye declaraciones de namespace heredadas
             sp_canonical = etree.tostring(
-                signed_properties, method='c14n', exclusive=False, with_comments=False
+                signed_properties, 
+                method='c14n', 
+                exclusive=False,  # Non-exclusive para incluir namespaces padre
+                with_comments=False
             )
             sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
+            
+            # DEBUG: Verificar canonicalización
+            logger.debug(f"SignedProperties C14N length: {len(sp_canonical)} bytes")
 
             # --- PASO 6: Crear SignedInfo ---
             signed_info = self._create_signed_info(
@@ -393,8 +401,8 @@ class DocumentProcessor:
         # Si agregamos Transform aquí, el SRI intentará aplicar C14N sobre algo ya
         # canonicalizado, causando que los hashes no coincidan → Error 39
         ref2 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
-        ref2.set("URI", f"#{signed_props_id}")
         ref2.set("Type", TYPE_SIGNED_PROPS)
+        ref2.set("URI", f"#{signed_props_id}")
 
         dm2 = etree.SubElement(ref2, f"{{{DS_NS}}}DigestMethod")
         dm2.set("Algorithm", ALG_SHA256)
@@ -412,7 +420,10 @@ class DocumentProcessor:
         - SigningCertificate con digest SHA-256
         - SignedDataObjectProperties (Description, MimeType, Encoding)
         """
-        signed_props = etree.Element(f"{{{XADES_NS}}}SignedProperties")
+        signed_props = etree.Element(
+            f"{{{XADES_NS}}}SignedProperties",
+            nsmap={'etsi': XADES_NS, 'ds': DS_NS}
+        )
         signed_props.set("Id", signed_props_id)
 
         # --- SignedSignatureProperties ---
