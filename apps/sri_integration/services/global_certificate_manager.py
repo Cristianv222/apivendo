@@ -157,7 +157,8 @@ class GlobalCertificateManager:
                 '-in', p12_path,
                 '-nocerts',
                 '-passin', f'pass:{password}',
-                '-passout', f'pass:{password}'
+                '-passout', f'pass:{password}',
+                '-legacy'  # FIX para OpenSSL 3.x con RC2-40-CBC
             ]
             
             result = subprocess.run(

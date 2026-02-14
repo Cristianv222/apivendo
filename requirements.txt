@@ -74,3 +74,4 @@ whitenoise
 sendgrid==6.11.0
 flower==1.2.0
 
+pyOpenSSL==20.0.1
