@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-Procesador principal de documentos electrónicos - VERSIÓN 5.2 FINAL
-RESUELVE: Error 39 FIRMA INVALIDA
+Procesador principal de documentos electrónicos - VERSIÓN JAR
+RESUELVE: Error 39 FIRMA INVALIDA usando JAR de Java oficial
 
-FIX DEFINITIVO v5.2: 
-- Namespace 'etsi' solo en QualifyingProperties y SignedProperties (raíz)
-- Elementos hijos SIN prefijo (heredan namespace por defecto)
+FIX DEFINITIVO JAR: 
+- Usa JAR compilado de firma XAdES-BES (compatible con TODOS los proveedores)
+- Soporta multi-tenant (múltiples empresas con diferentes certificados)
 """
 
 import logging
 import os
 import time
+import subprocess
 from datetime import datetime, timezone, timedelta
 from django.core.files.base import ContentFile
 from django.db import transaction
@@ -23,39 +24,21 @@ from apps.sri_integration.services.soap_client import SRISOAPClient
 from apps.sri_integration.services.email_service import EmailService
 from apps.core.models import AuditLog
 
-# Imports para firma XAdES-BES
-from lxml import etree
-import base64
-import hashlib
-import uuid
-import re
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives.serialization import pkcs12
+# Imports básicos para verificación de certificado
 from cryptography import x509
 
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# Constantes de namespaces y algoritmos
+# Constantes
 # ============================================================================
-DS_NS = "http://www.w3.org/2000/09/xmldsig#"
-XADES_NS = "http://uri.etsi.org/01903/v1.3.2#"
-XADES141_NS = "http://uri.etsi.org/01903/v1.4.1#"
-
-ALG_C14N = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315"
-ALG_RSA_SHA256 = "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256"
-ALG_SHA256 = "http://www.w3.org/2001/04/xmlenc#sha256"
-ALG_ENVELOPED = "http://www.w3.org/2000/09/xmldsig#enveloped-signature"
-TYPE_SIGNED_PROPS = "http://uri.etsi.org/01903#SignedProperties"
-
 ECUADOR_TZ = timezone(timedelta(hours=-5))
 
 
 class DocumentProcessor:
     """
     Procesador principal de documentos electrónicos del SRI.
-    Implementa firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
+    Implementa firma XAdES-BES usando JAR de Java oficial.
     """
 
     def __init__(self, company):
@@ -96,7 +79,7 @@ class DocumentProcessor:
                     logger.error(f"XML generation failed: {xml_content}")
                     return False, f"XML generation failed: {xml_content}"
 
-                # 2. Firmar XML
+                # 2. Firmar XML (usando JAR)
                 logger.info(f"Firmando XML para documento {document.id}")
                 ok, signed_xml = self._sign_xml(document, xml_content)
                 if not ok:
@@ -187,19 +170,60 @@ class DocumentProcessor:
             return False, f"Certificate verification failed: {str(e)}"
 
     # ========================================================================
-    # Firma XAdES-BES
+    # Firma XAdES-BES usando JAR de Java
     # ========================================================================
     def _sign_xml(self, document, xml_content):
-        """Firma el XML con XAdES-BES compatible con el SRI."""
+        """
+        Firma el XML usando JAR de Java (compatible con TODOS los proveedores).
+        Resuelve Error 39 - Funciona con Security Data, BCE, Uanataca, etc.
+        """
         try:
-            logger.info(f"Iniciando firma XML para documento {document.id}")
+            logger.info(f"🔐 Iniciando firma XML para documento {document.id} usando JAR")
 
+            # Obtener certificado de la empresa
             cert_data = self.cert_manager.get_certificate(self.company.id)
             if not cert_data:
                 return False, "Certificate not available"
 
-            signed_xml = self._create_xades_bes_signature(xml_content, cert_data)
-
+            # Rutas temporales
+            xml_unsigned_path = f"/tmp/factura_{document.id}_unsigned.xml"
+            xml_signed_path = f"/tmp/factura_{document.id}_signed.xml"
+            
+            # Guardar XML sin firmar
+            with open(xml_unsigned_path, 'w', encoding='utf-8') as f:
+                f.write(xml_content)
+            
+            # Obtener certificado P12 y password de LA EMPRESA actual
+            p12_path = cert_data.certificate_obj.certificate_file.path
+            password = cert_data.password
+            
+            logger.info(f"📋 Firmando con JAR")
+            logger.info(f"   Certificado: {p12_path}")
+            logger.info(f"   XML input: {xml_unsigned_path}")
+            logger.info(f"   XML output: {xml_signed_path}")
+            
+            # Ejecutar JAR de firma
+            result = subprocess.run([
+                'java', '-jar', '/app/sri.jar',
+                p12_path,
+                password,
+                xml_unsigned_path,
+                xml_signed_path
+            ], capture_output=True, text=True, check=True)
+            
+            logger.info(f"✅ JAR ejecutado exitosamente")
+            if result.stdout:
+                logger.info(f"   JAR stdout: {result.stdout.strip()}")
+            if result.stderr:
+                logger.warning(f"   JAR stderr: {result.stderr.strip()}")
+            
+            # Leer XML firmado
+            with open(xml_signed_path, 'rb') as f:
+                signed_xml = f.read()
+            
+            logger.info(f"📊 XML firmado: {len(signed_xml)} bytes")
+            
+            # Guardar en el documento
             filename = f"{document.access_key}_signed.xml"
             document.signed_xml_file.save(
                 filename,
@@ -211,352 +235,28 @@ class DocumentProcessor:
             document.save()
             cert_data.update_usage()
 
+            # Debug
             debug_path = f"/tmp/signed_debug_{document.id}.xml"
             with open(debug_path, 'wb') as debug_f:
                 debug_f.write(signed_xml)
-            logger.info(f"DEBUG: XML guardado en {debug_path}")
+            logger.info(f"DEBUG: XML firmado guardado en {debug_path}")
             
-            logger.info(f"XML firmado correctamente para documento {document.id}")
+            # Limpiar archivos temporales
+            try:
+                os.unlink(xml_unsigned_path)
+                os.unlink(xml_signed_path)
+            except:
+                pass
+            
+            logger.info(f"✅ XML firmado correctamente con JAR para documento {document.id}")
             return True, signed_xml.decode('utf-8')
 
+        except subprocess.CalledProcessError as e:
+            logger.error(f"❌ Error ejecutando JAR: {e.stderr}")
+            return False, f"JAR_SIGNING_ERROR: {e.stderr}"
         except Exception as e:
-            logger.error(f"Error signing XML for document {document.id}: {str(e)}")
+            logger.error(f"❌ Error signing XML for document {document.id}: {str(e)}")
             return False, f"XML_SIGNING_ERROR: {str(e)}"
-
-    def _create_xades_bes_signature(self, xml_content, cert_data):
-        """
-        Crear firma XAdES-BES EXACTAMENTE como el facturador oficial del SRI.
-        FIX v5.2: Elementos hijos SIN prefijo en SignedProperties
-        """
-        try:
-            # --- PASO 1: Limpiar y parsear XML SIN espacios en blanco ---
-            xml_content = self._pre_clean_xml(xml_content)
-
-            parser = etree.XMLParser(
-                remove_blank_text=True,
-                strip_cdata=False,
-                resolve_entities=False,
-                remove_comments=False,
-                recover=False
-            )
-            root = etree.fromstring(xml_content.encode('utf-8'), parser)
-
-            def clean_whitespace(elem):
-                """Elimina espacios/saltos de línea de tail recursivamente."""
-                if elem.tail is not None and not elem.tail.strip():
-                    elem.tail = None
-                for child in elem:
-                    clean_whitespace(child)
-            
-            clean_whitespace(root)
-            
-            logger.info("XML limpiado de espacios en blanco")
-
-            # --- PASO 2: Asegurar ID en comprobante ---
-            comprobante_uri = self._ensure_comprobante_id(root)
-
-            # --- PASO 3: Generar IDs ---
-            base_uuid = str(uuid.uuid4())
-            sig_id = f"xmldsig-{base_uuid}"
-            signed_props_id = f"{sig_id}-signedprops"
-            sig_value_id = f"{sig_id}-sigvalue"
-            ref_id = f"{sig_id}-ref0"
-            
-            logger.info(f"IDs generados - Base UUID: {base_uuid}")
-
-            certificate = cert_data.certificate
-            private_key = cert_data.private_key
-
-            # --- PASO 4: Digest del documento ---
-            doc_canonical = etree.tostring(
-                root, 
-                method='c14n', 
-                exclusive=False,
-                with_comments=False
-            )
-            doc_digest_b64 = base64.b64encode(hashlib.sha256(doc_canonical).digest()).decode()
-            
-            logger.info(f"Document digest: {len(doc_canonical)} bytes")
-
-            # --- PASO 5: Crear SignedProperties ---
-            signed_properties = self._create_signed_properties(
-                signed_props_id, sig_id, ref_id, certificate
-            )
-
-            # --- PASO 6: Digest de SignedProperties ---
-            sp_canonical = etree.tostring(
-                signed_properties, 
-                method='c14n', 
-                exclusive=False,
-                with_comments=False
-            )
-            sp_digest_b64 = base64.b64encode(hashlib.sha256(sp_canonical).digest()).decode()
-            
-            logger.info(f"SignedProperties digest: {len(sp_canonical)} bytes")
-
-            # --- PASO 7: Crear SignedInfo ---
-            signed_info = self._create_signed_info(
-                doc_digest_b64, sp_digest_b64,
-                comprobante_uri, signed_props_id, ref_id
-            )
-
-            # --- PASO 8: Firmar SignedInfo ---
-            si_canonical = etree.tostring(
-                signed_info, method='c14n', exclusive=False, with_comments=False
-            )
-            signature_bytes = private_key.sign(
-                si_canonical,
-                padding.PKCS1v15(),
-                hashes.SHA256()
-            )
-            signature_value_b64 = base64.b64encode(signature_bytes).decode()
-
-            # --- PASO 9: Ensamblar Signature ---
-            signature_element = self._assemble_signature(
-                sig_id, sig_value_id, signed_info, signature_value_b64,
-                certificate, signed_properties
-            )
-
-            # --- PASO 10: Insertar firma SIN espacios ---
-            root.append(signature_element)
-            signature_element.tail = None
-
-            # --- PASO 11: Serializar SIN pretty_print ---
-            signed_xml_bytes = etree.tostring(
-                root,
-                encoding='utf-8',
-                method='xml',
-                xml_declaration=False,
-                pretty_print=False
-            )
-
-            logger.info(f"XML firmado: {len(signed_xml_bytes)} bytes")
-            
-            return signed_xml_bytes
-
-        except Exception as e:
-            logger.error(f"Error creating XAdES-BES signature: {str(e)}")
-            raise Exception(f"XADES_SIGNATURE_FAILED: {str(e)}")
-
-    # ========================================================================
-    # Componentes de la firma
-    # ========================================================================
-    def _create_signed_info(self, doc_digest, sp_digest, comprobante_uri,
-                            signed_props_id, reference_id):
-        """Crear SignedInfo EXACTAMENTE como el facturador oficial."""
-        signed_info = etree.Element(f"{{{DS_NS}}}SignedInfo")
-
-        c14n_method = etree.SubElement(signed_info, f"{{{DS_NS}}}CanonicalizationMethod")
-        c14n_method.set("Algorithm", ALG_C14N)
-
-        sig_method = etree.SubElement(signed_info, f"{{{DS_NS}}}SignatureMethod")
-        sig_method.set("Algorithm", ALG_RSA_SHA256)
-
-        # Reference 1: Documento
-        ref1 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
-        ref1.set("Id", reference_id)
-        ref1.set("URI", comprobante_uri)
-
-        transforms = etree.SubElement(ref1, f"{{{DS_NS}}}Transforms")
-
-        t_env = etree.SubElement(transforms, f"{{{DS_NS}}}Transform")
-        t_env.set("Algorithm", ALG_ENVELOPED)
-
-        t_c14n = etree.SubElement(transforms, f"{{{DS_NS}}}Transform")
-        t_c14n.set("Algorithm", ALG_C14N)
-
-        dm1 = etree.SubElement(ref1, f"{{{DS_NS}}}DigestMethod")
-        dm1.set("Algorithm", ALG_SHA256)
-
-        dv1 = etree.SubElement(ref1, f"{{{DS_NS}}}DigestValue")
-        dv1.text = doc_digest
-
-        # Reference 2: SignedProperties
-        ref2 = etree.SubElement(signed_info, f"{{{DS_NS}}}Reference")
-        ref2.set("Type", TYPE_SIGNED_PROPS)
-        ref2.set("URI", f"#{signed_props_id}")
-
-        dm2 = etree.SubElement(ref2, f"{{{DS_NS}}}DigestMethod")
-        dm2.set("Algorithm", ALG_SHA256)
-
-        dv2 = etree.SubElement(ref2, f"{{{DS_NS}}}DigestValue")
-        dv2.text = sp_digest
-
-        return signed_info
-
-    def _create_signed_properties(self, signed_props_id, signature_id,
-                                  reference_id, certificate):
-        """
-        Crear SignedProperties EXACTAMENTE como facturador oficial.
-        CRÍTICO: Solo el elemento raíz tiene prefijo 'etsi:', los hijos NO tienen prefijo.
-        """
-        # Crear elemento raíz con namespace etsi
-        # Usamos QName para crear el elemento con el prefijo correcto
-        ETSI = "{http://uri.etsi.org/01903/v1.3.2#}"
-        
-        # Crear SignedProperties con prefijo etsi y namespace por defecto
-        signed_props = etree.Element(
-            etree.QName(XADES_NS, "SignedProperties"),
-            nsmap={
-                None: XADES_NS,  # Namespace por defecto (SIN prefijo para hijos)
-                'etsi': XADES_NS,  # Prefijo etsi para elemento raíz
-                'ds': DS_NS
-            }
-        )
-        signed_props.set("Id", signed_props_id)
-
-        # CRÍTICO: Hijos usan namespace XADES_NS pero SIN prefijo
-        # Se crea con QName(XADES_NS, nombre) pero NO se le pone prefijo
-        sig_props = etree.SubElement(signed_props, etree.QName(XADES_NS, "SignedSignatureProperties"))
-
-        signing_time = etree.SubElement(sig_props, etree.QName(XADES_NS, "SigningTime"))
-        now_ec = datetime.now(ECUADOR_TZ)
-        signing_time.text = now_ec.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + '-05:00'
-
-        signing_cert = etree.SubElement(sig_props, etree.QName(XADES_NS, "SigningCertificate"))
-        cert_elem = etree.SubElement(signing_cert, etree.QName(XADES_NS, "Cert"))
-
-        cert_digest = etree.SubElement(cert_elem, etree.QName(XADES_NS, "CertDigest"))
-        cdm = etree.SubElement(cert_digest, etree.QName(DS_NS, "DigestMethod"))
-        cdm.set("Algorithm", ALG_SHA256)
-
-        cert_der = certificate.public_bytes(serialization.Encoding.DER)
-        cert_hash = hashlib.sha256(cert_der).digest()
-        cdv = etree.SubElement(cert_digest, etree.QName(DS_NS, "DigestValue"))
-        cdv.text = base64.b64encode(cert_hash).decode()
-
-        issuer_serial = etree.SubElement(cert_elem, etree.QName(XADES_NS, "IssuerSerial"))
-
-        issuer_name = etree.SubElement(issuer_serial, etree.QName(DS_NS, "X509IssuerName"))
-        issuer_name.text = self._format_issuer_name(certificate)
-
-        serial_number = etree.SubElement(issuer_serial, etree.QName(DS_NS, "X509SerialNumber"))
-        serial_number.text = str(certificate.serial_number)
-
-        # SignedDataObjectProperties
-        sdop = etree.SubElement(signed_props, etree.QName(XADES_NS, "SignedDataObjectProperties"))
-        dof = etree.SubElement(sdop, etree.QName(XADES_NS, "DataObjectFormat"))
-        dof.set("ObjectReference", f"#{reference_id}")
-
-        desc = etree.SubElement(dof, etree.QName(XADES_NS, "Description"))
-        desc.text = "FIRMA DIGITAL SRI"
-
-        mime = etree.SubElement(dof, etree.QName(XADES_NS, "MimeType"))
-        mime.text = "text/xml"
-
-        encoding = etree.SubElement(dof, etree.QName(XADES_NS, "Encoding"))
-        encoding.text = "UTF-8"
-
-        return signed_props
-
-    def _assemble_signature(self, sig_id, sig_value_id, signed_info, signature_value_b64,
-                            certificate, signed_properties):
-        """Ensamblar Signature EXACTAMENTE como el facturador oficial."""
-        signature = etree.Element(
-            f"{{{DS_NS}}}Signature",
-            nsmap={'ds': DS_NS}
-        )
-        signature.set("Id", sig_id)
-
-        signature.append(signed_info)
-
-        sv = etree.SubElement(signature, f"{{{DS_NS}}}SignatureValue")
-        sv.set("Id", sig_value_id)
-        sv.text = signature_value_b64
-
-        key_info = etree.SubElement(signature, f"{{{DS_NS}}}KeyInfo")
-        x509_data = etree.SubElement(key_info, f"{{{DS_NS}}}X509Data")
-        x509_cert = etree.SubElement(x509_data, f"{{{DS_NS}}}X509Certificate")
-
-        cert_der = certificate.public_bytes(serialization.Encoding.DER)
-        x509_cert.text = base64.b64encode(cert_der).decode()
-
-        obj = etree.SubElement(signature, f"{{{DS_NS}}}Object")
-        
-        # QualifyingProperties con prefijo etsi
-        qp = etree.SubElement(
-            obj, 
-            etree.QName(XADES_NS, "QualifyingProperties"),
-            nsmap={'etsi': XADES_NS}
-        )
-        qp.set("Target", f"#{sig_id}")
-        qp.append(signed_properties)
-
-        return signature
-
-    # ========================================================================
-    # Utilidades de firma
-    # ========================================================================
-    def _pre_clean_xml(self, xml_content):
-        """Limpieza mínima del XML."""
-        if xml_content.startswith('\ufeff'):
-            xml_content = xml_content[1:]
-
-        if not xml_content.strip().startswith('<?xml'):
-            xml_content = '<?xml version="1.0" encoding="UTF-8"?>' + xml_content
-
-        return xml_content
-
-    def _ensure_comprobante_id(self, root):
-        """Asegurar id="comprobante" en el elemento raíz."""
-        comprobante_tags = [
-            'factura', 'notaCredito', 'notaDebito',
-            'comprobanteRetencion', 'liquidacionCompra'
-        ]
-
-        target = None
-        for tag in comprobante_tags:
-            found = root.find(f'.//{tag}')
-            if found is not None:
-                target = found
-                break
-
-        if target is None:
-            target = root
-
-        comp_id = target.get('id')
-        if not comp_id:
-            comp_id = 'comprobante'
-            target.set('id', comp_id)
-
-        logger.info(f"Comprobante: <{target.tag}> id=\"{comp_id}\"")
-        return f"#{comp_id}"
-
-    def _format_issuer_name(self, certificate):
-        """Formatear X509IssuerName en formato estándar RFC4514."""
-        try:
-            issuer = certificate.issuer
-            
-            attr_order = ['CN', 'OU', 'O', 'C']
-            attr_map = {}
-            
-            for attr in issuer:
-                oid = attr.oid
-                val = attr.value
-                
-                if oid == x509.oid.NameOID.COMMON_NAME:
-                    attr_map['CN'] = val
-                elif oid == x509.oid.NameOID.ORGANIZATIONAL_UNIT_NAME:
-                    attr_map['OU'] = val
-                elif oid == x509.oid.NameOID.ORGANIZATION_NAME:
-                    attr_map['O'] = val
-                elif oid == x509.oid.NameOID.COUNTRY_NAME:
-                    attr_map['C'] = val
-            
-            parts = []
-            for key in attr_order:
-                if key in attr_map:
-                    parts.append(f"{key}={attr_map[key]}")
-            
-            issuer_string = ','.join(parts)
-            
-            logger.info(f"X509IssuerName: {issuer_string}")
-            
-            return issuer_string
-
-        except Exception as e:
-            logger.error(f"Error formatting issuer name: {e}")
-            return certificate.issuer.rfc4514_string()
 
     # ========================================================================
     # Resto de métodos
@@ -767,7 +467,7 @@ class DocumentProcessor:
             'total_amount': document.total_amount,
             'created_at': document.created_at,
             'updated_at': document.updated_at,
-            'processor_version': 'v5.2_FINAL_NO_PREFIX_FIX',
+            'processor_version': 'JAR_JAVA_OFICIAL',
         }
 
     def validate_company_setup(self):
