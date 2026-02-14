@@ -187,7 +187,6 @@ class DocumentProcessor:
 
             # Rutas temporales
             xml_unsigned_path = f"/tmp/factura_{document.id}_unsigned.xml"
-            xml_signed_path = f"/tmp/factura_{document.id}_signed.xml"
             
             # Guardar XML sin firmar
             with open(xml_unsigned_path, 'w', encoding='utf-8') as f:
@@ -200,16 +199,22 @@ class DocumentProcessor:
             logger.info(f"📋 Firmando con JAR")
             logger.info(f"   Certificado: {p12_path}")
             logger.info(f"   XML input: {xml_unsigned_path}")
-            logger.info(f"   XML output: {xml_signed_path}")
             
-            # Ejecutar JAR de firma
+            # Ejecutar JAR de firma (requiere 5 parámetros: p12, password, xml_input, output_dir, output_filename)
+            output_filename = f'factura_{document.id}_signed.xml'
+            logger.info(f"   XML output: /tmp/{output_filename}")
+            
             result = subprocess.run([
                 'java', '-jar', '/app/sri.jar',
                 p12_path,
                 password,
                 xml_unsigned_path,
-                xml_signed_path
+                '/tmp',  # Directorio de salida
+                output_filename  # Nombre del archivo
             ], capture_output=True, text=True, check=True)
+            
+            # Ruta del archivo firmado
+            xml_signed_path = f'/tmp/{output_filename}'
             
             logger.info(f"✅ JAR ejecutado exitosamente")
             if result.stdout:
