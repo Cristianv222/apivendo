@@ -3,7 +3,8 @@
 Global Certificate Manager - Sistema de gestión centralizada de certificados
 apps/sri_integration/services/global_certificate_manager.py
 
-Gestiona certificados de múltiples empresas en memoria para máximo rendimiento
+FIX CRÍTICO: Extrae la clave privada de FIRMA correcta (no la de cifrado)
+Security Data tiene 2 claves en el P12: Signing Key + Encryption Key
 """
 
 import os
@@ -11,10 +12,14 @@ import logging
 import threading
 import hashlib
 import base64
+import subprocess
+import tempfile
+import re
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.serialization import pkcs12
+from cryptography.hazmat.backends import default_backend
 from cryptography import x509
 from django.core.cache import cache
 from django.conf import settings
@@ -29,15 +34,22 @@ class CertificateData:
     """
     Estructura para datos de certificado en memoria
     """
-    def __init__(self, company_id, private_key, certificate, additional_certificates, certificate_obj):
+    def __init__(self, company_id, private_key, certificate, additional_certificates, certificate_obj, p12_data=None, password=None):
         self.company_id = company_id
         self.private_key = private_key
         self.certificate = certificate
         self.additional_certificates = additional_certificates
         self.certificate_obj = certificate_obj
+        self.p12_data = p12_data  # Guardamos los datos P12 por si necesitamos recargar
+        self._password = password  # Guardamos password para poder recargar con OpenSSL
         self.loaded_at = datetime.now()
         self.last_used = datetime.now()
         self.usage_count = 0
+    
+    @property
+    def password(self):
+        """Getter para password"""
+        return self._password
     
     def update_usage(self):
         """Actualiza estadísticas de uso"""
@@ -129,9 +141,75 @@ class GlobalCertificateManager:
             
             return self._load_certificate(company_id)
     
+    def _extract_signing_key(self, p12_path: str, password: str) -> Optional[bytes]:
+        """
+        Extrae la clave privada de FIRMA usando OpenSSL directamente.
+        Security Data puede tener múltiples claves (firma + cifrado).
+        
+        CRÍTICO: Esto resuelve el Error 39 - Security Data tiene 2 claves en el P12
+        """
+        try:
+            logger.info(f"🔑 Extrayendo clave privada de firma usando OpenSSL...")
+            
+            # Comando OpenSSL para extraer claves privadas
+            cmd = [
+                'openssl', 'pkcs12',
+                '-in', p12_path,
+                '-nocerts',
+                '-passin', f'pass:{password}',
+                '-passout', f'pass:{password}'
+            ]
+            
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            
+            output = result.stdout
+            
+            # Buscar claves privadas
+            pattern = r'-----BEGIN ENCRYPTED PRIVATE KEY-----.+?-----END ENCRYPTED PRIVATE KEY-----'
+            matches = re.findall(pattern, output, re.DOTALL)
+            
+            if not matches:
+                logger.error("❌ No private keys found in P12")
+                return None
+            
+            logger.info(f"📊 Found {len(matches)} private key(s) in P12")
+            
+            # Si hay múltiples claves, buscar la de "Signing Key"
+            if len(matches) > 1:
+                logger.info(f"🔍 Multiple keys detected, searching for Signing Key...")
+                
+                # Buscar secciones que contengan "Signing Key"
+                sections = output.split('-----BEGIN ENCRYPTED PRIVATE KEY-----')
+                
+                for i, section in enumerate(sections[1:], 1):  # Skip first empty section
+                    if 'Signing Key' in section or 'signing' in section.lower():
+                        key_pem = '-----BEGIN ENCRYPTED PRIVATE KEY-----' + section.split('-----END ENCRYPTED PRIVATE KEY-----')[0] + '-----END ENCRYPTED PRIVATE KEY-----'
+                        logger.info(f"✅ Found Signing Key (key #{i}) - Using this for digital signature")
+                        return key_pem.encode('utf-8')
+                
+                # Si no encontramos "Signing Key", usar la primera
+                logger.warning("⚠️ Signing Key attribute not found, using first key")
+                return matches[0].encode('utf-8')
+            else:
+                logger.info("✅ Single private key found - using it")
+                return matches[0].encode('utf-8')
+                
+        except subprocess.CalledProcessError as e:
+            logger.error(f"❌ OpenSSL command failed: {e.stderr}")
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error extracting signing key: {str(e)}")
+            return None
+    
     def _load_certificate(self, company_id: int) -> Optional[CertificateData]:
         """
         Carga certificado desde base de datos y lo cachea
+        FIX: Usa OpenSSL para extraer la clave de FIRMA correcta
         """
         try:
             # Obtener empresa
@@ -171,14 +249,36 @@ class GlobalCertificateManager:
             with open(cert_path, 'rb') as f:
                 p12_data = f.read()
             
-            # Extraer certificado y clave privada
-            private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
+            # MÉTODO 1: Extraer certificado usando cryptography (normal)
+            temp_private_key, certificate, additional_certificates = pkcs12.load_key_and_certificates(
                 p12_data,
                 password.encode('utf-8')
             )
             
-            if not private_key or not certificate:
-                logger.error(f"Could not extract key/certificate for company {company_id}")
+            if not certificate:
+                logger.error(f"Could not extract certificate for company {company_id}")
+                return None
+            
+            # MÉTODO 2: Extraer clave privada de FIRMA usando OpenSSL (FIX CRÍTICO)
+            logger.info(f"🔧 Using OpenSSL to extract SIGNING KEY for company {company_id}")
+            
+            signing_key_pem = self._extract_signing_key(cert_path, password)
+            
+            if signing_key_pem:
+                # Cargar la clave privada desde PEM
+                private_key = serialization.load_pem_private_key(
+                    signing_key_pem,
+                    password=password.encode('utf-8'),
+                    backend=default_backend()
+                )
+                logger.info(f"✅ Signing Key loaded successfully for company {company_id}")
+            else:
+                # Fallback a la clave extraída por cryptography
+                logger.warning(f"⚠️ OpenSSL extraction failed, using cryptography default key")
+                private_key = temp_private_key
+            
+            if not private_key:
+                logger.error(f"Could not extract private key for company {company_id}")
                 return None
             
             # Crear objeto de datos de certificado
@@ -187,7 +287,9 @@ class GlobalCertificateManager:
                 private_key=private_key,
                 certificate=certificate,
                 additional_certificates=additional_certificates,
-                certificate_obj=certificate_obj
+                certificate_obj=certificate_obj,
+                p12_data=p12_data,
+                password=password
             )
             
             # Cachear
