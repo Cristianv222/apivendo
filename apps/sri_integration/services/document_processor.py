@@ -111,6 +111,10 @@ class DocumentProcessor:
                     logger.info(f"Enviando email para documento {document.id}")
                     self._send_email(document)
 
+                # 7. Consumir factura del plan SOLO si fue autorizada por el SRI
+                if document.status == 'AUTHORIZED':
+                    self._consume_invoice_from_plan(document)
+
                 logger.info(f"Documento {document.id} procesado con estado: {document.status}")
                 return True, f"Document processed successfully with status: {document.status}"
 
@@ -119,6 +123,59 @@ class DocumentProcessor:
             document.status = 'ERROR'
             document.save()
             return False, f"PROCESSOR_CRITICAL_ERROR: {str(e)}"
+
+    # ========================================================================
+    # Consumo de factura del plan de billing
+    # ========================================================================
+    def _consume_invoice_from_plan(self, document):
+        """
+        Consumir una factura del plan de billing.
+        Solo se llama cuando el documento queda con status AUTHORIZED.
+        Registra el consumo en InvoiceConsumption para auditoría.
+        """
+        try:
+            from apps.billing.models import CompanyBillingProfile, InvoiceConsumption
+
+            billing_profile = CompanyBillingProfile.objects.get(company=self.company)
+            balance_before = billing_profile.available_invoices
+
+            consumed = billing_profile.consume_invoice()
+
+            if consumed:
+                InvoiceConsumption.objects.create(
+                    company=self.company,
+                    invoice_id=str(document.access_key),
+                    invoice_type=document.document_type,
+                    balance_before=balance_before,
+                    balance_after=billing_profile.available_invoices,
+                    api_endpoint='document_processor',
+                )
+                logger.info(
+                    f"✅ BILLING: Factura consumida - "
+                    f"empresa={self.company.id} ({self.company.business_name}), "
+                    f"doc={document.access_key}, "
+                    f"tipo={document.document_type}, "
+                    f"saldo anterior={balance_before}, "
+                    f"saldo restante={billing_profile.available_invoices}"
+                )
+            else:
+                logger.warning(
+                    f"⚠️ BILLING: Sin facturas disponibles - "
+                    f"empresa={self.company.id} ({self.company.business_name}), "
+                    f"doc={document.access_key}, "
+                    f"saldo={balance_before}"
+                )
+
+        except CompanyBillingProfile.DoesNotExist:
+            logger.error(
+                f"❌ BILLING: No existe perfil de facturación para empresa "
+                f"{self.company.id} ({self.company.business_name})"
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ BILLING: Error inesperado al consumir factura del plan - "
+                f"empresa={self.company.id}, doc={document.access_key}: {str(e)}"
+            )
 
     # ========================================================================
     # Verificación de certificado
@@ -187,47 +244,47 @@ class DocumentProcessor:
 
             # Rutas temporales
             xml_unsigned_path = f"/tmp/factura_{document.id}_unsigned.xml"
-            
+
             # Guardar XML sin firmar
             with open(xml_unsigned_path, 'w', encoding='utf-8') as f:
                 f.write(xml_content)
-            
+
             # Obtener certificado P12 y password de LA EMPRESA actual
             p12_path = cert_data.certificate_obj.certificate_file.path
             password = cert_data.password
-            
+
             logger.info(f"📋 Firmando con JAR")
             logger.info(f"   Certificado: {p12_path}")
             logger.info(f"   XML input: {xml_unsigned_path}")
-            
+
             # Ejecutar JAR de firma (requiere 5 parámetros: p12, password, xml_input, output_dir, output_filename)
             output_filename = f'factura_{document.id}_signed.xml'
             logger.info(f"   XML output: /tmp/{output_filename}")
-            
+
             result = subprocess.run([
                 'java', '-jar', '/app/sri.jar',
                 p12_path,
                 password,
                 xml_unsigned_path,
-                '/tmp',  # Directorio de salida
+                '/tmp',          # Directorio de salida
                 output_filename  # Nombre del archivo
             ], capture_output=True, text=True, check=True)
-            
+
             # Ruta del archivo firmado
             xml_signed_path = f'/tmp/{output_filename}'
-            
+
             logger.info(f"✅ JAR ejecutado exitosamente")
             if result.stdout:
                 logger.info(f"   JAR stdout: {result.stdout.strip()}")
             if result.stderr:
                 logger.warning(f"   JAR stderr: {result.stderr.strip()}")
-            
+
             # Leer XML firmado
             with open(xml_signed_path, 'rb') as f:
                 signed_xml = f.read()
-            
+
             logger.info(f"📊 XML firmado: {len(signed_xml)} bytes")
-            
+
             # Guardar en el documento
             filename = f"{document.access_key}_signed.xml"
             document.signed_xml_file.save(
@@ -245,14 +302,14 @@ class DocumentProcessor:
             with open(debug_path, 'wb') as debug_f:
                 debug_f.write(signed_xml)
             logger.info(f"DEBUG: XML firmado guardado en {debug_path}")
-            
+
             # Limpiar archivos temporales
             try:
                 os.unlink(xml_unsigned_path)
                 os.unlink(xml_signed_path)
-            except:
+            except Exception:
                 pass
-            
+
             logger.info(f"✅ XML firmado correctamente con JAR para documento {document.id}")
             return True, signed_xml.decode('utf-8')
 

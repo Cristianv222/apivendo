@@ -105,87 +105,10 @@ class BillingLimitMiddleware(MiddlewareMixin):
         return None
     
     def process_response(self, request, response):
-        """
-        Consumir factura si la creación fue exitosa
-        """
-        # Solo procesar si es un endpoint de creación
-        if not any(request.path.startswith(endpoint) for endpoint in self.INVOICE_CREATION_ENDPOINTS):
-            return response
-        
-        # Solo procesar si fue POST exitoso
-        if request.method != 'POST' or response.status_code not in [200, 201]:
-            return response
-        
-        # Verificar si tenemos la información de facturación
-        if not hasattr(request, 'billing_profile') or not hasattr(request, 'billing_company'):
-            return response
-        
-        try:
-            # Obtener información del documento creado
-            invoice_id = self._extract_invoice_id_from_response(response)
-            invoice_type = self._extract_document_type_from_path(request.path)
-            
-            # Registrar el consumo antes de descontar
-            balance_before = request.billing_profile.available_invoices
-            
-            # Consumir una factura
-            if hasattr(request.billing_profile, 'consume_invoice') and request.billing_profile.consume_invoice():
-                balance_after = request.billing_profile.available_invoices
-                
-                # Registrar en auditoría
-                InvoiceConsumption.objects.create(
-                    company=request.billing_company,
-                    invoice_id=invoice_id or f"unknown_{request.path.split('/')[-2]}",
-                    invoice_type=invoice_type,
-                    balance_before=balance_before,
-                    balance_after=balance_after,
-                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
-                    ip_address=self._get_client_ip(request),
-                    api_endpoint=request.path,
-                )
-                
-                logger.info(f"✅ BILLING CONSUMED: Company {request.billing_company.business_name} consumed 1 invoice. Remaining: {balance_after}")
-                
-                # Agregar headers informativos a la respuesta
-                response['X-Billing-Invoices-Remaining'] = str(balance_after)
-                response['X-Billing-Invoices-Consumed'] = str(request.billing_profile.total_invoices_consumed)
-                response['X-Billing-Company'] = request.billing_company.business_name
-                
-                # Alerta si se está agotando el saldo
-                low_threshold = getattr(request.billing_profile, 'low_balance_threshold', 10)
-                if balance_after <= low_threshold:
-                    response['X-Billing-Warning'] = f'Quedan solo {balance_after} facturas. Considera comprar un nuevo plan.'
-                    
-                    # Log adicional para alertas
-                    logger.warning(f"⚠️ LOW BALANCE: {request.billing_company.business_name} - {balance_after} facturas restantes")
-                
-            else:
-                # Si no tiene método consume_invoice, descontar manualmente
-                request.billing_profile.available_invoices -= 1
-                request.billing_profile.total_invoices_consumed += 1
-                request.billing_profile.save()
-                
-                balance_after = request.billing_profile.available_invoices
-                
-                # Registrar en auditoría
-                InvoiceConsumption.objects.create(
-                    company=request.billing_company,
-                    invoice_id=invoice_id or f"unknown_{request.path.split('/')[-2]}",
-                    invoice_type=invoice_type,
-                    balance_before=balance_before,
-                    balance_after=balance_after,
-                    user_agent=request.META.get('HTTP_USER_AGENT', ''),
-                    ip_address=self._get_client_ip(request),
-                    api_endpoint=request.path,
-                )
-                
-                logger.info(f"✅ BILLING CONSUMED (manual): Company {request.billing_company.business_name} consumed 1 invoice. Remaining: {balance_after}")
-        
-        except Exception as e:
-            logger.error(f"❌ BILLING MIDDLEWARE ERROR: {e}")
-            # No interferir con la respuesta si hay errores en el billing
-        
-        return response
+    """
+    Solo verificación - el consumo se hace en DocumentProcessor al autorizar
+    """
+    return response
     
     def _get_company_from_request(self, request):
         """
