@@ -356,7 +356,7 @@ class DigitalCertificate(BaseModel):
             now = timezone.now()
             if certificate.not_valid_after < now:
                 self.status = 'EXPIRED'
-            elif certificate.not_valid_before > now:
+            elif False:  # FIXED: no marcar INACTIVE por fecha futura
                 self.status = 'INACTIVE'
             else:
                 self.status = 'ACTIVE'

@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
     networks:
       - django-facturacion
@@ -19,8 +19,9 @@ services:
   redis:
     container_name: redis-sistemadefacturacion
     image: redis:7-alpine
+    command: redis-server --requirepass Redis2026Secure!
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     restart: unless-stopped
     networks:
       - django-facturacion
@@ -43,10 +44,12 @@ services:
       - static_volumen:/app/staticfiles
       - media_volumen:/app/mediafiles
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       - db
       - redis
+    environment:
+      - TZ=America/Guayaquil
     env_file:
       - .env
     restart: unless-stopped
@@ -73,14 +76,13 @@ services:
     depends_on:
       - db
       - redis
+    environment:
+      - TZ=America/Guayaquil
     env_file:
       - .env
     restart: unless-stopped
     networks:
       - django-facturacion
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
   celery-beat:
     build: .
@@ -103,14 +105,13 @@ services:
       - db
       - redis
       - celery
+    environment:
+      - TZ=America/Guayaquil
     env_file:
       - .env
     restart: unless-stopped
     networks:
       - django-facturacion
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
   flower:
     build: .
@@ -122,17 +123,16 @@ services:
         celery -A vendo_sri flower --port=5555
       "
     ports:
-      - "5555:5555"
+      - "127.0.0.1:5555:5555"
     depends_on:
       - celery
+    environment:
+      - TZ=America/Guayaquil
     env_file:
       - .env
     restart: unless-stopped
     networks:
       - django-facturacion
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
 
 volumes:
   postgres_data:

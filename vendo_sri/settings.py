@@ -457,6 +457,8 @@ SESSION_ENGINE = config('SESSION_ENGINE', default='django.contrib.sessions.backe
 REDIS_HOST = config('REDIS_HOST', default='redis')  # ✅ Cambiado de 'localhost' a 'redis'
 REDIS_PORT = config('REDIS_PORT', default=6379, cast=int)
 REDIS_DB = config('REDIS_DB', default=0, cast=int)
+REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
+REDIS_AUTH = f":{REDIS_PASSWORD}@" if REDIS_PASSWORD else ""
 
 # Construir URL de Redis automáticamente - ✅ CORREGIDO
 REDIS_URL = config('REDIS_URL', default=f'redis://{REDIS_HOST}:{REDIS_PORT}')
@@ -549,7 +551,7 @@ CERTIFICATE_ALERT_EMAIL = config('CERTIFICATE_ALERT_EMAIL', default=EMAIL_HOST_U
 CACHES = {
     'default': {
         'BACKEND': 'django_redis.cache.RedisCache',  # ✅ CORREGIDO: Usando django-redis
-        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/2',
+        'LOCATION': f'redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/2',
         'TIMEOUT': config('CACHE_DEFAULT_TIMEOUT', default=300, cast=int),
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
@@ -560,7 +562,7 @@ CACHES = {
     },
     'certificates': {
         'BACKEND': 'django_redis.cache.RedisCache',  # ✅ CORREGIDO: Usando django-redis
-        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/3',
+        'LOCATION': f'redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/3',
         'TIMEOUT': CERTIFICATE_CACHE_TIMEOUT,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
@@ -571,7 +573,7 @@ CACHES = {
     },
     'sessions': {
         'BACKEND': 'django_redis.cache.RedisCache',  # ✅ CORREGIDO: Usando django-redis
-        'LOCATION': f'redis://{REDIS_HOST}:{REDIS_PORT}/4',
+        'LOCATION': f'redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/4',
         'TIMEOUT': SESSION_COOKIE_AGE,
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
