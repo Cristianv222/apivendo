@@ -280,6 +280,9 @@ STATICFILES_DIRS = [
 MEDIA_URL = config('MEDIA_URL', default='/media/')
 MEDIA_ROOT = os.path.join(BASE_DIR, config('MEDIA_ROOT', default='storage'))
 
+# Configuración personalizada para S3 o Storage Local Dinámico
+DEFAULT_FILE_STORAGE = 'apps.core.storage.DynamicMediaStorage'
+
 # ==========================================
 # DEFAULT AUTO FIELD
 # ==========================================

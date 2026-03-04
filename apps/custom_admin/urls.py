@@ -85,6 +85,8 @@ urlpatterns = [
    path('settings/test-email/', views.test_email, name='test_email'),
    path('settings/system/', views.system_settings, name='system_settings'),
    path('settings/companies/', views.company_settings, name='company_settings'),
+   path('settings/storage/', views.storage_settings, name='storage_settings'),
+   path('settings/storage/migrate/', views.storage_migrate, name='storage_migrate'),
    
 
    # Notifications

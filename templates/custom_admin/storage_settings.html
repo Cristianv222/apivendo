@@ -1,0 +1,255 @@
+{% extends "custom_admin/base.html" %}
+{% load static %}
+{% load crispy_forms_tags %}
+
+{% block title %}Configuración de Almacenamiento - FronteraTech{% endblock %}
+
+{% block header_title %}
+Configuración de Almacenamiento
+<div class="header-subtitle text-muted mt-1" style="font-size: 0.85rem;">
+    Gestiona dónde se almacenan los archivos estáticos y media (DigitalOcean Spaces, AWS S3 o Local)
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Estilos personalizados para la vista de Storage */
+    .storage-header {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+    .storage-header div {
+        display: flex;
+        align-items: center;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background-color: var(--primary-color);
+        color: white;
+        justify-content: center;
+        font-size: 1.2rem;
+    }
+    .storage-header h2 {
+        margin: 0;
+        font-weight: 600;
+        color: var(--primary-color);
+        font-size: 1.5rem;
+    }
+    .section-title {
+        font-size: 1rem;
+        color: var(--primary-color);
+        margin-bottom: 15px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #eee;
+    }
+    .status-badge {
+        padding: 5px 10px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: white;
+        margin-left: 10px;
+    }
+    .status-active { background-color: var(--success-color); }
+    .status-inactive { background-color: var(--secondary-color); }
+
+    .switch-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+    .form-switch .form-check-input {
+        width: 3em;
+        height: 1.5em;
+        cursor: pointer;
+    }
+    .info-box {
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        padding: 20px;
+        border-left: 4px solid var(--accent-color);
+    }
+    .migration-box {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        padding: 20px;
+        background-color: white;
+    }
+    .migration-box-title {
+        color: var(--success-color);
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="storage-header mt-2">
+    <div><i class="fas fa-cloud-upload-alt"></i></div>
+    <h2>Configuración de Almacenamiento</h2>
+</div>
+<p class="text-muted mb-4">Gestiona dónde se almacenan los archivos estáticos y media (DigitalOcean Spaces, AWS S3 o Local)</p>
+
+<div class="row">
+    <!-- Configuración del Bucket -->
+    <div class="col-lg-8">
+        <div class="admin-card p-4 mb-4">
+            <h5 class="section-title text-primary font-weight-bold">Configuración de Bucket</h5>
+            
+            <form method="post" action="{% url 'custom_admin:storage_settings' %}" id="storageForm">
+                {% csrf_token %}
+                
+                <div class="mb-4">
+                    <label class="fw-bold mb-2 d-flex align-items-center">
+                        Estado del Storage S3 
+                        {% if storage_active %}
+                        <span class="status-badge status-active">ACTIVO</span>
+                        {% else %}
+                        <span class="status-badge status-inactive">INACTIVO</span>
+                        {% endif %}
+                    </label>
+                    <div class="switch-container">
+                        <span class="text-muted">Desactivar</span>
+                        <div class="form-check form-switch m-0 pb-1">
+                            <input class="form-check-input" type="checkbox" id="storageToggle" name="storage_active" {% if storage_active %}checked{% endif %}>
+                        </div>
+                        <span>Activar uso del Bucket S3 en lugar del disco local</span>
+                    </div>
+                    <small class="text-muted bg-light p-2 rounded d-inline-block mt-2">
+                        <i class="fas fa-info-circle"></i> Si desactivas esta opción, los archivos se volverán a guardar en el disco del servidor (local).
+                    </small>
+                </div>
+                
+                <hr class="my-4">
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Proveedor de Nube</label>
+                        <select class="form-select" name="provider">
+                            <option value="digitalocean" {% if provider == 'digitalocean' %}selected{% endif %}>DigitalOcean Spaces</option>
+                            <option value="aws" {% if provider == 'aws' %}selected{% endif %}>AWS S3</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Región (Ej: nyc3)</label>
+                        <input type="text" class="form-control" name="region" value="{{ region|default:'' }}">
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Access Key</label>
+                        <input type="text" class="form-control" name="access_key" value="{{ access_key|default:'' }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Secret Key</label>
+                        <div class="input-group">
+                            <input type="password" class="form-control" id="secretKey" name="secret_key" value="{{ secret_key|default:'' }}">
+                            <button class="btn btn-outline-secondary" type="button" onclick="togglePassword('secretKey', this)"><i class="fas fa-eye-slash"></i></button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Nombre del Bucket</label>
+                        <input type="text" class="form-control" name="bucket_name" value="{{ bucket_name|default:'' }}">
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-bold">Endpoint URL</label>
+                        <input type="text" class="form-control" name="endpoint_url" value="{{ endpoint_url|default:'' }}">
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label fw-bold">Dominio Personalizado CDN (Opcional)</label>
+                    <input type="text" class="form-control mb-1" name="cdn_domain" value="{{ cdn_domain|default:'' }}" placeholder="Ej: cdn.tu-dominio.com">
+                    <small class="text-muted"><i class="fas fa-magic"></i> Útil si usas un CDN frente a tu Bucket para acelerar la carga de archivos.</small>
+                </div>
+                
+                <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                    <a href="{% url 'custom_admin:dashboard' %}" class="btn btn-light">Descartar</a>
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save me-1"></i> Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Info y Herramientas -->
+    <div class="col-lg-4">
+        <div class="info-box mb-4">
+            <div class="d-flex align-items-center gap-2 mb-2">
+                <i class="fas fa-info-circle text-primary fs-5"></i>
+            </div>
+            <p class="text-muted mb-0" style="font-size: 0.9rem;">
+                Asegúrate de configurar correctamente los permisos CORS en tu proveedor para que los archivos estáticos carguen sin problema.
+            </p>
+        </div>
+        
+        <div class="migration-box">
+            <div class="migration-box-title">
+                <i class="fas fa-truck text-success"></i> Herramienta de Migración
+            </div>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5;">
+                Si ya tienes archivos guardados localmente y quieres pasarlos todos al bucket de la nube para no perderlos, usa esta herramienta. <strong>Se recomienda tener configurado y activo el Bucket antes de realizar esto.</strong>
+            </p>
+            <form method="post" action="{% url 'custom_admin:storage_migrate' %}" id="migrateForm">
+                {% csrf_token %}
+                <button type="button" class="btn btn-outline-success w-100 fw-bold py-2 mt-2" onclick="confirmMigration()">
+                    <i class="fas fa-cloud-upload-alt me-2"></i> Migrar Archivos Locales a la Nube
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function togglePassword(inputId, btnElement) {
+        var input = document.getElementById(inputId);
+        var icon = btnElement.querySelector('i');
+        
+        if (input.type === "password") {
+            input.type = "text";
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        } else {
+            input.type = "password";
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        }
+    }
+
+    function confirmMigration() {
+        Swal.fire({
+            title: '¿Iniciar Migración?',
+            text: "Esto copiará los archivos locales al Bucket. Este proceso puede tardar dependiendo de la cantidad de archivos.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#28a745',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, Migrar Todo',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: 'Migrando...',
+                    text: 'Por favor no cierres esta ventana',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading()
+                    }
+                });
+                document.getElementById('migrateForm').submit();
+            }
+        });
+    }
+</script>
+{% endblock %}

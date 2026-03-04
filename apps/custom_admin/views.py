@@ -3556,3 +3556,93 @@ def billing_add_invoices(request, company_id):
             'success': False,
             'error': str(e)
         }, status=400)
+
+
+# ========== STORAGE CONFIGURATION ==========
+
+from apps.settings.models import SystemSetting
+
+@login_required
+@staff_required
+def storage_settings(request):
+    """Configuración de Almacenamiento S3 (AWS/DigitalOcean)"""
+    if request.method == 'POST':
+        SystemSetting.objects.update_or_create(key='STORAGE_ACTIVE', defaults={'value': 'true' if request.POST.get('storage_active') == 'on' else 'false', 'setting_type': 'BOOLEAN', 'name': 'S3 Active', 'category': 'SYSTEM'})
+        SystemSetting.objects.update_or_create(key='S3_PROVIDER', defaults={'value': request.POST.get('provider', ''), 'setting_type': 'STRING', 'name': 'S3 Provider', 'category': 'SYSTEM'})
+        SystemSetting.objects.update_or_create(key='S3_REGION', defaults={'value': request.POST.get('region', ''), 'setting_type': 'STRING', 'name': 'S3 Region', 'category': 'SYSTEM'})
+        SystemSetting.objects.update_or_create(key='S3_ACCESS_KEY', defaults={'value': request.POST.get('access_key', ''), 'setting_type': 'STRING', 'name': 'S3 Access Key', 'category': 'SYSTEM'})
+        SystemSetting.objects.update_or_create(key='S3_SECRET_KEY', defaults={'value': request.POST.get('secret_key', ''), 'setting_type': 'PASSWORD', 'name': 'S3 Secret Key', 'category': 'SYSTEM'})
+        SystemSetting.objects.update_or_create(key='S3_BUCKET_NAME', defaults={'value': request.POST.get('bucket_name', ''), 'setting_type': 'STRING', 'name': 'S3 Bucket Name', 'category': 'SYSTEM'})
+        SystemSetting.objects.update_or_create(key='S3_ENDPOINT_URL', defaults={'value': request.POST.get('endpoint_url', ''), 'setting_type': 'URL', 'name': 'S3 Endpoint URL', 'category': 'SYSTEM'})
+        SystemSetting.objects.update_or_create(key='S3_CDN_DOMAIN', defaults={'value': request.POST.get('cdn_domain', ''), 'setting_type': 'STRING', 'name': 'S3 CDN Domain', 'category': 'SYSTEM'})
+        
+        messages.success(request, 'Configuración de almacenamiento actualizada exitosamente.')
+        return redirect('custom_admin:storage_settings')
+
+    def get_val(key, default=''):
+        obj = SystemSetting.objects.filter(key=key).first()
+        return obj.value if obj else default
+
+    context = {
+        'page_title': 'Configuración de Almacenamiento',
+        'storage_active': get_val('STORAGE_ACTIVE', 'false') == 'true',
+        'provider': get_val('S3_PROVIDER', 'digitalocean'), 
+        'region': get_val('S3_REGION', 'nyc3'),
+        'access_key': get_val('S3_ACCESS_KEY', ''),
+        'secret_key': get_val('S3_SECRET_KEY', ''),
+        'bucket_name': get_val('S3_BUCKET_NAME', ''),
+        'endpoint_url': get_val('S3_ENDPOINT_URL', ''),
+        'cdn_domain': get_val('S3_CDN_DOMAIN', ''),
+    }
+    return render(request, 'custom_admin/storage_settings.html', context)
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def storage_migrate(request):
+    """Migración real de archivos locales a la nube"""
+    import os
+    import boto3
+    from django.conf import settings
+    
+    try:
+        def get_val(key, default=''):
+            obj = SystemSetting.objects.filter(key=key).first()
+            return obj.value if obj else default
+
+        access_key = get_val('S3_ACCESS_KEY')
+        secret_key = get_val('S3_SECRET_KEY')
+        bucket_name = get_val('S3_BUCKET_NAME')
+        endpoint_url = get_val('S3_ENDPOINT_URL')
+        region = get_val('S3_REGION')
+
+        if not all([access_key, secret_key, bucket_name, endpoint_url]):
+            raise Exception("Por favor, configure y guarde todas las credenciales del Bucket primero.")
+
+        session = boto3.session.Session()
+        client = session.client('s3',
+            region_name=region if region else None,
+            endpoint_url=endpoint_url,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key
+        )
+
+        media_root = settings.MEDIA_ROOT
+        base_folder = 'apivendo'
+        upload_count = 0
+
+        # Subir todos los archivos locales
+        if os.path.exists(media_root):
+            for root, dirs, files in os.walk(media_root):
+                for file in files:
+                    local_path = os.path.join(root, file)
+                    relative_path = os.path.relpath(local_path, media_root)
+                    s3_path = f"{base_folder}/{relative_path}".replace('\\', '/')
+                    client.upload_file(local_path, bucket_name, s3_path, ExtraArgs={'ACL': 'public-read'})
+                    upload_count += 1
+                    
+        messages.success(request, f'Se migraron exitosamente {upload_count} archivos locales a la carpeta "{base_folder}/" en el bucket.')
+    except Exception as e:
+        messages.error(request, f'Error durante la migración: {str(e)}')
+        
+    return redirect('custom_admin:storage_settings')

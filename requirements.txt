@@ -33,6 +33,8 @@ python-decouple
 Pillow
 requests
 python-dateutil
+boto3
+django-storages
 
 # Development (opcional)
 django-debug-toolbar
