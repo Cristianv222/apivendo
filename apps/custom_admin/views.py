@@ -3620,7 +3620,7 @@ def storage_migrate(request):
             return obj.value if obj else default
 
         access_key = get_val('S3_ACCESS_KEY', '').strip()
-        secret_key = get_val('S3_SECRET_KEY', '').strip()
+        secret_key = get_val('S3_SECRET_KEY', '').replace(' ', '+').strip()
         bucket_name = get_val('S3_BUCKET_NAME', '').strip()
         endpoint_url = get_val('S3_ENDPOINT_URL', '').strip()
         region = get_val('S3_REGION', '').strip()

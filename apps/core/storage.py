@@ -44,7 +44,7 @@ class DynamicMediaStorage(Storage):
             
             kwargs = {
                 'access_key': access_key.value.strip(),
-                'secret_key': secret_key.value.strip(),
+                'secret_key': secret_key.value.replace(' ', '+').strip(),
                 'bucket_name': bucket_name.value.strip(),
                 'endpoint_url': endpoint_url.value.strip(),
                 'location': 'apivendo',  # Carpeta raíz en el bucket
