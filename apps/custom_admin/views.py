@@ -3619,21 +3619,23 @@ def storage_migrate(request):
             obj = SystemSetting.objects.filter(key=key).first()
             return obj.value if obj else default
 
-        access_key = get_val('S3_ACCESS_KEY')
-        secret_key = get_val('S3_SECRET_KEY')
-        bucket_name = get_val('S3_BUCKET_NAME')
-        endpoint_url = get_val('S3_ENDPOINT_URL')
-        region = get_val('S3_REGION')
+        access_key = get_val('S3_ACCESS_KEY', '').strip()
+        secret_key = get_val('S3_SECRET_KEY', '').strip()
+        bucket_name = get_val('S3_BUCKET_NAME', '').strip()
+        endpoint_url = get_val('S3_ENDPOINT_URL', '').strip()
+        region = get_val('S3_REGION', '').strip()
 
         if not all([access_key, secret_key, bucket_name, endpoint_url]):
             raise Exception("Por favor, configure y guarde todas las credenciales del Bucket primero.")
 
+        from botocore.client import Config
         session = boto3.session.Session()
         client = session.client('s3',
             region_name=region if region else None,
             endpoint_url=endpoint_url,
             aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key
+            aws_secret_access_key=secret_key,
+            config=Config(signature_version='s3v4')
         )
 
         media_root = settings.MEDIA_ROOT

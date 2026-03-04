@@ -39,19 +39,23 @@ class DynamicMediaStorage(Storage):
                 self._is_s3_active = True
                 return self._s3_storage
                 
+            import boto3
+            from botocore.client import Config
+            
             kwargs = {
-                'access_key': access_key.value,
-                'secret_key': secret_key.value,
-                'bucket_name': bucket_name.value,
-                'endpoint_url': endpoint_url.value,
+                'access_key': access_key.value.strip(),
+                'secret_key': secret_key.value.strip(),
+                'bucket_name': bucket_name.value.strip(),
+                'endpoint_url': endpoint_url.value.strip(),
                 'location': 'apivendo',  # Carpeta raíz en el bucket
                 'default_acl': 'public-read',
                 'querystring_auth': False,
+                'config': Config(signature_version='s3v4'),
             }
             if region and region.value:
-                kwargs['region_name'] = region.value
+                kwargs['region_name'] = region.value.strip()
             if cdn_domain and cdn_domain.value:
-                kwargs['custom_domain'] = cdn_domain.value
+                kwargs['custom_domain'] = cdn_domain.value.strip()
                 
             self._s3_storage = S3Boto3Storage(**kwargs)
             self._last_bucket = bucket_name.value
