@@ -50,7 +50,10 @@ class DynamicMediaStorage(Storage):
                 'location': 'apivendo',  # Carpeta raíz en el bucket
                 'default_acl': 'public-read',
                 'querystring_auth': False,
-                'config': Config(signature_version='s3v4'),
+                'config': Config(
+                    signature_version='s3v4',
+                    s3={'addressing_style': 'virtual'}
+                ),
             }
             if region and region.value:
                 kwargs['region_name'] = region.value.strip()

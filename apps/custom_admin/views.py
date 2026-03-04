@@ -3635,7 +3635,10 @@ def storage_migrate(request):
             endpoint_url=endpoint_url,
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            config=Config(signature_version='s3v4')
+            config=Config(
+                signature_version='s3v4',
+                s3={'addressing_style': 'virtual'}
+            )
         )
 
         media_root = settings.MEDIA_ROOT
