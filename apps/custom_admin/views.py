@@ -3567,14 +3567,23 @@ from apps.settings.models import SystemSetting
 def storage_settings(request):
     """Configuración de Almacenamiento S3 (AWS/DigitalOcean)"""
     if request.method == 'POST':
-        SystemSetting.objects.update_or_create(key='STORAGE_ACTIVE', defaults={'value': 'true' if request.POST.get('storage_active') == 'on' else 'false', 'setting_type': 'BOOLEAN', 'name': 'S3 Active', 'category': 'SYSTEM'})
-        SystemSetting.objects.update_or_create(key='S3_PROVIDER', defaults={'value': request.POST.get('provider', ''), 'setting_type': 'STRING', 'name': 'S3 Provider', 'category': 'SYSTEM'})
-        SystemSetting.objects.update_or_create(key='S3_REGION', defaults={'value': request.POST.get('region', ''), 'setting_type': 'STRING', 'name': 'S3 Region', 'category': 'SYSTEM'})
-        SystemSetting.objects.update_or_create(key='S3_ACCESS_KEY', defaults={'value': request.POST.get('access_key', ''), 'setting_type': 'STRING', 'name': 'S3 Access Key', 'category': 'SYSTEM'})
-        SystemSetting.objects.update_or_create(key='S3_SECRET_KEY', defaults={'value': request.POST.get('secret_key', ''), 'setting_type': 'PASSWORD', 'name': 'S3 Secret Key', 'category': 'SYSTEM'})
-        SystemSetting.objects.update_or_create(key='S3_BUCKET_NAME', defaults={'value': request.POST.get('bucket_name', ''), 'setting_type': 'STRING', 'name': 'S3 Bucket Name', 'category': 'SYSTEM'})
-        SystemSetting.objects.update_or_create(key='S3_ENDPOINT_URL', defaults={'value': request.POST.get('endpoint_url', ''), 'setting_type': 'URL', 'name': 'S3 Endpoint URL', 'category': 'SYSTEM'})
-        SystemSetting.objects.update_or_create(key='S3_CDN_DOMAIN', defaults={'value': request.POST.get('cdn_domain', ''), 'setting_type': 'STRING', 'name': 'S3 CDN Domain', 'category': 'SYSTEM'})
+        def set_val(key, val, stype, name):
+            if not val:
+                SystemSetting.objects.filter(key=key).delete()
+            else:
+                SystemSetting.objects.update_or_create(
+                    key=key, 
+                    defaults={'value': val, 'setting_type': stype, 'name': name, 'category': 'SYSTEM'}
+                )
+
+        set_val('STORAGE_ACTIVE', 'true' if request.POST.get('storage_active') == 'on' else 'false', 'BOOLEAN', 'S3 Active')
+        set_val('S3_PROVIDER', request.POST.get('provider', ''), 'STRING', 'S3 Provider')
+        set_val('S3_REGION', request.POST.get('region', ''), 'STRING', 'S3 Region')
+        set_val('S3_ACCESS_KEY', request.POST.get('access_key', ''), 'STRING', 'S3 Access Key')
+        set_val('S3_SECRET_KEY', request.POST.get('secret_key', ''), 'PASSWORD', 'S3 Secret Key')
+        set_val('S3_BUCKET_NAME', request.POST.get('bucket_name', ''), 'STRING', 'S3 Bucket Name')
+        set_val('S3_ENDPOINT_URL', request.POST.get('endpoint_url', ''), 'URL', 'S3 Endpoint URL')
+        set_val('S3_CDN_DOMAIN', request.POST.get('cdn_domain', ''), 'STRING', 'S3 CDN Domain')
         
         messages.success(request, 'Configuración de almacenamiento actualizada exitosamente.')
         return redirect('custom_admin:storage_settings')
