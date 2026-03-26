@@ -44,120 +44,6 @@ def custom_logout(request):
     logout(request)
     return redirect('account_login')  # Redirige a tu login personalizado
 
-def dashboard_view_legacy(request):
-    """Vista temporal básica del dashboard (mantenida como backup)"""
-    if not request.user.is_authenticated:
-        return redirect('account_login')
-    
-    # Template básico inline
-    html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Dashboard - VENDO SRI</title>
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    </head>
-    <body>
-        <nav class="navbar navbar-dark bg-primary">
-            <div class="container">
-                <span class="navbar-brand">VENDO SRI - Dual Token System</span>
-                <div>
-                    <span class="text-white me-3">Hola, {request.user.email}</span>
-                    <a href="/token-auth/" class="btn btn-warning btn-sm me-2">🔑 Tokens API</a>
-                    <a href="/accounts/logout/" class="btn btn-outline-light btn-sm">Salir</a>
-                </div>
-            </div>
-        </nav>
-        <div class="container mt-4">
-            <div class="row">
-                <div class="col-12">
-                    <div class="alert alert-success">
-                        <h4>🎉 ¡Sistema Dual Token funcionando correctamente!</h4>
-                        <p>Usuario: <strong>{request.user.email}</strong></p>
-                        <p>Autenticación dual implementada: Usuario + Empresa tokens</p>
-                        <div class="mt-3">
-                            <a href="/dashboard/" class="btn btn-primary me-2">Nuevo Dashboard</a>
-                            <a href="/token-auth/" class="btn btn-warning me-2">🔑 Sistema de Tokens</a>
-                            <a href="/admin/" class="btn btn-secondary">Admin</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="row">
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
-                            <h5>🌐 Navegador Web</h5>
-                        </div>
-                        <div class="card-body">
-                            <p>Interfaz tradicional con sesión para uso en navegador.</p>
-                            <p><strong>Uso:</strong> Dashboard, administración manual</p>
-                            <a href="/admin/" class="btn btn-primary">Ir al Admin</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header bg-warning text-dark">
-                            <h5>🔑 Tokens API</h5>
-                        </div>
-                        <div class="card-body">
-                            <p>Sistema de tokens para APIs externas y máxima seguridad.</p>
-                            <p><strong>Uso:</strong> Sistemas POS, integraciones, APIs</p>
-                            <a href="/token-auth/" class="btn btn-warning">Obtener Tokens</a>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-4">
-                    <div class="card">
-                        <div class="card-header bg-info text-white">
-                            <h5>👤 Usuario Actual</h5>
-                        </div>
-                        <div class="card-body">
-                            <p><strong>Email:</strong> {request.user.email}</p>
-                            <p><strong>Nombre:</strong> {request.user.get_full_name() or 'No configurado'}</p>
-                            <p><strong>Staff:</strong> {'Sí' if request.user.is_staff else 'No'}</p>
-                            <p><strong>Superuser:</strong> {'Sí' if request.user.is_superuser else 'No'}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-header bg-success text-white">
-                            <h5>🚀 Endpoints Disponibles</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <h6>🔐 Autenticación:</h6>
-                                    <ul class="list-unstyled">
-                                        <li>• <code>/accounts/login/</code> - Login navegador</li>
-                                        <li>• <code>/token-auth/</code> - Login con tokens</li>
-                                        <li>• <code>/api/auth/login/</code> - Login API</li>
-                                        <li>• <code>/api/auth/profile/</code> - Perfil token</li>
-                                    </ul>
-                                </div>
-                                <div class="col-md-6">
-                                    <h6>📊 APIs:</h6>
-                                    <ul class="list-unstyled">
-                                        <li>• <code>/api/companies/</code> - Empresas</li>
-                                        <li>• <code>/api/customers/</code> - Clientes</li>
-                                        <li>• <code>/api/products/</code> - Productos</li>
-                                        <li>• <code>/api/sri/</code> - Documentos SRI</li>
-                                    </ul>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    """
-    return HttpResponse(html)
 
 def health_check(request):
     """Endpoint de salud para monitoreo"""
@@ -215,9 +101,6 @@ urlpatterns = [
     
     # Dashboard principal y funcionalidades completas
     path('dashboard/', include('apps.core.urls')),
-    
-    # Dashboard legacy (temporal) - puedes eliminarlo después
-    path('dashboard-legacy/', dashboard_view_legacy, name='dashboard_legacy'),
     
     # ==========================================
     # AUTENTICACIÓN (ALLAUTH) - DESPUÉS DEL LOGIN PERSONALIZADO
@@ -318,7 +201,6 @@ if settings.DEBUG:
     print("Endpoints de desarrollo disponibles:")
     print("  - /health/ (health check)")
     print("  - /dashboard/ (nuevo dashboard completo)")
-    print("  - /dashboard-legacy/ (dashboard temporal)")
     print("  - /token-auth/ (🔑 interfaz web con tokens)")
     if 'debug_toolbar' in settings.INSTALLED_APPS:
         print("  - /__debug__/ (Django Debug Toolbar)")
