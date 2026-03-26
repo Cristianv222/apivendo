@@ -11,6 +11,9 @@
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.5.1/dist/confetti.browser.min.js"></script>
+        <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.32/dist/sweetalert2.min.css" rel="stylesheet">
+        <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.7.32/dist/sweetalert2.all.min.js"></script>
         <style>
 /* Base styles */
 body {
@@ -972,13 +975,24 @@ body {
                 <!-- Company Header con botón de edición -->
                 <div class="company-header">
     <div class="d-flex align-items-center justify-content-between">
-        <div class="company-name-section">
-            <h4 class="mb-0 text-secondary">
-                <i class="fas fa-building me-2"></i>{{ selected_company.business_name|default:selected_company.trade_name }}
-            </h4>
-            {% if selected_company.ruc %}
-                <small class="text-muted ms-3">(RUC: {{ selected_company.ruc }})</small>
+        <div class="company-name-section d-flex flex-row align-items-center">
+            {% if selected_company.logo %}
+                <img src="{{ selected_company.logo.url }}" alt="Logo {{ selected_company.business_name }}" 
+                     class="me-3 rounded shadow-sm" style="max-height: 50px; width: auto; max-width: 100px; object-fit: contain;">
+            {% else %}
+                <div class="me-3 bg-light rounded d-flex align-items-center justify-content-center shadow-sm" style="height: 50px; width: 50px;">
+                    <i class="fas fa-building text-muted fa-lg"></i>
+                </div>
             {% endif %}
+            <div class="flex-grow-1">
+                <h4 class="mb-0 text-secondary">
+                    {{ selected_company.business_name|default:selected_company.trade_name }}
+                </h4>
+                {% if selected_company.ruc %}
+                    <small class="text-muted">(RUC: {{ selected_company.ruc }})</small>
+                {% endif %}
+            </div>
+        </div>
             
             <!-- Estado del certificado -->
             {% if has_certificate %}
@@ -999,6 +1013,9 @@ body {
 
             <!-- Botones responsive (solo visibles en móvil/tablet) -->
             <div class="company-actions-responsive">
+                <button class="btn btn-sm btn-warning" onclick="openTestSriModal()">
+                    <i class="fas fa-flask me-1"></i>Prueba SRI (Mini POS)
+                </button>
                 <button class="btn" onclick="openEditCompanyModal()">
                     <i class="fas fa-edit me-1"></i>Editar Empresa
                 </button>
@@ -1026,6 +1043,9 @@ body {
         
         <!-- Botones originales (solo visibles en desktop) -->
         <div class="company-actions">
+            <button class="btn btn-sm btn-warning me-2" onclick="openTestSriModal()">
+                <i class="fas fa-flask me-1"></i>Prueba SRI
+            </button>
             <button class="btn btn-sm btn-outline-primary" onclick="openEditCompanyModal()">
                 <i class="fas fa-edit me-1"></i>Editar Empresa
             </button>
@@ -1100,12 +1120,12 @@ body {
         {% endif %}
         
         <!-- Información adicional del plan actual -->
-        {% if billing_profile.current_plan %}
+        {% if current_plan %}
         <div class="alert alert-success alert-custom mb-4">
             <div class="d-flex align-items-center">
                 <i class="fas fa-check-circle fa-2x me-3"></i>
                 <div class="flex-grow-1">
-                    <strong>Plan Activo: {{ billing_profile.current_plan.name }}</strong>
+                    <strong>Plan Activo: {{ current_plan.name }}</strong>
                     <p class="mb-0">Documentos disponibles: {{ billing_profile.available_invoices }}</p>
                 </div>
                 <div class="d-flex gap-2">
@@ -1388,22 +1408,16 @@ body {
         <td>{{ document.client_name|default:"Cliente" }}</td>
         <td>${{ document.total_amount|floatformat:2 }}</td>
         <td>
-            {% if document.status == 'DRAFT' %}
-                <span class="badge-status badge-pending">Borrador</span>
-            {% elif document.status == 'GENERATED' %}
-                <span class="badge-status badge-pending">Generado</span>
-            {% elif document.status == 'SIGNED' %}
-                <span class="badge-status badge-pending">Firmado</span>
-            {% elif document.status == 'SENT' %}
-                <span class="badge-status badge-pending">Enviado</span>
+            {% if document.status == 'PENDIENTE' or document.status == 'DRAFT' or document.status == 'GENERATED' or document.status == 'SIGNED' or document.status == 'SENT' %}
+                <span class="badge-status badge-pending">PENDIENTE</span>
             {% elif document.status == 'AUTHORIZED' %}
-                <span class="badge-status badge-approved">Autorizado</span>
+                <span class="badge-status badge-approved">AUTORIZADO</span>
             {% elif document.status == 'REJECTED' %}
-                <span class="badge-status badge-rejected">Rechazado</span>
+                <span class="badge-status badge-rejected">RECHAZADO</span>
             {% elif document.status == 'ERROR' %}
-                <span class="badge-status badge-rejected">Error</span>
+                <span class="badge-status badge-rejected">ERROR</span>
             {% else %}
-                <span class="badge-status badge-pending">{{ document.get_status_display|default:document.status|default:"Pendiente" }}</span>
+                <span class="badge-status badge-pending">{{ document.get_status_display|default:document.status|default:"PENDIENTE" }}</span>
             {% endif %}
         </td>
         <td>{{ document.created_at|date:"d/m/Y H:i" }}</td>
@@ -1699,12 +1713,26 @@ body {
                                         </div>
                                     </div>
 
-                                    <div class="mb-3">
-                                        <label for="logo" class="form-label">Logo de la Empresa</label>
-                                        <input type="file" class="form-control" id="logo" name="logo" accept="image/*">
-                                        {% if selected_company.logo %}
-                                        <small class="text-muted">Logo actual: <a href="{{ selected_company.logo.url }}" target="_blank">Ver</a></small>
-                                        {% endif %}
+                                    <div class="mb-4 text-center">
+                                        <label class="form-label d-block text-start">Logo de la Empresa</label>
+                                        <div class="d-flex align-items-center gap-3 p-3 border rounded bg-light">
+                                            <div class="logo-preview-container" style="width: 80px; height: 80px; background: white; border: 1px dashed #ccc; display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 8px;">
+                                                {% if selected_company.logo %}
+                                                    <img id="currentLogo" src="{{ selected_company.logo.url }}" alt="Logo" style="max-width: 100%; max-height: 100%; object-fit: contain;">
+                                                {% else %}
+                                                    <i class="fas fa-image text-muted fa-2x" id="logoPlaceholder"></i>
+                                                {% endif %}
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <input type="file" class="form-control" id="logo" name="logo" accept="image/*" onchange="previewImage(this)">
+                                                <small class="text-muted d-block mt-1">Formatos: PNG, JPG, JPEG (Máx. 2MB)</small>
+                                                {% if selected_company.logo %}
+                                                <div class="mt-1">
+                                                    <a href="{{ selected_company.logo.url }}" target="_blank" class="btn btn-link btn-sm p-0">Ver imagen completa</a>
+                                                </div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -1849,6 +1877,28 @@ body {
             </div>
         </div>
 
+        <!-- SRI Test Modal (Mini POS) -->
+        <div class="modal fade" id="testSriModal" tabindex="-1" aria-labelledby="testSriModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning">
+                        <h5 class="modal-title" id="testSriModalLabel">
+                            <i class="fas fa-flask me-2"></i>Prueba de Emisión SRI - {{ selected_company.business_name|default:selected_company.trade_name }}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body" id="testSriModalBody">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Cargando...</span>
+                            </div>
+                            <p class="mt-2">Cargando módulo de prueba...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Toast Container -->
         <div id="toastContainer" class="notification-toast"></div>
 
@@ -1860,6 +1910,32 @@ body {
                 <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
             </div>
         </div>
+
+        <script>
+        function previewImage(input) {
+            const container = document.querySelector('.logo-preview-container');
+            const placeholder = document.getElementById('logoPlaceholder');
+            let img = document.getElementById('currentLogo');
+            
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    if (placeholder) placeholder.style.display = 'none';
+                    if (!img) {
+                        img = document.createElement('img');
+                        img.id = 'currentLogo';
+                        img.className = 'img-fluid';
+                        img.style.maxHeight = '100%';
+                        img.style.objectFit = 'contain';
+                        container.appendChild(img);
+                    }
+                    img.src = e.target.result;
+                    img.style.display = 'block';
+                }
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        </script>
 
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
         <script>
@@ -2010,6 +2086,118 @@ function filterDocuments() {
             const modal = new bootstrap.Modal(document.getElementById('editCompanyModal'));
             modal.show();
         }
+
+        // ======================================
+        // PRUEBAS POS SRI
+        // ======================================
+        let testSriModalObj = null;
+
+        function openTestSriModal() {
+            if (!testSriModalObj) {
+                testSriModalObj = new bootstrap.Modal(document.getElementById('testSriModal'));
+            }
+            
+            showLoadingToast('Cargando módulo de prueba...');
+            
+            const timestamp = new Date().getTime();
+            fetch(`{% url 'custom_admin:company_test_sri' selected_company.id %}?_=${timestamp}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                $('#testSriModalBody').html(html);
+                testSriModalObj.show();
+                
+                // Initialize handler submit for the test form
+                const form = document.getElementById('testSriForm');
+                if (form) {
+                    form.addEventListener('submit', function(e) {
+                        e.preventDefault();
+                        
+                        if (!this.checkValidity()) {
+                            e.stopPropagation();
+                            this.classList.add('was-validated');
+                            return;
+                        }
+                        
+                        const submitBtn = this.querySelector('button[type="submit"]');
+                        const originalBtnContent = submitBtn.innerHTML;
+                        submitBtn.disabled = true;
+                        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando al SRI...';
+                        showLoadingToast('Facturando en modo PRUEBAS...');
+                        
+                        const formData = new FormData(this);
+                        
+                        fetch(this.action, {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRFToken': getCookie('csrftoken')
+                            }
+                        })
+                        .then(res => res.json())
+                        .then(res => {
+                            if (res.success) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: '¡Aprobada!',
+                                    text: res.message,
+                                    confirmButtonText: 'Genial',
+                                    customClass: {
+                                        container: 'sri-alert-overlay'
+                                    }
+                                }).then(() => {
+                                    testSriModalObj.hide();
+                                    // Opcional: recargar lista para ver la nueva factura autorizada
+                                    location.reload(); 
+                                });
+                            } else {
+                                let errorText = typeof res.error === 'object' ? JSON.stringify(res.error, null, 2) : res.error;
+                                // Mostrar error detallado en SweetAlert por encima del modal
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Rechazada o Fallida',
+                                    text: 'Error interno: ' + errorText,
+                                    confirmButtonText: 'Entendido',
+                                    customClass: {
+                                        container: 'sri-alert-error-overlay'
+                                    }
+                                });
+                                // Restaurar botón
+                                submitBtn.disabled = false;
+                                submitBtn.innerHTML = originalBtnContent;
+                            }
+                        })
+                        .catch(err => {
+                            console.error(err);
+                            Swal.fire({
+                                icon: 'error',
+                                title: 'Error de Red',
+                                text: 'No se pudo comunicar con el servidor.',
+                                customClass: {
+                                    container: 'sri-alert-error-overlay'
+                                }
+                            });
+                            submitBtn.disabled = false;
+                            submitBtn.innerHTML = originalBtnContent;
+                        });
+                    });
+                }
+            })
+            .catch(err => {
+                showErrorToast('No se pudo cargar el módulo de prueba.');
+                console.error(err);
+            });
+        }
+
+        // Delegación de eventos para el Mini POS (Cálculos y UX)
+        // Los manejadores están ahora dentro del propio template del modal (test_sri_modal.html)
+        // para asegurar una mejor encapsulación y reactividad.
+
 
         // Manejar envío del formulario
         document.getElementById('editCompanyForm').addEventListener('submit', function(e) {
@@ -2400,27 +2588,93 @@ function showFileStatusModal(fileData) {
 }
 
 function viewDocumentDetail(documentId) {
-    showNotification('Funcionalidad de detalle en desarrollo', 'info');
+    showLoadingToast('Cargando detalle...');
+    // Redirigir a la vista de detalle real
+    window.location.href = `/dashboard/invoice/${documentId}/`;
 }
 
 function processDocument(documentId) {
-    if (confirm('¿Está seguro de que desea procesar este documento?')) {
-        showLoadingToast('Procesando documento...');
-        // Aquí iría la lógica para procesar el documento
-        setTimeout(() => {
-            showNotification('Documento enviado a procesamiento', 'info');
-        }, 1000);
-    }
+    Swal.fire({
+        title: '¿Procesar documento?',
+        text: "Se generará, firmará y enviará al SRI.",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, procesar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoadingToast('Procesando documento...');
+            
+            fetch(`/sri/documents/${documentId}/reprocess/`, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire(
+                        '¡Completado!',
+                        data.message || 'Documento procesado exitosamente.',
+                        'success'
+                    ).then(() => {
+                        window.location.reload();
+                    });
+                } else {
+                    Swal.fire(
+                        'Error',
+                        data.error || 'Ocurrió un error al procesar el documento.',
+                        'error'
+                    );
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Error de conexión', 'danger');
+            });
+        }
+    });
 }
 
 function sendDocumentEmail(documentId) {
-    if (confirm('¿Enviar este documento por email al cliente?')) {
-        showLoadingToast('Enviando email...');
-        // Aquí iría la lógica para enviar email
-        setTimeout(() => {
-            showNotification('Email enviado exitosamente', 'success');
-        }, 1500);
-    }
+    Swal.fire({
+        title: '¿Enviar por email?',
+        text: "¿Desea enviar este documento autorizado al cliente?",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: 'Sí, enviar',
+        cancelButtonText: 'Cancelar'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            showLoadingToast('Enviando email...');
+            
+            fetch(`/sri/documents/${documentId}/send_email/`, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Email enviado exitosamente', 'success');
+                } else {
+                    showNotification('Error: ' + (data.error || 'No se pudo enviar el email'), 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Error de conexión', 'danger');
+            });
+        }
+    });
 }
 
 function showLoadingToast(message) {

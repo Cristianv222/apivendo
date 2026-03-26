@@ -48,7 +48,10 @@ certifi
 openpyxl
 reportlab
 
-# XML processing (para SRI)
+# XML processing y firma XAdES-BES para SRI Ecuador
+# ✅ 100% Python — NO requiere Java, ni openssl externo, ni subprocess
+# lxml: parsing y canonicalización C14N
+# cryptography: carga de P12, RSA-SHA1, generación de firma
 lxml
 xmltodict
 

@@ -563,7 +563,22 @@ class SRISOAPClient:
                     error_text,
                     {"response": response_text, "method": "requests_fixed_final", "errors": error_messages}
                 )
-                
+                # ✅ FIX: Si el SRI dice que ya se está procesando o ya fue registrada, es como si se hubiera RECIBIDO
+                # Esto permite que el flujo continúe hacia la consulta de autorización de forma segura.
+                if any(kw in error_text.upper() for kw in ["EN PROCESAMIENTO", "IN PROCESSING", "PROCESADA", "PROCESAMIENTO", "REGISTRADA"]):
+                    logger.info(f"🎉 [SRI_FIXED] Document already handled by SRI ({error_text}) - treating as RECEIVED")
+                    document.status = "SENT"
+                    document.save()
+                    
+                    self._log_sri_response(
+                        document,
+                        "RECEPTION",
+                        "RECIBIDA_P",
+                        f"Already in processing/registered: {error_text}",
+                        {"response": response_text, "method": "requests_fixed_final", "errors": error_messages}
+                    )
+                    return True, f"Document already in processing/registered (Status: {estado}): {error_text}"
+
                 document.status = "ERROR"
                 document.save()
                 return False, f"SRI rejected document: {error_text}"
@@ -1178,11 +1193,10 @@ class SRISOAPClient:
                 logger.error(f"❌ [SRI_FAULT_ULTRA] Fault String: {fault_string}")
                 logger.error(f"❌ [SRI_FAULT_ULTRA] Fault Detail: {fault_detail}")
                 
-                # ✅ ANÁLISIS ESPECÍFICO DEL ERROR DE NAMESPACE
-                if "Unmarshalling Error" in fault_string and "claveAccesoComprobante" in fault_string:
-                    logger.error("❌ [SRI_FAULT_ULTRA] NAMESPACE ERROR STILL DETECTED!")
-                    logger.error("❌ [SRI_FAULT_ULTRA] This indicates our xmlns='' fix may not be working")
-                    error_msg = f"SRI Namespace Error (PERSISTENT): {fault_string}"
+                # ✅ DETECTAR ERRORES INTERNOS DEL SRI (STACK TRACES)
+                if any(kw in fault_string for kw in ["JDBCConnectionException", "SQLRecoverableException", "No more data to read from socket", "rolled back"]):
+                    error_msg = f"SRI Internal Service Error (Temporary): {fault_string[:100]}"
+                    logger.warning(f"⚠️ [SRI_FAULT_ULTRA] Detected SRI internal DB error: {fault_string}")
                 else:
                     error_msg = f"SOAP Fault {fault_code}: {fault_string}"
                     if fault_detail:

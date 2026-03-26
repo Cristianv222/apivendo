@@ -456,7 +456,8 @@ def user_dashboard(request):
         'authorized_invoices': 0,
         'pending_invoices': 0,
         'rejected_invoices': 0,
-        'total_amount': 0
+        'total_amount': 0,
+        'month_1': 0, 'month_2': 0, 'month_3': 0, 'month_4': 0, 'month_5': 0, 'month_6': 0
     }
     
     recent_invoices = []
@@ -498,7 +499,8 @@ def user_dashboard(request):
                     ).count(),
                     'total_amount': all_documents.filter(
                         status='AUTHORIZED'
-                    ).aggregate(total=Sum('total_amount'))['total'] or 0
+                    ).aggregate(total=Sum('total_amount'))['total'] or 0,
+                    'month_1': 0, 'month_2': 0, 'month_3': 0, 'month_4': 0, 'month_5': 0, 'month_6': 0
                 }
                 
                 # Estadísticas por tipo
@@ -531,7 +533,7 @@ def user_dashboard(request):
                         'document_number': getattr(doc, 'document_number', None) or getattr(doc, 'sequence_number', str(doc.id)),
                         'client_name': getattr(doc, 'customer_name', None) or getattr(doc, 'supplier_name', 'Cliente'),
                         'total_amount': float(getattr(doc, 'total_amount', 0) or 0),
-                        'status': doc.status,
+                        'status': 'PENDIENTE' if doc.status in ['DRAFT', 'GENERATED', 'SIGNED', 'SENT'] else doc.status,
                         'created_at': doc.created_at,
                     }
                     recent_invoices.append(type('Document', (), doc_data)())
@@ -559,7 +561,7 @@ def user_dashboard(request):
                             'document_number': getattr(factura, 'sequence_number', str(factura.id)),
                             'client_name': getattr(factura, 'customer_name', 'Cliente'),
                             'total_amount': float(getattr(factura, 'total_amount', 0) or 0),
-                            'status': factura.status,
+                            'status': 'PENDIENTE' if factura.status in ['DRAFT', 'GENERATED', 'SIGNED', 'SENT'] else factura.status,
                             'created_at': factura.created_at,
                         }
                         all_documents.append(doc_data)
@@ -583,7 +585,7 @@ def user_dashboard(request):
                             'document_number': getattr(retencion, 'sequence_number', str(retencion.id)),
                             'client_name': getattr(retencion, 'supplier_name', 'Proveedor'),
                             'total_amount': float(getattr(retencion, 'total_amount', 0) or 0),
-                            'status': retencion.status,
+                            'status': 'PENDIENTE' if retencion.status in ['DRAFT', 'GENERATED', 'SIGNED', 'SENT'] else retencion.status,
                             'created_at': retencion.created_at,
                         }
                         all_documents.append(doc_data)
@@ -703,6 +705,9 @@ def user_dashboard(request):
         'all_plans': all_plans,
         'recent_purchases': recent_purchases,
         'billing_profile': billing_profile,
+        'certificate_expiry': certificate_info.get('expiry'),
+        'certificate_issuer': certificate_info.get('issuer'),
+        'certificate_days_left': certificate_info.get('days_left'),
         'billing_available': BILLING_AVAILABLE,
         'page_title': 'Dashboard Principal',
         'security_validation': {
@@ -1419,48 +1424,59 @@ def company_invoices_api(request, company_id):
 @audit_html_action('VIEW_INVOICE_DETAIL')
 def invoice_detail_view(request, invoice_id):
     """
-    🔒 VISTA SEGURA de detalle de factura
+    🔒 VISTA SEGURA de detalle de documento electrónico / factura
     """
-    try:
-        from apps.invoicing.models import Invoice
-        INVOICES_AVAILABLE = True
-    except ImportError:
-        from django.http import Http404
-        raise Http404("La funcionalidad de facturas no está disponible")
+    from apps.sri_integration.models import ElectronicDocument
+    # CompanyAPIToken ya está importado globalmente desde apps.companies.models
     
-    # VALIDACIÓN CRÍTICA: Solo facturas de empresas del usuario
+    # Obtener empresas del usuario
     user_companies = get_user_companies_secure(request.user)
     
-    if user_companies.exists():
+    if not user_companies.exists():
+        logger.warning(f"❌ User {request.user.username} has no companies for document access")
+        from django.http import Http404
+        raise Http404("No tienes empresas asociadas")
+    
+    document = None
+    company = None
+    
+    # 1. Intentar obtener de sri_integration (ElectronicDocument)
+    try:
+        document = ElectronicDocument.objects.select_related('company').get(
+            id=invoice_id,
+            company__in=user_companies
+        )
+        company = document.company
+        logger.info(f"✅ User {request.user.username} accessing ElectronicDocument {invoice_id}")
+    except ElectronicDocument.DoesNotExist:
+        # 2. Intentar obtener de invoicing (Invoice) como fallback
         try:
-            invoice = Invoice.objects.select_related('company').get(
+            from apps.invoicing.models import Invoice
+            document = Invoice.objects.select_related('company').get(
                 id=invoice_id,
                 company__in=user_companies
             )
-            logger.info(f"✅ User {request.user.username} accessing invoice {invoice_id}")
-            
-            # Obtener token de la empresa de la factura
-            try:
-                company_token = CompanyAPIToken.objects.get(
-                    company=invoice.company,
-                    is_active=True
-                )
-                dashboard_token_url = f"/dashboard/?token={company_token.key}"
-            except CompanyAPIToken.DoesNotExist:
-                dashboard_token_url = "/dashboard/"
-            
-        except Invoice.DoesNotExist:
-            logger.warning(f"❌ User {request.user.username} denied access to invoice {invoice_id}")
+            company = document.company
+            logger.info(f"✅ User {request.user.username} accessing Invoice {invoice_id}")
+        except (ImportError, Exception):
+            # Si no existe cualquiera de los dos, error
+            logger.warning(f"❌ Document {invoice_id} not found for user {request.user.username}")
             from django.http import Http404
-            raise Http404("Invoice not found or access denied")
-    else:
-        logger.warning(f"❌ User {request.user.username} has no companies for invoice access")
-        from django.http import Http404
-        raise Http404("No accessible companies")
+            raise Http404("Documento no encontrado o sin permisos")
+    
+    # Obtener token de la empresa para navegación
+    try:
+        company_token = CompanyAPIToken.objects.get(
+            company=company,
+            is_active=True
+        )
+        dashboard_token_url = f"/dashboard/?token={company_token.key}"
+    except CompanyAPIToken.DoesNotExist:
+        dashboard_token_url = "/dashboard/"
     
     context = {
-        'invoice': invoice,
-        'company': invoice.company,
+        'document': document,
+        'company': company,
         'dashboard_token_url': dashboard_token_url,
         'is_admin': request.user.is_staff or request.user.is_superuser,
         'security_validation': {

@@ -1,0 +1,30 @@
+??? Settings VENDO_SRI configurado exitosamente
+???? Modo: Desarrollo
+???????  Base de datos: vendo_sri en db
+???? Redis: redis://redis:6379/0
+???? Celery Broker: redis://:Redis2026Secure!@redis:6379/0
+??? Session timeout: 60 minutos
+???? Certificados cache: 30 minutos
+???? Email backend: django.core.mail.backends.console.EmailBackend
+???? CORS origins: 4 configurados
+???? Log level: DEBUG
+???? SRI Auto-send: Activado
+???? SRI Reintentos: 3 m??ximo
+???? SRI Lote: 10 documentos
+???????  Configuraci??n de desarrollo activa
+   - Celery eager: False
+   - CORS allow all: True
+   - SRI Circuit breaker: Desactivado
+?????? WARNING: EMAIL_HOST_USER no configurado - las alertas por email no funcionar??n
+?????? WARNING: OAuth con Google no configurado
+???? Configuraci??n validada exitosamente - Sistema listo para usar
+???? Configuraci??n validada exitosamente - Sistema listo para usar
+??????? Celery configured for development mode
+???? Celery App: vendo_sri
+???? Broker: redis://:Redis2026Secure!@redis:6379/0
+???? Result Backend: redis://:Redis2026Secure!@redis:6379/1
+??? Timezone: America/Guayaquil
+???? Beat Schedule: 4 periodic tasks configured
+???? VENDO_SRI initialized with Celery support
+61 objects imported automatically (use -v 2 for details).
+

@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Instalar dependencias del sistema + Java JRE
+# Instalar dependencias del sistema (SIN JAVA JRE)
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
     libmagic-dev \
-    default-jre \
     libxml2-utils \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -36,14 +35,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Descargar JAR de firma XAdES para SRI Ecuador
-RUN wget -q https://github.com/joselo/sri/raw/master/dist/sri.jar -O /app/sri.jar \
-    || echo "Warning: Could not download JAR, will need manual copy"
-
 # Copiar el resto del código de la aplicación
 COPY . /app/
 
-# Crear directorios necesarios (como respaldo, pero el entrypoint los garantiza en runtime)
+# Crear directorios necesarios
 RUN mkdir -p \
     /app/storage/logs \
     /app/storage/backups \
@@ -73,14 +68,7 @@ RUN chmod +x /app/entrypoint.sh
 RUN chown -R appuser:appuser /app && \
     chmod -R 755 /app && \
     chmod -R 644 /app/storage/logs/*.log && \
-    chmod 644 /app/logs/celery.log && \
-    chmod 644 /app/sri.jar
+    chmod 644 /app/logs/celery.log
 
-# Verificar instalación de Java
-RUN java -version
-
-# Cambiar a usuario no root
-#USER appuser
-
-# Entrypoint garantiza directorios en runtime (después de volúmenes)
+# Entrypoint garantiza directorios en runtime
 ENTRYPOINT ["/app/entrypoint.sh"]

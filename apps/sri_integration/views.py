@@ -838,6 +838,66 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=["post"])
+    def reprocess(self, request, pk=None):
+        """Reprocesar un documento que falló"""
+        try:
+            document = self.get_object()
+            from .services.document_processor import DocumentProcessor
+            processor = DocumentProcessor(document.company)
+            
+            # Forzar regeneración en TEST para evitar "CLAVE DE ACCESO EN PROCESAMIENTO"
+            if hasattr(document.company, 'sri_configuration') and \
+               document.company.sri_configuration.environment == 'TEST':
+                document.document_number = None
+                document.access_key = None
+                document.save()
+            
+            success, message = processor.process_document(document, send_email=True)
+            
+            if success:
+                return Response({
+                    "success": True, 
+                    "message": "Documento procesado exitosamente",
+                    "status": document.status
+                })
+            else:
+                return Response({
+                    "success": False, 
+                    "error": message,
+                    "status": document.status
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error reprocessing document {pk}: {str(e)}")
+            return Response({
+                "success": False,
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=["post"])
+    def send_email(self, request, pk=None):
+        """Enviar documento por email al cliente"""
+        try:
+            document = self.get_object()
+            from .services.document_processor import DocumentProcessor
+            processor = DocumentProcessor(document.company)
+            
+            # Usar el método interno del procesador o el servicio directo
+            from .services.email_service import EmailService
+            email_svc = EmailService(document.company)
+            success, message = email_svc.send_document_email(document)
+            
+            if success:
+                document.email_sent = True
+                document.email_sent_date = timezone.now()
+                document.save(update_fields=['email_sent', 'email_sent_date'])
+                return Response({"success": True, "message": "Email enviado exitosamente"})
+            else:
+                return Response({"success": False, "error": message}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.error(f"Error sending email for document {pk}: {str(e)}")
+            return Response({"success": False, "error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=["post"])
     def debug_status_update(self, request, pk=None):
         """Endpoint de debug para probar actualizaciones de status - SOLO PARA DESARROLLO"""
         try:

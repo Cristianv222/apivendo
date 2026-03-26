@@ -23,6 +23,8 @@ urlpatterns = [
    path('companies/<int:company_id>/view/', views.company_view, name='company_view'),
    path('companies/<int:company_id>/delete/', views.company_delete, name='company_delete'),
    path('companies/<int:company_id>/toggle-status/', views.company_toggle_status, name='company_toggle_status'),
+   path('companies/<int:company_id>/test-sri/', views.company_test_sri, name='company_test_sri'),
+   path('companies/read-p12/', views.read_p12_data, name='company_read_p12'),
    
    # Certificates CRUD
    path('certificates/', views.certificates_list, name='certificates'),

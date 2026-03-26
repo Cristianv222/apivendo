@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Models for certificates app - CORREGIDO DEFINITIVO CON STORAGE DUAL + ENCRYPTED PASSWORD
 Modelos para certificados digitales del SRI
@@ -249,6 +249,22 @@ class DigitalCertificate(BaseModel):
         
         # Guardar primero
         super().save(*args, **kwargs)
+        
+        # ✅ Sincronizar ambiente con Company y SRIConfiguration para evitar discrepancias
+        try:
+            from apps.companies.models import Company
+            from apps.sri_integration.models import SRIConfiguration
+            
+            # 1. Actualizar Company.ambiente_sri ('1' o '2')
+            new_val = '1' if self.environment == 'TEST' else '2'
+            Company.objects.filter(pk=self.company.pk).update(ambiente_sri=new_val)
+            
+            # 2. Actualizar SRIConfiguration.environment ('TEST' o 'PRODUCTION')
+            SRIConfiguration.objects.filter(company=self.company).update(environment=self.environment)
+            
+            logger.info(f"✅ Sincronización de ambiente desde Certificado para empresa {self.company.ruc}: {self.environment}")
+        except Exception as e:
+            logger.warning(f"No se pudo sincronizar ambiente desde DigitalCertificate: {e}")
         
         # Luego intentar extraer información del certificado si es posible
         if self.certificate_file:

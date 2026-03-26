@@ -277,17 +277,48 @@ class PDFGenerator:
         """
         elements = []
         
+        # Columna izquierda - Logo y Datos de la empresa
+        left_column = []
+        
+        # Intentar agregar logo si existe
+        if self.company.logo:
+            try:
+                logo_path = self.company.logo.path
+                # Redimensionar logo manteniendo proporción (max 40mm de alto, 60mm de ancho)
+                from reportlab.platypus import Image
+                logo_img = Image(logo_path)
+                
+                # Calcular proporciones
+                aspect = logo_img.imageHeight / float(logo_img.imageWidth)
+                logo_width = 40 * mm
+                logo_height = logo_width * aspect
+                
+                if logo_height > 25 * mm:
+                    logo_height = 25 * mm
+                    logo_width = logo_height / aspect
+                
+                logo_img.drawHeight = logo_height
+                logo_img.drawWidth = logo_width
+                
+                left_column.append(logo_img)
+                left_column.append(Spacer(1, 2*mm))
+            except Exception as e:
+                logger.error(f"Error loading company logo for PDF: {str(e)}")
+        
+        # Datos de la empresa
+        left_column.extend([
+            Paragraph(self.company.business_name, self.styles['CompanyTitle']),
+            Paragraph(f"<b>RUC:</b> {self.company.ruc}", self.styles['CompanyData']),
+            Paragraph(f"<b>Dirección:</b> {self.company.address}", self.styles['CompanyData']),
+            Paragraph(f"<b>Teléfono:</b> {self.company.phone}", self.styles['CompanyData']) if self.company.phone else "",
+            Paragraph(f"<b>Email:</b> {self.company.email}", self.styles['CompanyData']),
+        ])
+        
         # Tabla principal del encabezado
         header_data = [
             [
-                # Columna izquierda - Datos de la empresa
-                [
-                    Paragraph(self.company.business_name, self.styles['CompanyTitle']),
-                    Paragraph(f"<b>RUC:</b> {self.company.ruc}", self.styles['CompanyData']),
-                    Paragraph(f"<b>Dirección:</b> {self.company.address}", self.styles['CompanyData']),
-                    Paragraph(f"<b>Teléfono:</b> {self.company.phone}", self.styles['CompanyData']) if self.company.phone else "",
-                    Paragraph(f"<b>Email:</b> {self.company.email}", self.styles['CompanyData']),
-                ],
+                # Columna izquierda
+                left_column,
                 # Columna derecha - Tipo de documento y numeración
                 [
                     Paragraph(f"<b>{self.document.get_document_type_display().upper()}</b>", self.styles['CompanyTitle']),

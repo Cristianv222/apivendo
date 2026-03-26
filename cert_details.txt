@@ -1,0 +1,6 @@
+serialNumber: 843ae362-27eb-4aef-84bb-3825215b9f7b
+emailAddress: frontera.tech.tulcan@gmail.com
+commonName: JHONY VICENTE ENRIQUEZ HERRERA
+organizationalUnitName: ENTIDAD DE CERTIFICACION DE INFORMACION
+organizationName: FIRMASEGURA S.A.S.
+countryName: EC

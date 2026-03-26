@@ -443,7 +443,7 @@ class XMLGeneratorSRI2025:
         
         # 3. razonSocial - Validación estricta longitud
         razon_social = SubElement(info_tributaria, 'razonSocial')
-        business_name = self.company.business_name.strip()[:300]
+        business_name = str(self.company.business_name).replace('\n', ' ').replace('\r', ' ').strip()[:300]
         razon_social.text = business_name
         
         # 4. nombreComercial - Opcional pero validado
@@ -451,7 +451,7 @@ class XMLGeneratorSRI2025:
             self.company.trade_name and 
             self.company.trade_name.strip()):
             nombre_comercial = SubElement(info_tributaria, 'nombreComercial')
-            nombre_comercial.text = self.company.trade_name.strip()[:300]
+            nombre_comercial.text = str(self.company.trade_name).replace('\n', ' ').replace('\r', ' ').strip()[:300]
         
         # 5. ruc - Validación de formato
         ruc = SubElement(info_tributaria, 'ruc')
@@ -492,7 +492,7 @@ class XMLGeneratorSRI2025:
         
         # 11. dirMatriz - Validación longitud
         dir_matriz = SubElement(info_tributaria, 'dirMatriz')
-        address = (self.company.address[:300] if self.company.address 
+        address = (str(self.company.address).replace('\n', ' ').replace('\r', ' ').strip()[:300] if self.company.address 
                   else 'Dirección no especificada')
         dir_matriz.text = address
         
@@ -510,7 +510,7 @@ class XMLGeneratorSRI2025:
         
         # 2. dirEstablecimiento
         dir_establecimiento = SubElement(info_factura, 'dirEstablecimiento')
-        dir_establecimiento.text = (self.company.address[:300] if self.company.address 
+        dir_establecimiento.text = (str(self.company.address).replace('\n', ' ').replace('\r', ' ').strip()[:300] if self.company.address 
                                    else 'Dirección no especificada')
         
         # 3. contribuyenteEspecial - Campo opcional
@@ -538,7 +538,7 @@ class XMLGeneratorSRI2025:
         customer_name = getattr(self.document, 'customer_name', '')
         if not customer_name or not str(customer_name).strip():
             raise ValueError("ERROR: customer_name es obligatorio")
-        razon_social_comprador.text = str(customer_name).strip()[:300]
+        razon_social_comprador.text = str(customer_name).replace('\n', ' ').replace('\r', ' ').strip()[:300]
         
         identificacion_comprador = SubElement(info_factura, 'identificacionComprador')
         customer_id = getattr(self.document, 'customer_identification', '')
@@ -551,7 +551,7 @@ class XMLGeneratorSRI2025:
             self.document.customer_address and 
             str(self.document.customer_address).strip()):
             direccion_comprador = SubElement(info_factura, 'direccionComprador')
-            direccion_comprador.text = str(self.document.customer_address).strip()[:300]
+            direccion_comprador.text = str(self.document.customer_address).replace('\n', ' ').replace('\r', ' ').strip()[:300]
         
         # 9. totalSinImpuestos - Formato decimal estricto
         total_sin_impuestos = SubElement(info_factura, 'totalSinImpuestos')
@@ -579,7 +579,6 @@ class XMLGeneratorSRI2025:
                 descuento_adicional.text = self._format_decimal(tax_data['descuentoAdicional'])
             
             SubElement(total_impuesto, 'baseImponible').text = self._format_decimal(tax_data['base'])
-            SubElement(total_impuesto, 'tarifa').text = self._format_decimal(tax_data['tarifa'])
             SubElement(total_impuesto, 'valor').text = self._format_decimal(tax_data['valor'])
         
         # 12. propina
@@ -645,7 +644,7 @@ class XMLGeneratorSRI2025:
         
         # descripcion - Límite 300 caracteres
         descripcion = SubElement(detalle, 'descripcion')
-        desc_text = str(getattr(item, 'description', 'Producto'))[:300]
+        desc_text = str(getattr(item, 'description', 'Producto')).replace('\n', ' ').replace('\r', ' ').strip()[:300]
         descripcion.text = desc_text
         
         # cantidad - Formato decimal (máximo 6 decimales)
@@ -873,44 +872,23 @@ class XMLGeneratorSRI2025:
             observaciones = SubElement(info_adicional, 'campoAdicional', {
                 'nombre': 'OBSERVACIONES'
             })
-            observaciones.text = str(self.document.observations).strip()[:300]
+            observaciones.text = str(self.document.observations).replace('\n', ' ').replace('\r', ' ').strip()[:300]
             added_fields += 1
         
         logger.info(f"Campos adicionales agregados: {added_fields}")
         return info_adicional
     
     def _prettify_xml(self, elem):
-        """Formateo XML optimizado"""
+        """Generar XML compacto para asegurar integridad de firma"""
         try:
-            # Convertir a bytes con codificación UTF-8
-            rough_string = tostring(elem, encoding='utf-8')
-            
-            # Parse con minidom
-            reparsed = minidom.parseString(rough_string)
-            
-            # Generar XML formateado
-            xml_lines = reparsed.toprettyxml(indent="  ", encoding=None).splitlines()
-            
-            # Filtrar líneas vacías
-            filtered_lines = [line for line in xml_lines if line.strip()]
-            
-            # Asegurar declaración XML correcta
-            if filtered_lines and filtered_lines[0].startswith('<?xml'):
-                final_xml = '\n'.join(filtered_lines)
-            else:
-                final_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + '\n'.join(filtered_lines)
-            
-            # Validar que no tenga BOM
-            if final_xml.startswith('\ufeff'):
-                final_xml = final_xml[1:]
-            
-            return final_xml
-            
+            # SRI prefiere XML compacto para procesos automatizados
+            xml_bytes = tostring(elem, encoding='utf-8', xml_declaration=True)
+            return xml_bytes.decode('utf-8')
         except Exception as e:
-            logger.error(f"Error formateando XML: {str(e)}")
-            # Fallback a XML básico sin formato
+            logger.error(f"Error en generación XML compacto: {str(e)}")
+            # Fallback seguro
             xml_str = tostring(elem, encoding='utf-8').decode('utf-8')
-            return '<?xml version="1.0" encoding="UTF-8"?>\n' + xml_str
+            return '<?xml version="1.0" encoding="UTF-8"?>' + xml_str
     
     # ========== MÉTODOS PARA OTROS TIPOS DE DOCUMENTO ==========
     

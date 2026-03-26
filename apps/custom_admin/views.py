@@ -729,6 +729,31 @@ def company_create(request):
                 company.plan = request.POST.get('plan', 'basic')
                 company.save()
             
+            # ========== N U E V O : CARGAR CERTIFICADO AUTOMÁTICAMENTE ==========
+            # Si el usuario subió el certificado en el mismo modal de creación de empresa:
+            p12_file = request.FILES.get('p12_file')
+            p12_password = request.POST.get('p12_password')
+            
+            cert_created = False
+            cert_error = None
+            
+            if p12_file and p12_password:
+                try:
+                    from apps.certificates.models import DigitalCertificate
+                    from django.utils import timezone
+                    import uuid
+                    # Usamos el factory method infalible
+                    DigitalCertificate.create_with_password(
+                        company=company,
+                        certificate_file=p12_file,
+                        password=p12_password,
+                        environment=request.POST.get('environment', 'PRODUCTION')  # Por defecto producción para empresas reales
+                    )
+                    cert_created = True
+                except Exception as e:
+                    cert_error = str(e)
+                    logger.error(f"Error cargando certificado automático: {e}")
+            
             # Log action
             AuditLog.objects.create(
                 user=request.user,
@@ -739,7 +764,13 @@ def company_create(request):
                 ip_address=request.META.get('REMOTE_ADDR')
             )
             
-            messages.success(request, 'Empresa creada exitosamente')
+            if cert_created:
+                messages.success(request, 'Empresa y Certificado Digital configurados exitosamente')
+            elif cert_error:
+                messages.warning(request, f'Empresa creada, pero falló el Certificado: {cert_error}')
+            else:
+                messages.success(request, 'Empresa creada exitosamente')
+                
             return HttpResponse('<script>window.parent.location.reload();</script>')
             
         except Exception as e:
@@ -896,6 +927,189 @@ def company_toggle_status(request, company_id):
             'success': False,
             'error': str(e)
         })
+
+
+# ========== LECTOR P12 - AUTOCOMPLETADO EMPRESA ==========
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def read_p12_data(request):
+    """
+    Extrae RUC, Razón Social y datos del emisor directamente de un archivo .p12.
+    Permite autocompletar el formulario de creación de empresa sin conocer el RUC de antemano.
+
+    POST multipart/form-data:
+        p12_file  – archivo .p12
+        password  – contraseña del certificado
+
+    Returns JSON:
+        { success, ruc, business_name, issuer, valid_from, valid_until, days_left }
+    """
+    try:
+        from cryptography.hazmat.primitives.serialization import pkcs12
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        import datetime
+
+        p12_file = request.FILES.get('p12_file')
+        password  = request.POST.get('password', '')
+
+        if not p12_file:
+            return JsonResponse({'success': False, 'error': 'No se recibió el archivo .p12'})
+
+        if not password:
+            return JsonResponse({'success': False, 'error': 'La contraseña es requerida'})
+
+        # Tamaño máximo: 5 MB
+        if p12_file.size > 5 * 1024 * 1024:
+            return JsonResponse({'success': False, 'error': 'El archivo es demasiado grande (máx. 5 MB)'})
+
+        p12_data = p12_file.read()
+
+        try:
+            private_key, certificate, _ = pkcs12.load_key_and_certificates(
+                p12_data,
+                password.encode('utf-8')
+            )
+        except Exception:
+            return JsonResponse({
+                'success': False,
+                'error': 'No se pudo abrir el certificado. Verifica que la contraseña sea correcta.'
+            })
+
+        if certificate is None:
+            return JsonResponse({'success': False, 'error': 'El archivo P12 no contiene un certificado válido'})
+
+        def get_attr(subject, oid):
+            try:
+                attrs = subject.get_attributes_for_oid(oid)
+                return attrs[0].value if attrs else None
+            except Exception:
+                return None
+
+        subject = certificate.subject
+
+        # Vamos a buscar el RUC usando una expresión regular (10 números seguidos de 001)
+        import re
+        ruc = ''
+        
+        # Recolectar TODOS los valores posibles del certificado
+        all_text_values = []
+        
+        for attr in subject:
+            valor = attr.value
+            if isinstance(valor, bytes):
+                try:
+                    valor = valor.decode('utf-8')
+                except Exception:
+                    valor = str(valor)
+            all_text_values.append(str(valor))
+            
+        # El string completo del Subject (puede tener el OID tal cual)
+        try:
+            all_text_values.append(subject.rfc4514_string())
+        except Exception:
+            pass
+
+        # Unir todos los valores de texto extraídos
+        full_text_to_search = " | ".join(all_text_values)
+
+        # 1. Buscar explícitamente un RUC de 13 dígitos en forma flexible
+        match_ruc = re.search(r'(\d{10}00[1-9])', full_text_to_search)
+        if match_ruc:
+            ruc = match_ruc.group(1)
+        else:
+            # 2. Si es una "Firma de Persona Natural", probamos con 10 dígitos (Cédula)
+            match_cedula = re.search(r'(?<!\d)(\d{10})(?!\d)', full_text_to_search)
+            if match_cedula:
+                ruc = match_cedula.group(1) + '001'
+            else:
+                # 3. Y si no, probamos buscando en los bytes puros sin condiciones estrictas
+                try:
+                    from cryptography.hazmat.primitives import serialization
+                    der_bytes = certificate.public_bytes(serialization.Encoding.DER)
+                    match_der_13 = re.search(rb'(\d{10}00[1-9])', der_bytes)
+                    if match_der_13:
+                        ruc = match_der_13.group(1).decode('ascii')
+                    else:
+                        match_der_10 = re.search(rb'(?<!\d)(\d{10})(?!\d)', der_bytes)
+                        if match_der_10:
+                            ruc = match_der_10.group(1).decode('ascii') + '001'
+                except Exception:
+                    pass
+
+        # 4. Si aún no lo tenemos, extraeremos las Opciones y Extensiones Completas (Por si acaso está en Subject Alternative Name)
+        if not ruc:
+            try:
+                for ext in certificate.extensions:
+                    val = ext.value
+                    try:
+                        if hasattr(val, '_general_names'):
+                            for gn in val._general_names:
+                                if hasattr(gn, 'value'):
+                                    all_text_values.append(str(gn.value))
+                    except Exception:
+                        pass
+                    all_text_values.append(str(val))
+            except Exception:
+                pass
+            
+            # Reintentamos después de haber sacado las extensiones
+            full_text_to_search = " || ".join(all_text_values)
+            match = re.search(r'(\d{10}00[1-9])', full_text_to_search)
+            if match:
+                ruc = match.group(1)
+
+        # Razón Social: primero CN, luego O
+        business_name = (
+            get_attr(subject, NameOID.COMMON_NAME)
+            or get_attr(subject, NameOID.ORGANIZATION_NAME)
+            or ''
+        )
+
+        # Emisor (CA)
+        issuer = certificate.issuer
+        issuer_name = (
+            get_attr(issuer, NameOID.COMMON_NAME)
+            or get_attr(issuer, NameOID.ORGANIZATION_NAME)
+            or str(issuer)
+        )
+
+        # Vigencia
+        try:
+            not_before = certificate.not_valid_before_utc
+            not_after  = certificate.not_valid_after_utc
+        except AttributeError:
+            import pytz
+            not_before = certificate.not_valid_before.replace(tzinfo=pytz.utc)
+            not_after  = certificate.not_valid_after.replace(tzinfo=pytz.utc)
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        days_left = (not_after - now).days
+
+        validity_warning = None
+        if days_left < 0:
+            validity_warning = f'ADVERTENCIA: El certificado expiró hace {abs(days_left)} días.'
+        elif days_left <= 30:
+            validity_warning = f'ADVERTENCIA: El certificado vence en {days_left} días.'
+            
+        return JsonResponse({
+            'success':          True,
+            'ruc':              ruc or '',
+            'business_name':    business_name,
+            'issuer':           issuer_name,
+            'valid_from':       not_before.strftime('%Y-%m-%d'),
+            'valid_until':      not_after.strftime('%Y-%m-%d'),
+            'days_left':        days_left,
+            'validity_warning': validity_warning,
+            'debug_text':       full_text_to_search
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': f'Error inesperado: {str(e)}'})
 
 
 # ========== CERTIFICATES CRUD ==========
@@ -1669,6 +1883,9 @@ def sri_documents_list(request):
 def sri_document_view(request, document_id):
     """View SRI document details"""
     from apps.sri_integration.models import ElectronicDocument
+    from django.shortcuts import get_object_or_404, render
+    from django.http import HttpResponse
+    import traceback
     
     try:
         document = get_object_or_404(ElectronicDocument, id=document_id)
@@ -1679,175 +1896,35 @@ def sri_document_view(request, document_id):
             'CREDIT_NOTE': 'Nota de Crédito',
             'DEBIT_NOTE': 'Nota de Débito',
             'RETENTION': 'Retención',
-            'PURCHASE_SETTLEMENT': 'Liquidación de Compra'
+            'PURCHASE_SETTLEMENT': 'Liquidación de Compra',
+            'REMISSION_GUIDE': 'Guía de Remisión'
         }
         
-        # Mapear estado
-        status_names = {
-            'DRAFT': 'Borrador',
-            'GENERATED': 'Generado',
-            'SIGNED': 'Firmado',
-            'SENT': 'Enviado',
-            'AUTHORIZED': 'Autorizado',
-            'REJECTED': 'Rechazado',
-            'ERROR': 'Error',
-            'CANCELLED': 'Anulado'
+        # Mapear estado para el label
+        status_labels = {
+            'DRAFT': 'PENDIENTE (Borrador)',
+            'GENERATED': 'PENDIENTE (Generado)',
+            'SIGNED': 'PENDIENTE (Firmado)',
+            'SENT': 'PENDIENTE (Enviado SRI)',
+            'AUTHORIZED': 'AUTORIZADO',
+            'REJECTED': 'RECHAZADO',
+            'ERROR': 'ERROR',
+            'CANCELLED': 'ANULADO'
         }
         
-        html = f"""
-        <style>
-            .info-row {{
-                padding: 0.75rem 0;
-                border-bottom: 1px solid #e9ecef;
-            }}
-            .info-row:last-child {{
-                border-bottom: none;
-            }}
-            .info-label {{
-                font-weight: 600;
-                color: #495057;
-                width: 40%;
-                display: inline-block;
-            }}
-            .info-value {{
-                color: #212529;
-            }}
-            .status-badge {{
-                padding: 0.375rem 0.75rem;
-                border-radius: 0.25rem;
-                font-size: 0.875rem;
-                font-weight: 500;
-            }}
-            .status-authorized {{
-                background-color: #d4edda;
-                color: #155724;
-            }}
-            .status-pending {{
-                background-color: #fff3cd;
-                color: #856404;
-            }}
-            .status-rejected {{
-                background-color: #f8d7da;
-                color: #721c24;
-            }}
-        </style>
+        context = {
+            'document': document,
+            'type_name': type_names.get(document.document_type, 'Documento'),
+            'status_label': status_labels.get(document.status, document.status),
+            'responses': document.sri_responses.all().order_by('-created_at')[:5]
+        }
         
-        <div class="document-view-content">
-            <h5 class="mb-4">
-                <i class="fas fa-file-invoice-dollar me-2"></i>
-                {type_names.get(document.document_type, 'Documento')} #{document.document_number}
-            </h5>
-            
-            <div class="row">
-                <div class="col-md-6">
-                    <h6 class="text-muted mb-3">Información del Documento</h6>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Tipo:</span>
-                        <span class="info-value">{type_names.get(document.document_type, document.document_type)}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Número:</span>
-                        <span class="info-value"><strong>{document.document_number}</strong></span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Fecha Emisión:</span>
-                        <span class="info-value">{document.issue_date.strftime('%d/%m/%Y') if document.issue_date else 'N/A'}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Estado:</span>
-                        <span class="info-value">
-                            <span class="status-badge status-{'authorized' if document.status == 'AUTHORIZED' else ('rejected' if document.status == 'REJECTED' else 'pending')}">
-                                {status_names.get(document.status, document.status)}
-                            </span>
-                        </span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Empresa:</span>
-                        <span class="info-value">{document.company.business_name if document.company else 'N/A'}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Total:</span>
-                        <span class="info-value"><strong>${float(document.total_amount or 0):,.2f}</strong></span>
-                    </div>
-                </div>
-                
-                <div class="col-md-6">
-                    <h6 class="text-muted mb-3">Información del Cliente</h6>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Razón Social:</span>
-                        <span class="info-value">{document.customer_name or 'N/A'}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Identificación:</span>
-                        <span class="info-value">{document.customer_identification or 'N/A'}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Email:</span>
-                        <span class="info-value">{document.customer_email or 'N/A'}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Teléfono:</span>
-                        <span class="info-value">{document.customer_phone or 'N/A'}</span>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">Dirección:</span>
-                        <span class="info-value">{document.customer_address or 'N/A'}</span>
-                    </div>
-                </div>
-            </div>
-            
-            {'<hr><div class="row"><div class="col-12"><h6 class="text-muted mb-3">Autorización SRI</h6><div class="info-row"><span class="info-label">Clave de Acceso:</span><span class="info-value"><code>' + (document.access_key or 'N/A') + '</code></span></div><div class="info-row"><span class="info-label">Número Autorización:</span><span class="info-value">' + (document.sri_authorization_code or 'N/A') + '</span></div><div class="info-row"><span class="info-label">Fecha Autorización:</span><span class="info-value">' + (document.sri_authorization_date.strftime('%d/%m/%Y %H:%M') if document.sri_authorization_date else 'N/A') + '</span></div></div></div>' if document.status == 'AUTHORIZED' else ''}
-            
-            <div class="modal-footer px-0 pb-0 mt-4">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Cerrar
-                </button>
-                {'<button class="btn btn-success" onclick="authorizeDoc(' + str(document.id) + ')"><i class="fas fa-paper-plane me-1"></i>Autorizar</button>' if document.status in ['GENERATED', 'SIGNED'] else ''}
-                <button class="btn btn-primary" onclick="downloadDoc({document.id})">
-                    <i class="fas fa-download me-1"></i>Descargar
-                </button>
-            </div>
-        </div>
-        
-        <script>
-        function authorizeDoc(docId) {{
-            $('#documentModal').modal('hide');
-            setTimeout(function() {{
-                $('.btn-authorize[data-doc-id="' + docId + '"]').click();
-            }}, 300);
-        }}
-        
-        function downloadDoc(docId) {{
-            window.location.href = '/admin-panel/sri-documents/' + docId + '/download/';
-        }}
-        </script>
-        """
-        
-        return HttpResponse(html)
+        return render(request, 'custom_admin/sri_documents/detail_modal.html', context)
         
     except Exception as e:
-        return HttpResponse(f"""
-            <div class="p-4">
-                <div class="alert alert-danger">
-                    <h4>Error</h4>
-                    <p>{str(e)}</p>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                </div>
-            </div>
-        """)
+        import traceback
+        print(traceback.format_exc())
+        return HttpResponse(f'<div class="alert alert-danger">Error al cargar detalle: {str(e)}</div>', status=500)
 
 
 @login_required
@@ -3660,3 +3737,149 @@ def storage_migrate(request):
         messages.error(request, f'Error durante la migración: {str(e)}')
         
     return redirect('custom_admin:storage_settings')
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def company_test_sri(request, company_id):
+    """
+    Vista de modal 'Mini POS' para emisión directa de prueba SRI
+    """
+    from apps.companies.models import Company
+    from django.shortcuts import get_object_or_404, render
+    from django.http import JsonResponse
+    import traceback
+    
+    company = get_object_or_404(Company, id=company_id)
+    
+    if request.method == 'POST':
+        try:
+            from apps.sri_integration.models import ElectronicDocument, DocumentItem, DocumentTax
+            from apps.sri_integration.services.document_processor import DocumentProcessor
+            from decimal import Decimal, ROUND_HALF_UP
+            from django.utils import timezone
+            
+            # 1. Validaciones previas
+            if not hasattr(company, 'sri_configuration'):
+                from apps.sri_integration.models import SRIConfiguration
+                # Auto-crear configuración usando datos heredados si existen
+                SRIConfiguration.objects.create(
+                    company=company,
+                    environment='PRODUCTION' if getattr(company, 'ambiente_sri', '1') == '2' else 'TEST',
+                    establishment_code=getattr(company, 'codigo_establecimiento', '001'),
+                    emission_point=getattr(company, 'codigo_punto_emision', '001'),
+                    invoice_sequence=getattr(company, 'secuencial_factura', 1) or 1,
+                    is_active=True
+                )
+                company.refresh_from_db()
+                
+            if not company.sri_configuration.is_active:
+                return JsonResponse({'success': False, 'error': 'La empresa no tiene configuración SRI activa.'})
+                
+            if not hasattr(company, 'digital_certificate') or company.digital_certificate.status != 'ACTIVE':
+                return JsonResponse({'success': False, 'error': 'La empresa no tiene un certificado digital activo.'})
+                
+            # 2. Obtener y parsear datos del form modal
+            is_final_consumer = request.POST.get('is_final_consumer') == 'on'
+            
+            if is_final_consumer:
+                customer_id_type = '07'
+                customer_id = '9999999999999'
+                customer_name = 'CONSUMIDOR FINAL'
+                customer_address = 'ECUADOR'
+                customer_email = ''
+            else:
+                customer_id_type = request.POST.get('customer_id_type', '05')
+                customer_id = request.POST.get('customer_id', '')
+                customer_name = request.POST.get('customer_name', '')
+                customer_address = request.POST.get('customer_address', 'ECUADOR')
+                customer_email = request.POST.get('customer_email', '')
+            
+            product_name = request.POST.get('product_name', 'PRUEBA SRI')
+            quantity = Decimal(request.POST.get('quantity', '1.0'))
+            unit_price = Decimal(request.POST.get('unit_price', '1.00'))
+            tax_rate = Decimal(request.POST.get('tax_rate', '15.00'))
+            
+            # 3. Cálculos con redondeo exacto de 2 decimales
+            subtotal = (quantity * unit_price).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            iva = (subtotal * (tax_rate / Decimal('100.00'))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            total = (subtotal + iva).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+            
+            # 4. Crear documento (Factura)
+            doc = ElectronicDocument.objects.create(
+                company=company,
+                document_type='INVOICE',
+                issue_date=timezone.localdate(),
+                status='DRAFT',
+                customer_identification_type=customer_id_type,
+                customer_identification=customer_id,
+                customer_name=customer_name,
+                customer_address=customer_address,
+                customer_email=customer_email,
+                customer_phone='',
+                subtotal_without_tax=subtotal,
+                subtotal_with_tax=subtotal if tax_rate > 0 else Decimal('0.00'),
+                total_discount=Decimal('0.00'),
+                total_tax=iva,
+                total_amount=total,
+            )
+            
+            # 5. Crear Item de la factura
+            item = DocumentItem.objects.create(
+                document=doc,
+                main_code='TEST-POS',
+                description=product_name,
+                quantity=quantity,
+                unit_price=unit_price,
+                discount=Decimal('0.00'),
+                # subtotal se recalcula en save()
+            )
+            
+            # 6. Crear Impuesto del ítem (tax_code 2=IVA)
+            if tax_rate == Decimal('15.00'):
+                percentage_code = '4'
+            elif tax_rate == Decimal('12.00'):
+                percentage_code = '2'
+            else:
+                percentage_code = '0'
+                
+            DocumentTax.objects.create(
+                document=doc,
+                item=item,
+                tax_code='2',
+                percentage_code=percentage_code,
+                rate=tax_rate,
+                taxable_base=item.subtotal,
+                tax_amount=iva
+            )
+            
+            # 7. Procesar Factura con DocumentProcessor
+            # Esto genera XML, Firma XAdES-BES, y envía al SRI
+            processor = DocumentProcessor(company)
+            # send_email a True solo en este mini pos de pruebas
+            success, msg = processor.process_document(doc, send_email=(customer_email != ''))
+            
+            if success:
+                return JsonResponse({
+                    'success': True, 
+                    'message': f'¡Factura enviada satisfactoriamente! Estado: {doc.status}. SRI Msg: {msg}'
+                })
+            else:
+                return JsonResponse({
+                    'success': False, 
+                    'error': f'Falló el procesamiento SRI: {msg}',
+                    'status': doc.status
+                })
+                
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            error_trace = traceback.format_exc()
+            logger.error(f'Error en prueba POS SRI: {error_trace}')
+            return JsonResponse({
+                'success': False, 
+                'error': f'Error interno: {str(e)}',
+                'traceback': error_trace if settings.DEBUG else None
+            })
+
+    # GET => render the Modal form
+    return render(request, 'custom_admin/companies/test_sri_modal.html', {'company': company})

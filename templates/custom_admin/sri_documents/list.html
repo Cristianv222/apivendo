@@ -342,11 +342,14 @@
                     </td>
                     <td>
                         {% if doc.clave_acceso %}
-                            <small class="text-monospace" title="{{ doc.clave_acceso }}">
-                                {{ doc.clave_acceso|truncatechars:15 }}
-                            </small>
+                            <div class="d-flex align-items-center">
+                                <code class="text-xs text-muted me-2" style="font-size: 0.75rem;">{{ doc.clave_acceso|truncatechars:15 }}</code>
+                                <button class="btn btn-link p-0 text-muted" onclick="navigator.clipboard.writeText('{{ doc.clave_acceso }}'); Swal.fire({toast: true, position: 'top-end', icon: 'success', title: 'Clave copiada', showConfirmButton: false, timer: 1500});" title="Copiar clave completa">
+                                    <i class="far fa-copy" style="font-size: 0.8rem;"></i>
+                                </button>
+                            </div>
                         {% else %}
-                            <span class="text-muted">-</span>
+                            <span class="text-muted small">Sin clave</span>
                         {% endif %}
                     </td>
                     <td>
@@ -502,6 +505,15 @@ $(document).ready(function() {
             }
         });
     });
+    
+    // Helper to authorize from modal
+    window.authorizeDocFromModal = function(docId) {
+        $('#documentModal').modal('hide');
+        // Esperar a que el modal se cierre antes de lanzar el siguiente Swal
+        setTimeout(function() {
+            $(`.btn-authorize[data-doc-id="${docId}"]`).first().trigger('click');
+        }, 300);
+    };
     
     // View Document
     $('.btn-view').on('click', function() {

@@ -1,6 +1,6 @@
 <!-- templates/custom_admin/companies/form_modal.html -->
 <form method="POST" action="{% if mode == 'edit' %}{% url 'custom_admin:company_edit' company.id %}{% else %}{% url 'custom_admin:company_create' %}{% endif %}"
-      id="companyForm" class="needs-validation" novalidate>
+      id="companyForm" class="needs-validation" enctype="multipart/form-data" novalidate>
     {% csrf_token %}
     
     <!-- Área de mensajes de error mejorada -->
@@ -19,6 +19,63 @@
         <div class="col-md-6">
             <h6 class="text-muted mb-3">Información Básica</h6>
             
+            <!-- ═══ BANNER AUTOCOMPLETADO DESDE P12 ═══ -->
+    {% if mode == 'create' %}
+    <div class="mb-4">
+        <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 12px;">
+            <div class="card-body py-3 px-4">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-3">
+                        <div style="background:rgba(255,255,255,0.2);border-radius:10px;padding:10px;">
+                            <i class="fas fa-certificate fa-lg text-white"></i>
+                        </div>
+                        <div>
+                            <p class="mb-0 fw-semibold text-white" style="font-size:0.9rem;">¿No tienes el RUC a mano?</p>
+                            <p class="mb-0 text-white-50" style="font-size:0.78rem;">Carga tu certificado P12 y extraemos los datos automáticamente</p>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-sm text-white fw-semibold px-3"
+                            style="background:rgba(255,255,255,0.25);border:1px solid rgba(255,255,255,0.4);border-radius:8px;backdrop-filter:blur(4px);"
+                            id="btnOpenP12Reader">
+                        <i class="fas fa-upload me-1"></i> Cargar certificado P12
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel expandible del lector P12 -->
+        <div id="p12ReaderPanel" class="card border shadow-sm mt-2" style="display:none;border-radius:10px;border-color:#c0a8e8 !important;">
+            <div class="card-body py-3">
+                <h6 class="mb-3 fw-bold" style="color:#764ba2;">
+                    <i class="fas fa-key me-2"></i>Leer datos del certificado
+                </h6>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold text-muted">Archivo .p12 / .pfx</label>
+                        <input type="file" class="form-control form-control-sm" id="p12FileInput" name="p12_file"
+                               accept=".p12,.pfx" style="border-color:#c0a8e8;">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-semibold text-muted">Contraseña del certificado</label>
+                        <input type="password" class="form-control form-control-sm" id="p12PasswordInput" name="p12_password"
+                               placeholder="••••••••" style="border-color:#c0a8e8;">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="button" class="btn btn-sm w-100 text-white fw-semibold"
+                                style="background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;"
+                                id="btnReadP12">
+                            <i class="fas fa-search me-1"></i>Leer
+                        </button>
+                    </div>
+                </div>
+                <!-- Resultado -->
+                <div id="p12Result" class="mt-3" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    <!-- ═══ FIN BANNER ═══ -->
+
             <div class="mb-3">
                 <label for="ruc" class="form-label">RUC <span class="text-danger">*</span></label>
                 <div class="input-group">
@@ -299,10 +356,14 @@ $(document).ready(function() {
         $('#submitBtn').prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-1"></i>Guardando...');
         
         // Enviar usando AJAX para mejor manejo de errores
+        var formData = new FormData(form);
+        
         $.ajax({
             url: $(form).attr('action'),
             method: 'POST',
-            data: $(form).serialize(),
+            data: formData,
+            processData: false,
+            contentType: false,
             success: function(response) {
                 // Si la respuesta contiene el formulario con errores, mostrarlo
                 if (response.includes('alert-danger') || response.includes('error')) {
@@ -362,5 +423,106 @@ $(document).ready(function() {
     if ($('#ruc').val()) {
         $('#ruc').trigger('input');
     }
+
+    // ═══ LÓGICA DEL LECTOR P12 ═══
+    $('#btnOpenP12Reader').on('click', function() {
+        $('#p12ReaderPanel').slideToggle('fast');
+    });
+
+    $('#btnReadP12').on('click', function() {
+        var fileInput = $('#p12FileInput')[0];
+        var password = $('#p12PasswordInput').val();
+        var $btn = $(this);
+        var $result = $('#p12Result');
+
+        if (!fileInput.files.length) {
+            alert('Por favor selecciona un archivo .p12 o .pfx');
+            return;
+        }
+
+        if (!password) {
+            alert('Por favor ingresa la contraseña del certificado');
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append('p12_file', fileInput.files[0]);
+        formData.append('password', password);
+        formData.append('csrfmiddlewaretoken', $('input[name="csrfmiddlewaretoken"]').val());
+
+        $btn.html('<i class="fas fa-spinner fa-spin"></i>').prop('disabled', true);
+        $result.hide();
+
+        $.ajax({
+            url: "{% url 'custom_admin:company_read_p12' %}",
+            method: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.success) {
+                    // Mapear al formulario
+                    if (response.ruc) {
+                        $('#ruc').val(response.ruc).trigger('input');
+                    }
+                    if (response.business_name) {
+                        $('#business_name').val(response.business_name);
+                        // También lo ponemos por defecto en nombre comercial
+                        if (!$('#trade_name').val()) {
+                            $('#trade_name').val(response.business_name);
+                        }
+                    }
+
+                    // Mostrar resumen de éxito
+                    var html = `
+                        <div class="alert alert-success py-2 px-3 mb-0 small border-0" style="background-color:rgba(25,135,84,0.1); border-radius:8px;">
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-check-circle text-success me-2"></i>
+                                <span class="fw-bold text-success">Datos extraídos (RUC: ${response.ruc ? response.ruc : 'No encontrado'})</span>
+                            </div>
+                            <div class="mt-2 text-dark">
+                                <div class="mb-1"><span class="text-muted">RUC:</span> <strong>${response.ruc}</strong></div>
+                                <div class="mb-1"><span class="text-muted">Emisor:</span> ${response.issuer}</div>
+                                <div><span class="text-muted">Válido hasta:</span> ${response.valid_until} <span class="badge ${response.days_left > 30 ? 'bg-success' : 'bg-warning text-dark'}">${response.days_left} días</span></div>
+                            </div>
+                        </div>
+                    `;
+                    if (response.validity_warning) {
+                        html += `
+                            <div class="mt-2 text-danger small fw-bold">
+                                <i class="fas fa-exclamation-triangle me-1"></i> ${response.validity_warning}
+                            </div>
+                        `;
+                    }
+                    if (!response.ruc && response.debug_text) {
+                        console.error("DEBUG TEXT DEL CERTIFICADO:", response.debug_text);
+                        html += `
+                            <div class="mt-2 small text-muted" style="max-height: 100px; overflow-y: auto; font-size: 10px; background: #f8f9fa; padding: 5px; border-radius: 5px;">
+                                <strong>Modo Diagnóstico (Copia esto):</strong><br>
+                                ${response.debug_text}
+                            </div>
+                        `;
+                    }
+                    $result.html(html).slideDown();
+                } else {
+                    $result.html(`
+                        <div class="alert alert-danger py-2 px-3 mb-0 small border-0" style="background-color:rgba(220,53,69,0.1); border-radius:8px; color:#dc3545;">
+                            <i class="fas fa-exclamation-circle me-1"></i> ${response.error}
+                        </div>
+                    `).slideDown();
+                }
+            },
+            error: function() {
+                $result.html(`
+                    <div class="alert alert-danger py-2 px-3 mb-0 small border-0" style="background-color:rgba(220,53,69,0.1); border-radius:8px; color:#dc3545;">
+                        <i class="fas fa-exclamation-circle me-1"></i> Error de conexión al servidor.
+                    </div>
+                `).slideDown();
+            },
+            complete: function() {
+                $btn.html('<i class="fas fa-search me-1"></i>Leer').prop('disabled', false);
+            }
+        });
+    });
 });
 </script>

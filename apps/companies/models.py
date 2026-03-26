@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Models for companies app
 Modelos para empresas en VENDO_SRI
@@ -304,6 +304,34 @@ class Company(models.Model):
         # Validar antes de guardar
         self.full_clean()
         super().save(*args, **kwargs)
+
+        # ✅ Sincronizar con SRIConfiguration para mantener concordancia entre paneles
+        # Usamos .update() para evitar bucles de recursión con SRIConfiguration.save()
+        try:
+            if hasattr(self, 'sri_configuration'):
+                from apps.sri_integration.models import SRIConfiguration
+                SRIConfiguration.objects.filter(pk=self.sri_configuration.pk).update(
+                    environment='TEST' if self.ambiente_sri == '1' else 'PRODUCTION',
+                    establishment_code=self.codigo_establecimiento,
+                    emission_point=self.codigo_punto_emision,
+                    invoice_sequence=self.secuencial_factura,
+                    credit_note_sequence=self.secuencial_nota_credito,
+                    debit_note_sequence=self.secuencial_nota_debito,
+                    retention_sequence=self.secuencial_retencion,
+                    accounting_required=(self.obligado_contabilidad == 'SI'),
+                    special_taxpayer=bool(self.contribuyente_especial),
+                    special_taxpayer_number=self.contribuyente_especial or ''
+                )
+            
+            # 3. Sincronizar también el ambiente en el Certificado Digital si existe
+            if hasattr(self, 'digital_certificate'):
+                from apps.certificates.models import DigitalCertificate
+                DigitalCertificate.objects.filter(company=self).update(
+                    environment='TEST' if self.ambiente_sri == '1' else 'PRODUCTION'
+                )
+        except Exception:
+            # Silenciar errores de sincronización para no romper el flujo principal
+            pass
     
     def __str__(self):
         return f"{self.business_name} ({self.ruc})"

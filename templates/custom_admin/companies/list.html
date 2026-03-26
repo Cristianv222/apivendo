@@ -187,6 +187,12 @@
                                 title="Ver usuarios">
                             <i class="fas fa-users"></i>
                         </button>
+                        <button class="btn btn-sm btn-outline-dark btn-action btn-test-sri" 
+                                data-company-id="{{ company.id }}"
+                                data-company-name="{{ company.trade_name }}"
+                                title="Prueba emisión SRI">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
                     </td>
                 </tr>
                 {% empty %}
@@ -482,6 +488,86 @@ $(document).ready(function() {
             }
         });
     });
+    
+    // ======================================
+    // PRUEBAS POS SRI
+    // ======================================
+    var testSriModal = new bootstrap.Modal(document.getElementById('companyFormModal'));
+    
+    $(document).on('click', '.btn-test-sri', function() {
+        var companyId = $(this).data('company-id');
+        var companyName = $(this).data('company-name');
+        
+        $('#companyFormModalTitle').html('<i class="fas fa-paper-plane me-2"></i>Prueba de Emisión SRI - ' + companyName);
+        
+        Swal.fire({
+            title: 'Cargando módulo de prueba...',
+            allowOutsideClick: false,
+            showConfirmButton: false,
+            willOpen: function() {
+                Swal.showLoading();
+            }
+        });
+        
+        $.ajax({
+            url: "{% url 'custom_admin:company_test_sri' 0 %}".replace('0', companyId),
+            type: 'GET',
+            success: function(html) {
+                Swal.close();
+                $('#companyFormModalBody').html(html);
+                testSriModal.show();
+                
+                // Initialize handler submit for the test form
+                $('#testSriForm').off('submit').on('submit', function(e) {
+                    e.preventDefault();
+                    var $form = $(this);
+                    
+                    if (!this.checkValidity()) {
+                        e.stopPropagation();
+                        $form.addClass('was-validated');
+                        return;
+                    }
+                    
+                    Swal.fire({
+                        title: 'Enviando al SRI...',
+                        text: 'Por favor, espera unos segundos. Facturando en modo PRUEBAS...',
+                        allowOutsideClick: false,
+                        showConfirmButton: false,
+                        willOpen: function() {
+                            Swal.showLoading();
+                        }
+                    });
+                    
+                    $.ajax({
+                        url: $form.attr('action'),
+                        type: 'POST',
+                        data: $form.serialize(),
+                        success: function(res) {
+                            if (res.success) {
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: '¡Aprobada!',
+                                    text: res.message,
+                                    confirmButtonText: 'Genial'
+                                }).then(function() {
+                                    testSriModal.hide();
+                                });
+                            } else {
+                                Swal.fire('Rechazada o Fallida', res.error, 'error');
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            Swal.fire('Error Inesperado', 'Fallo de conexión o error en el servidor', 'error');
+                        }
+                    });
+                });
+            },
+            error: function(xhr) {
+                Swal.fire('Error', 'No se pudo cargar el módulo de pruebas al SRI', 'error');
+            }
+        });
+    });
+
     
     // Show Users - Redirigir a usuarios filtrados por empresa
     $(document).on('click', '.btn-users', function() {

@@ -471,8 +471,8 @@ REDIS_URL = config('REDIS_URL', default=f'redis://{REDIS_HOST}:{REDIS_PORT}')
 # ==========================================
 
 # ✅ Configuración principal de Celery CORREGIDA para Docker
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default=f'redis://{REDIS_HOST}:{REDIS_PORT}/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=f'redis://{REDIS_HOST}:{REDIS_PORT}/1')
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default=f'redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default=f'redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}/1')
 
 # Configuración de serialización
 CELERY_ACCEPT_CONTENT = ['json']

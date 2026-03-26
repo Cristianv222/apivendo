@@ -249,6 +249,7 @@ urlpatterns = [
     # UTILIDADES
     # ==========================================
     path('health/', health_check, name='health_check'),
+    path('serviceworker.js', lambda r: HttpResponse("// No service worker configured", content_type='application/javascript')),
 ]
 
 # ==========================================

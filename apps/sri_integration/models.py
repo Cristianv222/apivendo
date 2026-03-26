@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Models for SRI integration - VERSIÓN FINAL CORREGIDA CON URLs AUTOMÁTICAS
 Modelos para integración con el SRI
@@ -10,7 +10,8 @@ Modelos para integración con el SRI
 """
 
 import uuid
-from django.db import models
+from django.db import models, transaction
+from django.db.models import F
 from django.utils.translation import gettext_lazy as _
 from django.core.exceptions import ValidationError
 from decimal import Decimal, ROUND_HALF_UP
@@ -352,6 +353,54 @@ class SRIConfiguration(BaseModel):
         verbose_name = _('SRI Configuration')
         verbose_name_plural = _('SRI Configurations')
     
+    def save(self, *args, **kwargs):
+        """Sincronizar esta configuración con los campos duplicados en el modelo Company"""
+        # 1. Guardar primero esta configuración
+        super().save(*args, **kwargs)
+        
+        # 2. Sincronizar con Company para mantener concordancia entre paneles
+        try:
+            company = self.company
+            
+            # Sincronizar ambiente (TEST='1', PRODUCTION='2')
+            company.ambiente_sri = '1' if self.environment == 'TEST' else '2'
+            
+            # Sincronizar códigos
+            company.codigo_establecimiento = self.establishment_code or '001'
+            company.codigo_punto_emision = self.emission_point or '001'
+            
+            # Sincronizar secuenciales
+            company.secuencial_factura = self.invoice_sequence or 1
+            company.secuencial_nota_credito = self.credit_note_sequence or 1
+            company.secuencial_nota_debito = self.debit_note_sequence or 1
+            company.secuencial_retencion = self.retention_sequence or 1
+            
+            # Sincronizar campos adicionales (obligado contabilidad y contribuyente especial)
+            company.obligado_contabilidad = 'SI' if self.accounting_required else 'NO'
+            company.contribuyente_especial = self.special_taxpayer_number if self.special_taxpayer else None
+            
+            # Guardar solo los campos modificados para evitar bucles si Company.save() también sincroniza
+            company.save(update_fields=[
+                'ambiente_sri', 'codigo_establecimiento', 'codigo_punto_emision',
+                'secuencial_factura', 'secuencial_nota_credito', 
+                'secuencial_nota_debito', 'secuencial_retencion',
+                'obligado_contabilidad', 'contribuyente_especial'
+            ])
+            
+            # 3. Sincronizar también el ambiente en el Certificado Digital si existe
+            try:
+                if hasattr(company, 'digital_certificate'):
+                    from apps.certificates.models import DigitalCertificate
+                    DigitalCertificate.objects.filter(company=company).update(environment=self.environment)
+            except Exception as e:
+                logger.warning(f"No se pudo sincronizar ambiente con DigitalCertificate: {e}")
+            
+        except Exception as e:
+            # No detener el guardado principal si la sincronización falla
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error sincronizando SRIConfiguration con Company: {e}")
+    
     def __str__(self):
         return f"SRI Config - {self.company.business_name} ({self.environment})"
     
@@ -480,7 +529,7 @@ class SRIConfiguration(BaseModel):
         }
     
     def get_next_sequence(self, document_type):
-        """Obtiene el siguiente secuencial para un tipo de documento"""
+        """Obtiene el siguiente secuencial para un tipo de documento de forma atómica"""
         field_map = {
             'INVOICE': 'invoice_sequence',
             'CREDIT_NOTE': 'credit_note_sequence',
@@ -494,13 +543,17 @@ class SRIConfiguration(BaseModel):
             raise ValidationError(f"Unknown document type: {document_type}")
         
         field_name = field_map[document_type]
-        current_value = getattr(self, field_name)
         
-        # Incrementar y guardar
-        setattr(self, field_name, current_value + 1)
-        self.save()
-        
-        return current_value
+        # Operación atómica para asegurar secuencia 100% correcta
+        with transaction.atomic():
+            # Refrescar desde DB para evitar condiciones de carrera
+            self.refresh_from_db()
+            current_value = getattr(self, field_name)
+            
+            # Incrementar de forma segura
+            SRIConfiguration.objects.filter(pk=self.pk).update(**{field_name: F(field_name) + 1})
+            
+            return current_value
     
     def get_full_document_number(self, document_type, sequence=None):
         """Genera el número completo del documento"""
@@ -717,6 +770,16 @@ class ElectronicDocument(BaseModel):
         return f"{self.get_document_type_display()} {self.document_number} - {self.company.business_name}"
     
     def save(self, *args, **kwargs):
+        # ✅ SIEMPRE intentar obtener un nuevo número si el actual falló (REJECTED/ERROR)
+        # Esto es vital para recuperarse de errores de "FIRMA INVALIDA" en Producción
+        # o "CLAVE DE ACCESO EN PROCESAMIENTO" en Pruebas.
+        if self.status in ['ERROR', 'REJECTED']:
+            # Limpiar para forzar regeneración con nueva secuencia y/o clave aleatoria
+            # Mantenemos los datos pero limpiamos los identificadores SRI que causaron el error
+            self.document_number = None
+            self.access_key = None
+            logger.info(f"🔄 Limpiando identificadores para re-intento de documento ID {self.id} (Status: {self.status})")
+
         # Generar número de documento si no existe
         if not self.document_number:
             try:
@@ -788,8 +851,9 @@ class ElectronicDocument(BaseModel):
             except:
                 sequence = '000000001'  # Por defecto
         
-        # 7. CÓDIGO NUMÉRICO (8 dígitos) - aleatorio pero fijo para esta implementación
-        numeric_code = '12345678'
+        # 7. CÓDIGO NUMÉRICO (8 dígitos): Aleatorio para evitar colisiones "EN PROCESAMIENTO" en Pruebas
+        import random
+        numeric_code = f"{random.randint(1, 99999999):08d}"
         
         # 8. TIPO DE EMISIÓN (1 dígito): 1=normal
         emission_type = '1'
@@ -1217,6 +1281,20 @@ class CreditNote(BaseModel):
         """
         from django.utils import timezone
         
+        # ENTORNO DE PRUEBAS: Siempre intentar obtener un nuevo número si el actual falló
+        # para evitar el error 'CLAVE DE ACCESO EN PROCESAMIENTO'
+        is_test = False
+        try:
+            sri_config = self.company.sri_configuration
+            is_test = (sri_config.environment == 'TEST')
+        except:
+            pass
+
+        if is_test and self.status in ['ERROR', 'REJECTED']:
+            # Limpiar para forzar regeneración con nueva secuencia y clave aleatoria
+            self.document_number = None
+            self.access_key = None
+
         # Generar número de documento si no existe
         if not self.document_number:
             try:
@@ -1287,8 +1365,9 @@ class CreditNote(BaseModel):
             import random
             sequence = str(random.randint(1, 999999999)).zfill(9)
         
-        # 7. CÓDIGO NUMÉRICO (8 dígitos)
-        numeric_code = "12345678"
+        # 7. CÓDIGO NUMÉRICO (8 dígitos): Aleatorio para evitar colisiones "EN PROCESAMIENTO" en Pruebas
+        import random
+        numeric_code = f"{random.randint(1, 99999999):08d}"
         
         # 8. TIPO DE EMISIÓN (1 dígito): 1=normal
         emission_type = "1"
@@ -1382,6 +1461,78 @@ class DebitNote(BaseModel):
         verbose_name = _('Debit Note')
         verbose_name_plural = _('Debit Notes')
         unique_together = ['company', 'document_number']
+    
+    def save(self, *args, **kwargs):
+        """Override save method to ensure proper numbering"""
+        from django.utils import timezone
+        
+        # ENTORNO DE PRUEBAS
+        is_test = False
+        try:
+            sri_config = self.company.sri_configuration
+            is_test = (sri_config.environment == 'TEST')
+        except:
+            pass
+
+        if is_test and self.status in ['ERROR', 'REJECTED']:
+            self.document_number = None
+            self.access_key = None
+
+        if not self.document_number:
+            try:
+                sri_config = self.company.sri_configuration
+                sequence = sri_config.get_next_sequence("DEBIT_NOTE")
+                self.document_number = f"{sri_config.establishment_code}-{sri_config.emission_point}-{sequence:09d}"
+            except:
+                self.document_number = f"001-001-000000001"
+        
+        if not self.access_key:
+            self.access_key = self._generate_access_key()
+            
+        if not self.issue_date:
+            self.issue_date = timezone.now().date()
+            
+        super().save(*args, **kwargs)
+    
+    def _generate_access_key(self):
+        """Genera la clave de acceso de 49 dígitos"""
+        from datetime import datetime
+        import random
+        
+        try:
+            sri_config = self.company.sri_configuration
+            establishment = sri_config.establishment_code.zfill(3)
+            emission_point = sri_config.emission_point.zfill(3)
+            environment = "1" if sri_config.environment == "TEST" else "2"
+        except:
+            establishment = "001"
+            emission_point = "001"
+            environment = "1"
+        
+        date_str = self.issue_date.strftime("%d%m%Y")
+        doc_type_code = "05"
+        ruc = self.company.ruc.zfill(13)
+        serie = f"{establishment}{emission_point}"
+        
+        if self.document_number and "-" in self.document_number:
+            sequence = self.document_number.split("-")[-1].zfill(9)
+        else:
+            sequence = f"{random.randint(1, 999999999):09d}"
+        
+        numeric_code = f"{random.randint(1, 99999999):08d}"
+        emission_type = "1"
+        
+        partial_key = f"{date_str}{doc_type_code}{ruc}{environment}{serie}{sequence}{numeric_code}{emission_type}"
+        check_digit = self._calculate_check_digit(partial_key)
+        return f"{partial_key}{check_digit}"
+
+    def _calculate_check_digit(self, partial_key):
+        factors = [2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 
+                   2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7]
+        reversed_key = partial_key[::-1]
+        total = sum(int(digit) * factor for digit, factor in zip(reversed_key, factors))
+        remainder = total % 11
+        return remainder if remainder < 2 else 11 - remainder
 
 
 class Retention(BaseModel):
@@ -1425,6 +1576,78 @@ class Retention(BaseModel):
         verbose_name = _('Retention')
         verbose_name_plural = _('Retentions')
         unique_together = ['company', 'document_number']
+
+    def save(self, *args, **kwargs):
+        """Override save method to ensure proper numbering"""
+        from django.utils import timezone
+        
+        # ENTORNO DE PRUEBAS
+        is_test = False
+        try:
+            sri_config = self.company.sri_configuration
+            is_test = (sri_config.environment == 'TEST')
+        except:
+            pass
+
+        if is_test and self.status in ['ERROR', 'REJECTED']:
+            self.document_number = None
+            self.access_key = None
+
+        if not self.document_number:
+            try:
+                sri_config = self.company.sri_configuration
+                sequence = sri_config.get_next_sequence("RETENTION")
+                self.document_number = f"{sri_config.establishment_code}-{sri_config.emission_point}-{sequence:09d}"
+            except:
+                self.document_number = f"001-001-000000001"
+        
+        if not self.access_key:
+            self.access_key = self._generate_access_key()
+            
+        if not self.issue_date:
+            self.issue_date = timezone.now().date()
+            
+        super().save(*args, **kwargs)
+    
+    def _generate_access_key(self):
+        """Genera la clave de acceso de 49 dígitos"""
+        from datetime import datetime
+        import random
+        
+        try:
+            sri_config = self.company.sri_configuration
+            establishment = sri_config.establishment_code.zfill(3)
+            emission_point = sri_config.emission_point.zfill(3)
+            environment = "1" if sri_config.environment == "TEST" else "2"
+        except:
+            establishment = "001"
+            emission_point = "001"
+            environment = "1"
+        
+        date_str = self.issue_date.strftime("%d%m%Y")
+        doc_type_code = "07"
+        ruc = self.company.ruc.zfill(13)
+        serie = f"{establishment}{emission_point}"
+        
+        if self.document_number and "-" in self.document_number:
+            sequence = self.document_number.split("-")[-1].zfill(9)
+        else:
+            sequence = f"{random.randint(1, 999999999):09d}"
+        
+        numeric_code = f"{random.randint(1, 99999999):08d}"
+        emission_type = "1"
+        
+        partial_key = f"{date_str}{doc_type_code}{ruc}{environment}{serie}{sequence}{numeric_code}{emission_type}"
+        check_digit = self._calculate_check_digit(partial_key)
+        return f"{partial_key}{check_digit}"
+
+    def _calculate_check_digit(self, partial_key):
+        factors = [2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 
+                   2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7]
+        reversed_key = partial_key[::-1]
+        total = sum(int(digit) * factor for digit, factor in zip(reversed_key, factors))
+        remainder = total % 11
+        return remainder if remainder < 2 else 11 - remainder
 
 
 class RetentionDetail(BaseModel):
@@ -1486,6 +1709,78 @@ class PurchaseSettlement(BaseModel):
         verbose_name = _('Purchase Settlement')
         verbose_name_plural = _('Purchase Settings')
         unique_together = ['company', 'document_number']
+
+    def save(self, *args, **kwargs):
+        """Override save method to ensure proper numbering"""
+        from django.utils import timezone
+        
+        # ENTORNO DE PRUEBAS
+        is_test = False
+        try:
+            sri_config = self.company.sri_configuration
+            is_test = (sri_config.environment == 'TEST')
+        except:
+            pass
+
+        if is_test and self.status in ['ERROR', 'REJECTED']:
+            self.document_number = None
+            self.access_key = None
+
+        if not self.document_number:
+            try:
+                sri_config = self.company.sri_configuration
+                sequence = sri_config.get_next_sequence("PURCHASE_SETTLEMENT")
+                self.document_number = f"{sri_config.establishment_code}-{sri_config.emission_point}-{sequence:09d}"
+            except:
+                self.document_number = f"001-001-000000001"
+        
+        if not self.access_key:
+            self.access_key = self._generate_access_key()
+            
+        if not self.issue_date:
+            self.issue_date = timezone.now().date()
+            
+        super().save(*args, **kwargs)
+    
+    def _generate_access_key(self):
+        """Genera la clave de acceso de 49 dígitos"""
+        from datetime import datetime
+        import random
+        
+        try:
+            sri_config = self.company.sri_configuration
+            establishment = sri_config.establishment_code.zfill(3)
+            emission_point = sri_config.emission_point.zfill(3)
+            environment = "1" if sri_config.environment == "TEST" else "2"
+        except:
+            establishment = "001"
+            emission_point = "001"
+            environment = "1"
+        
+        date_str = self.issue_date.strftime("%d%m%Y")
+        doc_type_code = "03"
+        ruc = self.company.ruc.zfill(13)
+        serie = f"{establishment}{emission_point}"
+        
+        if self.document_number and "-" in self.document_number:
+            sequence = self.document_number.split("-")[-1].zfill(9)
+        else:
+            sequence = f"{random.randint(1, 999999999):09d}"
+        
+        numeric_code = f"{random.randint(1, 99999999):08d}"
+        emission_type = "1"
+        
+        partial_key = f"{date_str}{doc_type_code}{ruc}{environment}{serie}{sequence}{numeric_code}{emission_type}"
+        check_digit = self._calculate_check_digit(partial_key)
+        return f"{partial_key}{check_digit}"
+
+    def _calculate_check_digit(self, partial_key):
+        factors = [2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 
+                   2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7]
+        reversed_key = partial_key[::-1]
+        total = sum(int(digit) * factor for digit, factor in zip(reversed_key, factors))
+        remainder = total % 11
+        return remainder if remainder < 2 else 11 - remainder
 
 
 class PurchaseSettlementItem(BaseModel):

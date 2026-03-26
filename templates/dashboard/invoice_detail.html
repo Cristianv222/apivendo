@@ -1,0 +1,425 @@
+{% extends 'custom_admin/base.html' %}
+{% load static %}
+
+{% block title %}Detalle de Documento - APIVENDO{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding-top: 2rem;
+    }
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .status-AUTHORIZED { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+    .status-ERROR, .status-REJECTED { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+    .status-SENT { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+    .status-DRAFT { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
+
+    .card-glass {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 1.5rem;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .document-header {
+        padding: 2rem;
+        border-bottom: 1px solid rgba(0,0,0,0.05);
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+
+    .document-body {
+        padding: 2.5rem;
+    }
+
+    .info-section {
+        margin-bottom: 2.5rem;
+    }
+
+    .info-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        margin-bottom: 1rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .info-item .label {
+        font-size: 0.85rem;
+        color: #94a3b8;
+        margin-bottom: 0.25rem;
+    }
+
+    .info-item .value {
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 1rem;
+    }
+
+    .items-table th {
+        text-align: left;
+        padding: 1rem;
+        background: #f8fafc;
+        color: #64748b;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        font-weight: 700;
+    }
+
+    .items-table td {
+        padding: 1.25rem 1rem;
+        border-bottom: 1px solid #f1f5f9;
+        color: #334155;
+    }
+
+    .totals-section {
+        margin-left: auto;
+        width: 300px;
+        margin-top: 2rem;
+    }
+
+    .total-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.75rem 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+
+    .total-row.grand-total {
+        border-bottom: none;
+        padding-top: 1.5rem;
+        color: #1e293b;
+        font-size: 1.25rem;
+        font-weight: 800;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-premium {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+    }
+
+    .btn-premium:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid pb-5">
+    <div class="detail-container">
+        <!-- Back Link -->
+        <a href="{{ dashboard_token_url }}" class="text-secondary mb-4 d-inline-block text-decoration-none">
+            <i class="fas fa-arrow-left me-2"></i> Volver al Dashboard
+        </a>
+
+        <!-- Document Card -->
+        <div class="card-glass">
+            <div class="document-header">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                    <div>
+                        <h2 class="h4 mb-1 fw-bold">{{ document.get_document_type_display|default:document.document_type }}</h2>
+                        <span class="text-muted">Nro: {{ document.document_number|default:"SIN NÚMERO" }}</span>
+                    </div>
+                    <div>
+                        <div class="status-badge status-{{ document.status }}">
+                            <i class="fas {% if document.status == 'AUTHORIZED' %}fa-check-circle{% elif document.status == 'ERROR' or document.status == 'REJECTED' %}fa-exclamation-circle{% else %}fa-clock{% endif %}"></i>
+                            {{ document.get_status_display|default:document.status }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="document-body">
+                <!-- Info Grid -->
+                <div class="row">
+                    <!-- Client Info -->
+                    <div class="col-md-6 info-section">
+                        <div class="info-title">
+                            <i class="fas fa-user"></i> Información del Cliente
+                        </div>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="label">Razón Social</div>
+                                <div class="value">{{ document.customer_name|default:"N/A" }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="label">Identificación</div>
+                                <div class="value">{{ document.customer_identification|default:"N/A" }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="label">Email</div>
+                                <div class="value">{{ document.customer_email|default:"N/A" }}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Issuer Info -->
+                    <div class="col-md-6 info-section">
+                        <div class="info-title">
+                            <i class="fas fa-building"></i> Emisor
+                        </div>
+                        <div class="info-grid">
+                            <div class="info-item">
+                                <div class="label">Empresa</div>
+                                <div class="value">{{ company.business_name }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="label">RUC</div>
+                                <div class="value">{{ company.ruc }}</div>
+                            </div>
+                            <div class="info-item">
+                                <div class="label">Fecha Emisión</div>
+                                <div class="value">{{ document.issue_date|date:"d/m/Y"|default:document.created_at|date:"d/m/Y" }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Technical Details -->
+                <div class="info-section">
+                    <div class="info-title">
+                        <i class="fas fa-key"></i> Detalles Técnicos SRI
+                    </div>
+                    <div class="card bg-light border-0 p-3" style="border-radius: 1rem;">
+                        <div class="row">
+                            <div class="col-md-12 mb-2">
+                                <div class="label text-muted small">Clave de Acceso</div>
+                                <div class="value font-monospace small text-break">{{ document.access_key|default:"Pendiente de generación" }}</div>
+                            </div>
+                            {% if document.sri_authorization_code %}
+                            <div class="col-md-6">
+                                <div class="label text-muted small">Autorización</div>
+                                <div class="value font-monospace small">{{ document.sri_authorization_code }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Items Table -->
+                <div class="info-section">
+                    <div class="info-title">
+                        <i class="fas fa-list"></i> Detalle de Ítems
+                    </div>
+                    <div class="table-responsive">
+                        <table class="items-table">
+                            <thead>
+                                <tr>
+                                    <th>Cód.</th>
+                                    <th>Descripción</th>
+                                    <th>Cant.</th>
+                                    <th>P.Unit</th>
+                                    <th>Desc.</th>
+                                    <th>Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if document.items.exists %}
+                                    {% for item in document.items.all %}
+                                    <tr>
+                                        <td>{{ item.main_code }}</td>
+                                        <td>{{ item.description }}</td>
+                                        <td>{{ item.quantity|floatformat:2 }}</td>
+                                        <td>${{ item.unit_price|floatformat:2 }}</td>
+                                        <td>${{ item.discount|floatformat:2 }}</td>
+                                        <td class="fw-bold">${{ item.subtotal|floatformat:2 }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">No hay ítems detallados para este documento</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Totals -->
+                <div class="totals-section">
+                    <div class="total-row">
+                        <span class="label">Subtotal</span>
+                        <span class="value">${{ document.subtotal_without_tax|floatformat:2 }}</span>
+                    </div>
+                    <div class="total-row">
+                        <span class="label">IVA (15%)</span>
+                        <span class="value">${{ document.total_tax|floatformat:2 }}</span>
+                    </div>
+                    <div class="total-row grand-total">
+                        <span class="label">TOTAL</span>
+                        <span class="value">${{ document.total_amount|floatformat:2 }}</span>
+                    </div>
+                </div>
+
+                <!-- SRI Error Info if any -->
+                {% if document.status == 'ERROR' or document.status == 'REJECTED' %}
+                <div class="alert alert-danger mt-4 border-0" style="border-radius: 1rem;">
+                    <div class="d-flex gap-2">
+                        <i class="fas fa-exclamation-triangle mt-1"></i>
+                        <div>
+                            <div class="fw-bold">Error del SRI:</div>
+                            <p class="mb-0 small">{{ document.sri_response.mensaje|default:document.sri_responses.first.response_message|default:"Error desconocido en el procesamiento." }}</p>
+                            {% if document.sri_response.informacionAdicional or document.sri_responses.first.raw_response %}
+                            <p class="mb-0 mt-2 small"><em>{{ document.sri_response.informacionAdicional|default:document.sri_responses.first.raw_response }}</em></p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Actions -->
+                <div class="action-buttons border-top pt-4">
+                    <button class="btn btn-premium btn-primary" onclick="processDocument('{{ document.id }}')">
+                        <i class="fas fa-sync-alt"></i> Procesar SRI
+                    </button>
+                    <button class="btn btn-premium btn-outline-primary" onclick="sendDocumentEmail('{{ document.id }}')">
+                        <i class="fas fa-envelope"></i> Enviar Email
+                    </button>
+                    {% if document.pdf_file %}
+                    <a href="{{ document.pdf_file.url }}" class="btn btn-premium btn-light" target="_blank">
+                        <i class="fas fa-file-pdf text-danger"></i> Descargar PDF
+                    </a>
+                    {% endif %}
+                    {% if document.xml_file %}
+                    <a href="{{ document.xml_file.url }}" class="btn btn-premium btn-light" download>
+                        <i class="fas fa-file-code text-primary"></i> Descargar XML
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    // Usar las mismas funciones que el dashboard para consistencia
+    function processDocument(documentId) {
+        Swal.fire({
+            title: '¿Procesar con SRI?',
+            text: "Se enviará el documento para autorización oficial.",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Sí, procesar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: 'Procesando...',
+                    text: 'Conectando con el SRI...',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+                
+                fetch(`/sri/documents/${documentId}/reprocess/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire({
+                            title: '¡Éxito!',
+                            text: data.message,
+                            icon: 'success'
+                        }).then(() => { location.reload(); });
+                    } else {
+                        Swal.fire('Error', data.message || 'Error al procesar', 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    Swal.fire('Error', 'Error de red al procesar', 'error');
+                });
+            }
+        });
+    }
+
+    function sendDocumentEmail(documentId) {
+        Swal.fire({
+            title: '¿Enviar por email?',
+            text: "¿Deseas enviar este documento al cliente?",
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, enviar',
+            cancelButtonText: 'No'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: 'Enviando...',
+                    allowOutsideClick: false,
+                    didOpen: () => { Swal.showLoading(); }
+                });
+                
+                fetch(`/sri/documents/${documentId}/send_email/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        Swal.fire('Enviado', data.message, 'success');
+                    } else {
+                        Swal.fire('Error', data.message || 'Error al enviar', 'error');
+                    }
+                })
+                .catch(err => {
+                    console.error('Error:', err);
+                    Swal.fire('Error', 'Error de red al enviar', 'error');
+                });
+            }
+        });
+    }
+</script>
+{% endblock %}
