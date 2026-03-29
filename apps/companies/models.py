@@ -13,6 +13,16 @@ from django.core.exceptions import ValidationError
 import re
 
 
+def company_logo_upload_path(instance, filename):
+    """Genera la ruta para el logo de la empresa"""
+    try:
+        business_name = instance.business_name.lower()
+        company_name = re.sub(r'[^a-z0-9_]', '_', business_name).strip('_')
+    except:
+        company_name = instance.ruc if instance.ruc else f"empresa_{instance.id}"
+    return f"{company_name}/logos/{filename}"
+
+
 class Company(models.Model):
     """
     Modelo para empresas y personas naturales
@@ -210,7 +220,7 @@ class Company(models.Model):
     
     logo = models.ImageField(
         _('logo'),
-        upload_to='companies/logos/',
+        upload_to=company_logo_upload_path,
         blank=True,
         null=True,
         help_text=_('Company logo for documents')

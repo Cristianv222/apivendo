@@ -131,11 +131,10 @@ LOGOUT_REDIRECT_URL = config('LOGOUT_REDIRECT_URL', default='/accounts/login/')
 # ALLAUTH CONFIGURATION
 # ==========================================
 
-# Configuración de cuentas
-ACCOUNT_AUTHENTICATION_METHOD = config('ACCOUNT_AUTHENTICATION_METHOD', default='email')
-ACCOUNT_EMAIL_REQUIRED = config('ACCOUNT_EMAIL_REQUIRED', default=True, cast=bool)
+# Configuración de cuentas (Actualizado para evitar deprecaciones en allauth)
+ACCOUNT_LOGIN_METHODS = {config('ACCOUNT_AUTHENTICATION_METHOD', default='email')}
 ACCOUNT_EMAIL_VERIFICATION = config('ACCOUNT_EMAIL_VERIFICATION', default='optional')
-ACCOUNT_USERNAME_REQUIRED = config('ACCOUNT_USERNAME_REQUIRED', default=False, cast=bool)
+ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_USER_MODEL_EMAIL_FIELD = 'email'
 ACCOUNT_UNIQUE_EMAIL = config('ACCOUNT_UNIQUE_EMAIL', default=True, cast=bool)
@@ -281,7 +280,14 @@ MEDIA_URL = config('MEDIA_URL', default='/media/')
 MEDIA_ROOT = os.path.join(BASE_DIR, config('MEDIA_ROOT', default='storage'))
 
 # Configuración personalizada para S3 o Storage Local Dinámico
-DEFAULT_FILE_STORAGE = 'apps.core.storage.DynamicMediaStorage'
+STORAGES = {
+    "default": {
+        "BACKEND": "apps.core.storage.DynamicMediaStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 # ==========================================
 # DEFAULT AUTO FIELD
@@ -710,6 +716,11 @@ LOGGING = {
         },
         'apps.certificates': {
             'handlers': ['certificates_file', 'console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        'apps.core': {
+            'handlers': ['console', 'file'],
             'level': LOG_LEVEL,
             'propagate': False,
         },

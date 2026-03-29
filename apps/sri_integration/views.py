@@ -797,12 +797,10 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
             # Enviar email
             from .services.email_service import EmailService
             
-            email_service = EmailService()
+            email_service = EmailService(document.company)
             
-            if is_credit_note:
-                success, message = email_service.send_credit_note_email(document)
-            else:
-                success, message = email_service.send_invoice_email(document)
+            # Usar el método genérico que ya maneja ambos
+            success, message = email_service.send_document_email(document)
             
             if success:
                 # Marcar como enviado
@@ -1370,19 +1368,39 @@ def download_document_pdf(request, document_id):
                     'message': f'Error al generar PDF: {str(e)}'
                 }, status=500)
         
-        # Verificar que el archivo existe físicamente
-        try:
-            if not os.path.exists(files['pdf_file'].path):
-                logger.error(f"Archivo PDF no existe: {files['pdf_file'].path}")
+        # Verificar si existe el archivo PDF y servirlo
+        if files['pdf_file']:
+            try:
+                # Generar nombre de archivo descargable según el tipo
+                doc_type_names = {
+                    'electronic_document': 'documento',
+                    'credit_note': 'nota_credito',
+                    'debit_note': 'nota_debito',
+                    'retention': 'retencion',
+                    'purchase_settlement': 'liquidacion_compra'
+                }
+                
+                type_name = doc_type_names.get(doc_type, 'documento')
+                filename = f"{files['document_number']}_{type_name}_{files['status'].lower()}.pdf"
+                
+                # Servir archivo directamente desde el storage
+                return FileResponse(
+                    files['pdf_file'].open('rb'),
+                    as_attachment=True,
+                    filename=filename,
+                    content_type='application/pdf'
+                )
+            except Exception as e:
+                logger.error(f"Error accediendo al archivo PDF: {str(e)}")
                 return JsonResponse({
-                    'error': 'PDF_FILE_NOT_FOUND',
-                    'message': 'El archivo PDF no se encuentra en el servidor'
-                }, status=404)
-        except (AttributeError, ValueError):
-            return JsonResponse({
-                'error': 'PDF_PATH_ERROR',
-                'message': 'Error al acceder al archivo PDF'
-            }, status=500)
+                    'error': 'PDF_ACCESS_ERROR',
+                    'message': 'No se pudo acceder al archivo PDF en el almacenamiento'
+                }, status=500)
+        
+        return JsonResponse({
+            'error': 'PDF_NOT_FOUND',
+            'message': 'El archivo PDF no está disponible'
+        }, status=404)
         
         # Generar nombre de archivo descargable según el tipo
         doc_type_names = {
@@ -1457,19 +1475,39 @@ def download_document_xml(request, document_id):
                 'message': 'El archivo XML no está disponible para este documento'
             }, status=404)
         
-        # Verificar que el archivo existe físicamente
-        try:
-            if not os.path.exists(xml_file.path):
-                logger.error(f"Archivo XML no existe: {xml_file.path}")
+        # Verificar que el archivo existe en el almacenamiento y servirlo
+        if xml_file:
+            try:
+                # Generar nombre de archivo descargable según el tipo
+                doc_type_names = {
+                    'electronic_document': 'documento',
+                    'credit_note': 'nota_credito',
+                    'debit_note': 'nota_debito',
+                    'retention': 'retencion',
+                    'purchase_settlement': 'liquidacion_compra'
+                }
+                
+                type_name = doc_type_names.get(doc_type, 'documento')
+                filename = f"{files['document_number']}_{type_name}_{filename_prefix}.xml"
+                
+                # Servir archivo directamente desde el storage
+                return FileResponse(
+                    xml_file.open('rb'),
+                    as_attachment=True,
+                    filename=filename,
+                    content_type='application/xml'
+                )
+            except Exception as e:
+                logger.error(f"Error accediendo al archivo XML: {str(e)}")
                 return JsonResponse({
-                    'error': 'XML_FILE_NOT_FOUND',
-                    'message': 'El archivo XML no se encuentra en el servidor'
-                }, status=404)
-        except (AttributeError, ValueError):
-            return JsonResponse({
-                'error': 'XML_PATH_ERROR',
-                'message': 'Error al acceder al archivo XML'
-            }, status=500)
+                    'error': 'XML_ACCESS_ERROR',
+                    'message': 'No se pudo acceder al archivo XML en el almacenamiento'
+                }, status=500)
+        
+        return JsonResponse({
+            'error': 'XML_NOT_FOUND',
+            'message': 'El archivo XML no está disponible'
+        }, status=404)
         
         # Generar nombre de archivo descargable según el tipo
         doc_type_names = {

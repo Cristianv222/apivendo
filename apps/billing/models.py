@@ -10,6 +10,27 @@ from decimal import Decimal
 import uuid
 
 
+import re
+from django.utils import timezone
+
+def billing_receipt_upload_path(instance, filename):
+    """Genera la ruta para el comprobante de pago"""
+    try:
+        business_name = instance.company.business_name.lower()
+        company_name = re.sub(r'[^a-z0-9_]', '_', business_name).strip('_')
+    except:
+        company_name = f"empresa_{instance.company.id}"
+    
+    now = timezone.now()
+    months_es = {
+        1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+        5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+        9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+    }
+    month_name = months_es.get(now.month, 'desconocido')
+    return f"pagos/{company_name}/{now.year}/{month_name}/{filename}"
+
+
 class Plan(models.Model):
     """
     Planes de facturación disponibles
@@ -153,7 +174,7 @@ class PlanPurchase(models.Model):
     bank_name = models.CharField('Banco', max_length=100, blank=True)
     
     # Comprobante
-    payment_receipt = models.FileField('Comprobante de Pago', upload_to='billing/receipts/%Y/%m/', help_text='JPG, PNG o PDF')
+    payment_receipt = models.FileField('Comprobante de Pago', upload_to=billing_receipt_upload_path, help_text='JPG, PNG o PDF')
     
     # Notas y observaciones
     customer_notes = models.TextField('Notas del Cliente', blank=True, help_text='Observaciones adicionales del cliente')

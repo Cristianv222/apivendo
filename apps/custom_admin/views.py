@@ -2023,20 +2023,26 @@ def sri_document_download(request, document_id):
         document = get_object_or_404(ElectronicDocument, id=document_id)
         
         # Verificar si existe el archivo PDF
-        if document.pdf_file and os.path.exists(document.pdf_file.path):
-            return FileResponse(
-                open(document.pdf_file.path, 'rb'),
-                as_attachment=True,
-                filename=f'{document.document_number}.pdf'
-            )
+        if document.pdf_file:
+            try:
+                return FileResponse(
+                    document.pdf_file.open('rb'),
+                    as_attachment=True,
+                    filename=f'{document.document_number}.pdf'
+                )
+            except Exception:
+                pass
         
         # Si no hay PDF, generar uno temporal o devolver el XML
-        if document.signed_xml_file and os.path.exists(document.signed_xml_file.path):
-            return FileResponse(
-                open(document.signed_xml_file.path, 'rb'),
-                as_attachment=True,
-                filename=f'{document.document_number}.xml'
-            )
+        if document.signed_xml_file:
+            try:
+                return FileResponse(
+                    document.signed_xml_file.open('rb'),
+                    as_attachment=True,
+                    filename=f'{document.document_number}.xml'
+                )
+            except Exception:
+                pass
         
         # Si no hay archivos, generar un PDF básico
         from reportlab.lib.pagesizes import letter
@@ -2573,20 +2579,54 @@ def settings_save(request):
         try:
             data = json.loads(request.body)
             
-            # Aquí deberías guardar las configuraciones en un modelo
-            # Por ejemplo:
-            # from apps.core.models import SystemSettings
-            # settings_obj, created = SystemSettings.objects.get_or_create(pk=1)
-            # settings_obj.system_name = data.get('system_name')
-            # settings_obj.smtp_host = data.get('smtp_host')
-            # ... etc
-            # settings_obj.save()
+            # Guardar configuraciones en el modelo SystemSetting para persistencia real
+            from apps.settings.models import SystemSetting
             
-            # Para propósitos de demostración, guardaremos algunos en session
-            request.session['site_settings'] = data
+            # Mapeo de campos de la vista con llaves de SystemSetting
+            settings_map = {
+                'system_name': {'name': 'Nombre del Sistema', 'type': 'STRING', 'cat': 'SYSTEM'},
+                'timezone': {'name': 'Zona Horaria', 'type': 'STRING', 'cat': 'SYSTEM'},
+                'language': {'name': 'Idioma', 'type': 'STRING', 'cat': 'SYSTEM'},
+                'maintenance_mode': {'name': 'Modo Mantenimiento', 'type': 'BOOLEAN', 'cat': 'SYSTEM'},
+                
+                # Email SMTP
+                'smtp_host': {'name': 'Servidor SMTP', 'type': 'STRING', 'cat': 'EMAIL'},
+                'smtp_port': {'name': 'Puerto SMTP', 'type': 'INTEGER', 'cat': 'EMAIL'},
+                'smtp_user': {'name': 'Usuario SMTP', 'type': 'STRING', 'cat': 'EMAIL'},
+                'smtp_password': {'name': 'Contraseña SMTP', 'type': 'PASSWORD', 'cat': 'EMAIL'},
+                'from_email': {'name': 'Email Remitente', 'type': 'STRING', 'cat': 'EMAIL'},
+                'use_tls': {'name': 'Usar TLS', 'type': 'BOOLEAN', 'cat': 'EMAIL'},
+                
+                # SRI
+                'sri_environment': {'name': 'Ambiente SRI', 'type': 'STRING', 'cat': 'SRI'},
+                'sri_auto_send': {'name': 'Envío Automático SRI', 'type': 'BOOLEAN', 'cat': 'SRI'},
+                'sri_auto_email': {'name': 'Email Automático SRI', 'type': 'BOOLEAN', 'cat': 'SRI'},
+            }
             
-            # Si necesitas actualizar configuraciones de Django en tiempo real:
-            # Nota: Esto solo afectará a la instancia actual del servidor
+            for key, info in settings_map.items():
+                if key in data:
+                    val = str(data[key])
+                    # Caso especial para booleanos
+                    if info['type'] == 'BOOLEAN':
+                        val = 'true' if data[key] else 'false'
+                    
+                    setting_obj, created = SystemSetting.objects.get_or_create(
+                        key=key.upper(),
+                        defaults={
+                            'name': info['name'],
+                            'setting_type': info['type'],
+                            'category': info['cat'],
+                            'value': val
+                        }
+                    )
+                    if not created:
+                        # No actualizar password si viene vacío (placeholder)
+                        if info['type'] == 'PASSWORD' and not data[key]:
+                            continue
+                        setting_obj.value = val
+                        setting_obj.save()
+            
+            # Actualizar configuraciones de Django en tiempo real para esta instancia
             if 'smtp_host' in data:
                 django_settings.EMAIL_HOST = data['smtp_host']
             if 'smtp_port' in data:
@@ -3686,55 +3726,212 @@ def storage_settings(request):
 @staff_required
 @require_http_methods(["POST"])
 def storage_migrate(request):
-    """Migración real de archivos locales a la nube"""
+    """
+    Migración inteligente de archivos locales a la nube con reestructuración:
+    [empresa]/[tipo]/[año]/[mes]/[archivo]
+    Esta versión itera sobre los registros de la DB para asegurar que cada archivo
+    se asocie correctamente a su empresa y tipo.
+    """
     import os
-    import boto3
     from django.conf import settings
+    from django.core.files.base import ContentFile
+    from apps.certificates.models import DigitalCertificate
+    from apps.sri_integration.models import ElectronicDocument, CreditNote, DebitNote, Retention
+    from apps.billing.models import PlanPurchase
+    from apps.companies.models import Company
+    from apps.settings.models import SystemSetting
+    import logging
+
+    logger = logging.getLogger(__name__)
     
     try:
+        # 1. Verificar configuración S3
         def get_val(key, default=''):
             obj = SystemSetting.objects.filter(key=key).first()
             return obj.value if obj else default
 
-        access_key = get_val('S3_ACCESS_KEY', '').strip()
-        secret_key = get_val('S3_SECRET_KEY', '').replace(' ', '+').strip()
-        bucket_name = get_val('S3_BUCKET_NAME', '').strip()
-        endpoint_url = get_val('S3_ENDPOINT_URL', '').strip()
-        region = get_val('S3_REGION', '').strip()
+        active = get_val('STORAGE_ACTIVE', 'false') == 'true'
+        if not active:
+            messages.error(request, "Debe activar el almacenamiento S3 antes de iniciar la migración.")
+            return redirect('custom_admin:storage_settings')
 
-        if not all([access_key, secret_key, bucket_name, endpoint_url]):
-            raise Exception("Por favor, configure y guarde todas las credenciales del Bucket primero.")
+        # 2. Modelos a procesar
+        # Estructura: (Modelo, [Campos de archivo])
+        models_to_process = [
+            (DigitalCertificate, ['certificate_file']),
+            (ElectronicDocument, ['xml_file', 'signed_xml_file', 'pdf_file']),
+            (CreditNote, ['xml_file', 'signed_xml_file', 'pdf_file']),
+            (DebitNote, ['xml_file', 'signed_xml_file', 'pdf_file']),
+            (Retention, ['xml_file', 'signed_xml_file', 'pdf_file']),
+            (PlanPurchase, ['payment_receipt']),
+            (Company, ['logo']),
+            (User, ['profile_picture']),
+        ]
 
-        from botocore.client import Config
-        session = boto3.session.Session()
-        client = session.client('s3',
-            region_name=region if region else None,
-            endpoint_url=endpoint_url,
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            config=Config(
-                signature_version='s3v4',
-                s3={'addressing_style': 'virtual'}
-            )
-        )
-
-        media_root = settings.MEDIA_ROOT
-        base_folder = 'apivendo'
         upload_count = 0
+        error_count = 0
+        total_found = 0
+        skipped_count = 0
 
-        # Subir todos los archivos locales
-        if os.path.exists(media_root):
-            for root, dirs, files in os.walk(media_root):
-                for file in files:
-                    local_path = os.path.join(root, file)
-                    relative_path = os.path.relpath(local_path, media_root)
-                    s3_path = f"{base_folder}/{relative_path}".replace('\\', '/')
-                    client.upload_file(local_path, bucket_name, s3_path, ExtraArgs={'ACL': 'public-read'})
-                    upload_count += 1
+        for model_class, fields in models_to_process:
+            queryset = model_class.objects.all()
+            for obj in queryset:
+                for field_name in fields:
+                    file_field = getattr(obj, field_name)
+                    if not file_field:
+                        continue
                     
-        messages.success(request, f'Se migraron exitosamente {upload_count} archivos locales a la carpeta "{base_folder}/" en el bucket.')
+                    total_found += 1
+                    
+                    # Obtener ruta local absoluta para verificar existencia
+                    # Importante: name puede ser una ruta relativa o ya externa
+                    try:
+                        name = str(file_field.name)
+                        # Si ya tiene una ruta organizada (empieza por algo que no sea 'facturas/' o 'firmas/'), 
+                        # podrías querer saltarlo, pero aquí forzaremos la organización solicitada.
+                        
+                        local_path = os.path.join(settings.MEDIA_ROOT, name)
+                        
+                        if not os.path.exists(local_path):
+                            # Si no está en media, probar en storage/ (para certificados legacy)
+                            if model_class == DigitalCertificate:
+                                legacy_path = os.path.join(settings.BASE_DIR, 'storage', name)
+                                if os.path.exists(legacy_path):
+                                    local_path = legacy_path
+                        
+                        if os.path.exists(local_path):
+                            with open(local_path, 'rb') as f:
+                                content = f.read()
+                            
+                            # Obtener solo el nombre del archivo
+                            filename = os.path.basename(name)
+                            
+                            # 3. GUARDAR: Esto invoca el upload_to actualizado y sube al Bucket
+                            # El storage actual (DynamicMediaStorage) se encargará de enviarlo a S3
+                            logger.warning(f"[MIGRATION] Guardando {filename} usando storage: {file_field.storage.__class__.__name__}")
+                            file_field.save(filename, ContentFile(content), save=True)
+                            upload_count += 1
+                        else:
+                            skipped_count += 1
+                            logger.warning(f"Archivo local no encontrado para {model_class.__name__} {obj.id}: {name}")
+                            
+                    except Exception as e:
+                        error_count += 1
+                        logger.error(f"Error migrando {model_class.__name__} field {field_name}: {str(e)}")
+
+        messages.success(
+            request, 
+            f'¡Migración exitosa! Se procesaron {total_found} registros: '
+            f'{upload_count} archivos subidos al bucket, '
+            f'{skipped_count} no encontrados localmente, '
+            f'{error_count} errores.'
+        )
+        
     except Exception as e:
-        messages.error(request, f'Error durante la migración: {str(e)}')
+        messages.error(request, f'Error crítico durante la migración: {str(e)}')
+        logger.exception("Error en storage_migrate")
+        
+    return redirect('custom_admin:storage_settings')
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def storage_create_structure(request):
+    """
+    Crea la estructura de carpetas inicial en el bucket S3:
+    facturacion/
+        certificados/[empresa]/
+        pagos/[empresa]/[año]/[mes]/
+        facturas/[empresa]/PDF/[año]/[mes]/
+        facturas/[empresa]/XML/[año]/[mes]/
+    """
+    import os
+    import re
+    from django.utils import timezone
+    from django.core.files.base import ContentFile
+    from apps.companies.models import Company
+    from apps.core.storage import DynamicMediaStorage
+    from apps.settings.models import SystemSetting
+    import logging
+
+    logger = logging.getLogger(__name__)
+    
+    # Solo funciona si S3 está activo
+    active = SystemSetting.objects.filter(key='STORAGE_ACTIVE').first()
+    if not active or active.value != 'true':
+        messages.error(request, "Debe activar el almacenamiento S3 para crear la estructura.")
+        return redirect('custom_admin:storage_settings')
+
+    try:
+        storage_engine = DynamicMediaStorage().current
+        from django.core.files.storage import FileSystemStorage
+        is_s3 = not isinstance(storage_engine, FileSystemStorage)
+        
+        # Guardar en qué motor estamos para el mensaje final
+        engine_name = "Cloud Bucket (S3)" if is_s3 else "Almacenamiento Local (DISCO)"
+        
+        if not is_s3:
+            # Si el usuario cree que activó S3 pero estamos en local, algo falló en la inicialización
+            active_s3 = SystemSetting.objects.filter(key='STORAGE_ACTIVE').first()
+            if active_s3 and active_s3.value == 'true':
+                messages.warning(request, "⚠️ El motor reporta Local pero STORAGE_ACTIVE está en 'true'. Verifique logs para errores de conexión S3.")
+            else:
+                messages.info(request, "ℹ️ El motor de almacenamiento actual es LOCAL. Las carpetas se crearán en el servidor.")
+
+        companies = Company.objects.all()
+        now = timezone.now()
+        year = now.year
+        months_es = {
+            1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+            5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+            9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+        }
+        month_name = months_es.get(now.month, 'desconocido')
+        
+        folders_created = 0
+        
+        for company in companies:
+            # Normalizar nombre de empresa
+            try:
+                business_name = company.business_name.lower()
+                company_name = re.sub(r'[^a-z0-9_]', '_', business_name).strip('_')
+            except:
+                company_name = company.ruc or f"empresa_{company.id}"
+            
+            # 1. Certificados
+            # Estructura: certificados/[empresa]/
+            cert_path = f"certificados/{company_name}/.keep"
+            if not storage_engine.exists(cert_path):
+                storage_engine.save(cert_path, ContentFile(b' '))
+                folders_created += 1
+            
+            # 2. Pagos
+            # Estructura: pagos/[empresa]/[año]/[mes]/
+            pago_path = f"pagos/{company_name}/{year}/{month_name}/.keep"
+            if not storage_engine.exists(pago_path):
+                storage_engine.save(pago_path, ContentFile(b' '))
+                folders_created += 1
+                
+            # 3. Facturas PDF
+            # Estructura: facturas/[empresa]/PDF/[año]/[mes]/
+            pdf_path = f"facturas/{company_name}/PDF/{year}/{month_name}/.keep"
+            if not storage_engine.exists(pdf_path):
+                storage_engine.save(pdf_path, ContentFile(b' '))
+                folders_created += 1
+                
+            # 4. Facturas XML
+            # Estructura: facturas/[empresa]/XML/[año]/[mes]/
+            xml_path = f"facturas/{company_name}/XML/{year}/{month_name}/.keep"
+            if not storage_engine.exists(xml_path):
+                storage_engine.save(xml_path, ContentFile(b' '))
+                folders_created += 1
+
+        target = "el Bucket de la nube" if is_s3 else "el almacenamiento local"
+        messages.success(request, f"Estructura de carpetas inicializada en {target}. Se crearon {folders_created} archivos .keep para {companies.count()} empresas.")
+        
+    except Exception as e:
+        messages.error(request, f"Error al crear la estructura: {str(e)}")
+        logger.exception("Error en storage_create_structure")
         
     return redirect('custom_admin:storage_settings')
 

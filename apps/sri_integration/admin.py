@@ -101,12 +101,16 @@ class ElectronicDocumentAdmin(admin.ModelAdmin):
             
         xml_file = document.signed_xml_file or document.xml_file
         
-        if xml_file and os.path.exists(str(xml_file)):
-            with open(str(xml_file), 'rb') as f:
-                response = HttpResponse(f.read(), content_type='application/xml')
+        if xml_file:
+            try:
+                content = xml_file.read()
+                response = HttpResponse(content, content_type='application/xml')
                 response['Content-Disposition'] = f'attachment; filename="{document.document_number}.xml"'
                 return response
-        raise Http404("Archivo XML no encontrado")
+            except Exception as e:
+                logger.error(f"Error downloading XML: {e}")
+                raise Http404("Archivo XML no encontrado en el almacenamiento")
+        raise Http404("Archivo XML no definido")
     
     def download_pdf(self, request, pk):
         """Descargar archivo PDF"""
@@ -115,12 +119,16 @@ class ElectronicDocumentAdmin(admin.ModelAdmin):
         except ElectronicDocument.DoesNotExist:
             raise Http404("Documento no encontrado")
         
-        if document.pdf_file and os.path.exists(str(document.pdf_file)):
-            with open(str(document.pdf_file), 'rb') as f:
-                response = HttpResponse(f.read(), content_type='application/pdf')
+        if document.pdf_file:
+            try:
+                content = document.pdf_file.read()
+                response = HttpResponse(content, content_type='application/pdf')
                 response['Content-Disposition'] = f'attachment; filename="{document.document_number}.pdf"'
                 return response
-        raise Http404("Archivo PDF no encontrado")
+            except Exception as e:
+                logger.error(f"Error downloading PDF: {e}")
+                raise Http404("Archivo PDF no encontrado en el almacenamiento")
+        raise Http404("Archivo PDF no definido")
     
     def preview_document(self, request, pk):
         """Vista previa del documento"""
@@ -161,19 +169,19 @@ class ElectronicDocumentAdmin(admin.ModelAdmin):
         """Enlaces a archivos generados"""
         links = []
         
-        if obj.xml_file and os.path.exists(str(obj.xml_file)):
+        if obj.xml_file:
             links.append(
                 f'<a href="/admin/sri_integration/electronicdocument/{obj.pk}/download_xml/" '
                 f'style="color: blue;" title="Descargar XML">📄 XML</a>'
             )
         
-        if obj.signed_xml_file and os.path.exists(str(obj.signed_xml_file)):
+        if obj.signed_xml_file:
             links.append(
                 f'<a href="/admin/sri_integration/electronicdocument/{obj.pk}/download_xml/" '
                 f'style="color: green;" title="Descargar XML Firmado">🔐 XML Firmado</a>'
             )
         
-        if obj.pdf_file and os.path.exists(str(obj.pdf_file)):
+        if obj.pdf_file:
             links.append(
                 f'<a href="/admin/sri_integration/electronicdocument/{obj.pk}/download_pdf/" '
                 f'style="color: red;" title="Descargar PDF">📋 PDF</a>'

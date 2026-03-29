@@ -166,25 +166,19 @@ class GlobalCertificateManager:
                 logger.error(f"No active certificate for company {company_id}")
                 return None
             
-            # Verificar que el archivo existe
-            if not certificate_obj.certificate_file:
-                logger.error(f"Certificate file not found for company {company_id}")
-                return None
-            
-            cert_path = certificate_obj.certificate_file.path
-            if not os.path.exists(cert_path):
-                logger.error(f"Certificate file does not exist: {cert_path}")
-                return None
-            
             # Obtener password descifrado
             password = self._get_decrypted_password(certificate_obj)
             if not password:
                 logger.error(f"Could not decrypt password for company {company_id}")
                 return None
-            
-            # Cargar archivo P12
-            with open(cert_path, 'rb') as f:
-                p12_data = f.read()
+
+            # Leer archivo P12 del almacenamiento (compatible con S3 y Local)
+            try:
+                with certificate_obj.certificate_file.open('rb') as f:
+                    p12_data = f.read()
+            except Exception as e:
+                logger.error(f"Could not read certificate file for company {company_id}: {str(e)}")
+                return None
             
             # Cargar P12 con cryptography (sin subprocess ni openssl externo)
             # load_key_and_certificates selecciona automáticamente la clave

@@ -14,69 +14,82 @@ class DynamicMediaStorage(Storage):
     def _initialize_s3(self):
         try:
             from apps.settings.models import SystemSetting
-            from storages.backends.s3boto3 import S3Boto3Storage
             
-            # Chequear activo
+            # Obtener configuraciones de la base de datos
             active_setting = SystemSetting.objects.filter(key='STORAGE_ACTIVE').first()
-            if not active_setting or active_setting.value != 'true':
+            if not active_setting or active_setting.value.lower() != 'true':
                 self._is_s3_active = False
                 return None
-                
-            provider = SystemSetting.objects.filter(key='S3_PROVIDER').first()
+
+            bucket_name = SystemSetting.objects.filter(key='S3_BUCKET_NAME').first()
             region = SystemSetting.objects.filter(key='S3_REGION').first()
             access_key = SystemSetting.objects.filter(key='S3_ACCESS_KEY').first()
             secret_key = SystemSetting.objects.filter(key='S3_SECRET_KEY').first()
-            bucket_name = SystemSetting.objects.filter(key='S3_BUCKET_NAME').first()
-            endpoint_url = SystemSetting.objects.filter(key='S3_ENDPOINT_URL').first()
+            endpoint = SystemSetting.objects.filter(key='S3_ENDPOINT_URL').first()
             cdn_domain = SystemSetting.objects.filter(key='S3_CDN_DOMAIN').first()
-            
-            if not all([access_key, secret_key, bucket_name, endpoint_url]):
+
+            if not all([bucket_name, access_key, secret_key, endpoint]):
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning("[STORAGE] Faltan configuraciones críticas para S3 en SystemSetting")
                 self._is_s3_active = False
                 return None
-                
+
             # Solo recrear si cambió el bucket (optimización simple)
-            if self._s3_storage and self._last_bucket == bucket_name.value:
+            if self._s3_storage and getattr(self, '_last_bucket', None) == bucket_name.value:
                 self._is_s3_active = True
                 return self._s3_storage
-                
+
             import boto3
-            from botocore.client import Config
+            from storages.backends.s3boto3 import S3Boto3Storage
             
+            # Configuración para DigitalOcean Spaces / S3
+            # Nota: Usamos aws_access_key_id y aws_secret_access_key que son los nombres estándar
             kwargs = {
                 'access_key': access_key.value.strip(),
-                'secret_key': secret_key.value.replace(' ', '+').strip(),
+                'secret_key': secret_key.value.strip(),
                 'bucket_name': bucket_name.value.strip(),
-                'endpoint_url': endpoint_url.value.strip(),
-                'location': 'apivendo',  # Carpeta raíz en el bucket
+                'location': 'facturacion',  # Carpeta raíz en el bucket
+                'region_name': region.value.strip() if region else None,
+                'endpoint_url': endpoint.value.strip(),
                 'default_acl': 'public-read',
-                'querystring_auth': False,
-                'config': Config(
-                    signature_version='s3v4',
-                    s3={'addressing_style': 'virtual'}
-                ),
+                'file_overwrite': False,
+                'custom_domain': cdn_domain.value.strip() if cdn_domain and cdn_domain.value else None,
             }
-            if region and region.value:
-                kwargs['region_name'] = region.value.strip()
-            if cdn_domain and cdn_domain.value:
-                kwargs['custom_domain'] = cdn_domain.value.strip()
-                
+
             self._s3_storage = S3Boto3Storage(**kwargs)
-            self._last_bucket = bucket_name.value
             self._is_s3_active = True
+            self._last_bucket = bucket_name.value
+            
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"[STORAGE] Motor S3 inicializado correctamente en bucket: {bucket_name.value}")
+            
             return self._s3_storage
+
         except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"[STORAGE] Error crítico inicializando S3: {str(e)}")
             self._is_s3_active = False
             return None
 
     @property
     def current(self):
         s3 = self._initialize_s3()
-        return s3 if s3 else self._local_storage
+        if s3:
+            return s3
+        return self._local_storage
 
     def _open(self, name, mode='rb'):
         return self.current._open(name, mode)
 
     def _save(self, name, content):
+        import logging
+        logger = logging.getLogger(__name__)
+        engine = "S3" if self._is_s3_active else "LOCAL"
+        # Usamos warning para asegurar que se vea en los logs de Docker con LOG_LEVEL=INFO
+        logger.warning(f"[STORAGE] Guardando {name} en motor {engine}")
         return self.current._save(name, content)
 
     def path(self, name):

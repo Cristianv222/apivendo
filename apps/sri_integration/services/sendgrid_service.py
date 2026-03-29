@@ -9,14 +9,28 @@ logger = logging.getLogger("sri_integration")
 
 class SendGridService:
     def __init__(self):
+        # 1. Intentar desde variables de entorno
         self.api_key = os.getenv("SENDGRID_API_KEY")
+        
+        # 2. Fallback: Intentar desde SystemSetting (Base de Datos)
         if not self.api_key:
-            logger.warning("SENDGRID_API_KEY no configurada")
+            try:
+                from apps.settings.models import SystemSetting
+                setting = SystemSetting.objects.filter(key="SENDGRID_API_KEY").first()
+                if setting:
+                    self.api_key = setting.value
+                    logger.info("SendGrid API Key recuperada desde SystemSetting")
+            except:
+                pass
+                
+        if not self.api_key:
+            logger.warning("SENDGRID_API_KEY no configurada (ni en ENV ni en DB)")
+        
         self.sg = SendGridAPIClient(self.api_key) if self.api_key else None
         self.from_email = "noreply@fronteratech.ec"
         self.from_name = "Frontera Tech - API VENDO - Facturacion"
     
-    def send_invoice(self, to_email, invoice_number, xml_path, pdf_path, cliente_nombre=None):
+    def send_invoice(self, to_email, invoice_number, xml_content=None, pdf_content=None, cliente_nombre=None):
         """Envía factura con archivos adjuntos usando SendGrid API directamente"""
         if not self.sg:
             logger.error("SendGrid no está configurado")
@@ -156,9 +170,8 @@ class SendGridService:
             )
             
             # Adjuntar XML
-            if xml_path and os.path.exists(xml_path):
-                with open(xml_path, "rb") as f:
-                    xml_data = base64.b64encode(f.read()).decode()
+            if xml_content:
+                xml_data = base64.b64encode(xml_content).decode()
                 xml_attachment = Attachment(
                     FileContent(xml_data),
                     FileName(f"factura_{invoice_number}.xml"),
@@ -166,14 +179,11 @@ class SendGridService:
                     Disposition("attachment")
                 )
                 message.add_attachment(xml_attachment)
-                logger.info(f"XML adjuntado: {xml_path}")
-            else:
-                logger.warning(f"XML no encontrado: {xml_path}")
+                logger.info(f"XML adjuntado desde contenido")
             
             # Adjuntar PDF
-            if pdf_path and os.path.exists(pdf_path):
-                with open(pdf_path, "rb") as f:
-                    pdf_data = base64.b64encode(f.read()).decode()
+            if pdf_content:
+                pdf_data = base64.b64encode(pdf_content).decode()
                 pdf_attachment = Attachment(
                     FileContent(pdf_data),
                     FileName(f"factura_{invoice_number}.pdf"),
@@ -181,9 +191,7 @@ class SendGridService:
                     Disposition("attachment")
                 )
                 message.add_attachment(pdf_attachment)
-                logger.info(f"PDF adjuntado: {pdf_path}")
-            else:
-                logger.warning(f"PDF no encontrado: {pdf_path}")
+                logger.info(f"PDF adjuntado desde contenido")
             
             # Enviar
             response = self.sg.send(message)

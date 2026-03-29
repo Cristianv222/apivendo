@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Models for users app
 Sistema de Usuarios personalizado para VENDO_SRI
@@ -8,6 +8,12 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
+import re
+
+def user_profile_pic_upload_path(instance, filename):
+    """Genera la ruta para la foto de perfil del usuario"""
+    email_slug = re.sub(r'[^a-z0-9_]', '_', instance.email.lower()).strip('_')
+    return f"usuarios/{email_slug}/foto/{filename}"
 
 
 class UserManager(BaseUserManager):
@@ -84,7 +90,7 @@ class User(AbstractUser):
     
     profile_picture = models.ImageField(
         _('profile picture'),
-        upload_to='profiles/',
+        upload_to=user_profile_pic_upload_path,
         blank=True,
         null=True,
         help_text=_('Optional profile picture.')

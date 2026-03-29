@@ -206,6 +206,21 @@ Configuración de Almacenamiento
                 </button>
             </form>
         </div>
+
+        <div class="migration-box mt-4 border-info">
+            <div class="migration-box-title text-info">
+                <i class="fas fa-folder-plus"></i> Estructura de Carpetas
+            </div>
+            <p class="text-muted" style="font-size: 0.85rem; line-height: 1.5;">
+                Inicializa la estructura base de carpetas solicitada para todas las empresas en el bucket S3: <strong>certificados, pagos, facturas PDF/XML</strong>. 
+            </p>
+            <form method="post" action="{% url 'custom_admin:create_structure' %}" id="structureForm">
+                {% csrf_token %}
+                <button type="button" class="btn btn-outline-info w-100 fw-bold py-2 mt-2" onclick="confirmStructure()">
+                    <i class="fas fa-sitemap me-2"></i> Crear Estructura Base
+                </button>
+            </form>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -248,6 +263,31 @@ Configuración de Almacenamiento
                     }
                 });
                 document.getElementById('migrateForm').submit();
+            }
+        });
+    }
+
+    function confirmStructure() {
+        Swal.fire({
+            title: '¿Crear Estructura?',
+            text: "Se generarán las rutas iniciales en el Bucket (certificados, pagos, facturas PDF/XML) para todas las empresas actuales.",
+            icon: 'info',
+            showCancelButton: true,
+            confirmButtonColor: '#0dcaf0',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Sí, Crear Estructura',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Swal.fire({
+                    title: 'Procesando...',
+                    text: 'Creando estructura en S3',
+                    allowOutsideClick: false,
+                    didOpen: () => {
+                        Swal.showLoading()
+                    }
+                });
+                document.getElementById('structureForm').submit();
             }
         });
     }

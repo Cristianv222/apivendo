@@ -25,9 +25,17 @@ from apps.companies.models import Company
 logger = logging.getLogger(__name__)
 
 
+import re
+
 def certificate_upload_path(instance, filename):
-    """Genera la ruta para subir certificados"""
-    return f'certificates/{instance.company.ruc}/{filename}'
+    """Genera la ruta para subir certificados según la nueva estructura"""
+    try:
+        business_name = instance.company.business_name.lower()
+        company_name = re.sub(r'[^a-z0-9_]', '_', business_name).strip('_')
+    except:
+        company_name = instance.company.ruc
+    
+    return f'certificados/{company_name}/{filename}'
 
 
 class DigitalCertificate(BaseModel):
@@ -321,14 +329,13 @@ class DigitalCertificate(BaseModel):
                 return False
             
             # Leer el archivo P12
-            cert_data = None
-            if hasattr(self.certificate_file, 'path') and os.path.exists(self.certificate_file.path):
-                with open(self.certificate_file.path, 'rb') as f:
+            try:
+                # Usamos open() del FieldFile que es compatible con S3 y Local
+                with self.certificate_file.open('rb') as f:
                     cert_data = f.read()
-            elif hasattr(self.certificate_file, 'read'):
-                self.certificate_file.seek(0)
-                cert_data = self.certificate_file.read()
-                self.certificate_file.seek(0)
+            except Exception as e:
+                logger.error(f"Error leyendo archivo de certificado: {e}")
+                return False
             
             if not cert_data:
                 return False
@@ -401,13 +408,18 @@ class DigitalCertificate(BaseModel):
             cert_data = None
             
             # Intentar obtener el contenido del archivo
-            if hasattr(self.certificate_file, 'path') and os.path.exists(self.certificate_file.path):
-                with open(self.certificate_file.path, 'rb') as f:
+            try:
+                with self.certificate_file.open('rb') as f:
                     cert_data = f.read()
-            elif hasattr(self.certificate_file, 'read'):
-                self.certificate_file.seek(0)
-                cert_data = self.certificate_file.read()
-                self.certificate_file.seek(0)
+            except Exception as e:
+                logger.debug(f"Error leyendo certificado en _extract_certificate_info (intento 1): {e}")
+                # Fallback: intentar lectura directa si el objeto lo soporta
+                try:
+                    if hasattr(self.certificate_file, 'read'):
+                        self.certificate_file.seek(0)
+                        cert_data = self.certificate_file.read()
+                except Exception as e2:
+                    logger.error(f"Error en fallback de lectura: {e2}")
             
             if cert_data:
                 # Generar fingerprint del archivo
@@ -482,17 +494,23 @@ class DigitalCertificate(BaseModel):
             if not self.certificate_file:
                 return None
             
-            if hasattr(self.certificate_file, 'path') and os.path.exists(self.certificate_file.path):
-                with open(self.certificate_file.path, 'rb') as f:
+            try:
+                with self.certificate_file.open('rb') as f:
                     content = f.read()
-                    logger.info(f"Certificado leído desde media: {len(content)} bytes")
+                    logger.info(f"Certificado leído desde almacenamiento (S3/Media): {len(content)} bytes")
                     return content
-            elif hasattr(self.certificate_file, 'read'):
-                self.certificate_file.seek(0)
-                content = self.certificate_file.read()
-                self.certificate_file.seek(0)
-                logger.info(f"Certificado leído desde file object: {len(content)} bytes")
-                return content
+            except Exception as e:
+                # Fallback: intentar lectura directa si el objeto lo soporta
+                if hasattr(self.certificate_file, 'read'):
+                    try:
+                        self.certificate_file.seek(0)
+                        content = self.certificate_file.read()
+                        self.certificate_file.seek(0)
+                        logger.info(f"Certificado leído desde file object: {len(content)} bytes")
+                        return content
+                    except:
+                        pass
+                raise e
             
             return None
             

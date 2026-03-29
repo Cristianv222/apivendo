@@ -9,7 +9,10 @@ Modelos para integración con el SRI
 ✅ ENHANCED CON AUTO-SEND CONFIGURATION
 """
 
-import uuid
+import os
+import re
+import logging
+from datetime import date
 from django.db import models, transaction
 from django.db.models import F
 from django.utils.translation import gettext_lazy as _
@@ -17,6 +20,41 @@ from django.core.exceptions import ValidationError
 from decimal import Decimal, ROUND_HALF_UP
 from apps.core.models import BaseModel
 from apps.companies.models import Company
+
+# Configuración de logging
+logger = logging.getLogger(__name__)
+
+
+def get_sri_document_upload_path(instance, filename):
+    """
+    Genera la ruta de almacenamiento según: 
+    facturas/[nombre-empresa]/[xml|pdf]/[año]/[mes]/[archivo]
+    """
+    # 1. Nombre de empresa normalizado
+    try:
+        business_name = instance.company.business_name.lower()
+        company_name = re.sub(r'[^a-z0-9_]', '_', business_name).strip('_')
+    except:
+        company_name = "desconocida"
+    
+    # 2. Tipo de carpeta (xml o pdf)
+    ext = os.path.splitext(filename)[1].lower()
+    folder_type = 'xml' if 'xml' in ext else 'pdf'
+    
+    # 3. Fecha (año y mes en español)
+    issue_date = getattr(instance, 'issue_date', date.today())
+    if not isinstance(issue_date, date):
+        issue_date = date.today()
+    
+    year = issue_date.year
+    months_es = {
+        1: 'enero', 2: 'febrero', 3: 'marzo', 4: 'abril',
+        5: 'mayo', 6: 'junio', 7: 'julio', 8: 'agosto',
+        9: 'septiembre', 10: 'octubre', 11: 'noviembre', 12: 'diciembre'
+    }
+    month_name = months_es.get(issue_date.month, 'desconocido')
+    
+    return f"facturas/{company_name}/{folder_type.upper()}/{year}/{month_name}/{filename}"
 
 
 class SRIConfiguration(BaseModel):
@@ -44,10 +82,6 @@ class SRIConfiguration(BaseModel):
         default='TEST',
         help_text=_('SRI environment')
     )
-    
-    # ✅ URLS AUTOMÁTICAS - NO MÁS CAMPOS MANUALES
-    # Los campos reception_url y authorization_url se generan automáticamente
-    # según el ambiente usando @property
     
     # Configuración de establecimiento
     establishment_code = models.CharField(
@@ -397,8 +431,6 @@ class SRIConfiguration(BaseModel):
             
         except Exception as e:
             # No detener el guardado principal si la sincronización falla
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"Error sincronizando SRIConfiguration con Company: {e}")
     
     def __str__(self):
@@ -702,19 +734,19 @@ class ElectronicDocument(BaseModel):
     # Archivos generados
     xml_file = models.FileField(
         _('XML file'),
-        upload_to='invoices/xml/',
+        upload_to=get_sri_document_upload_path,
         blank=True
     )
     
     signed_xml_file = models.FileField(
         _('signed XML file'),
-        upload_to='invoices/xml/',
+        upload_to=get_sri_document_upload_path,
         blank=True
     )
     
     pdf_file = models.FileField(
         _('PDF file'),
-        upload_to='invoices/pdf/',
+        upload_to=get_sri_document_upload_path,
         blank=True
     )
     
@@ -1259,9 +1291,9 @@ class CreditNote(BaseModel):
     
     # Status y archivos
     status = models.CharField(_('status'), max_length=20, choices=STATUS_CHOICES, default='DRAFT')
-    xml_file = models.FileField(_('XML file'), upload_to='credit_notes/xml/', blank=True)
-    signed_xml_file = models.FileField(_('signed XML file'), upload_to='credit_notes/xml/', blank=True)
-    pdf_file = models.FileField(_('PDF file'), upload_to='credit_notes/pdf/', blank=True)
+    xml_file = models.FileField(_('XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    signed_xml_file = models.FileField(_('signed XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    pdf_file = models.FileField(_('PDF file'), upload_to=get_sri_document_upload_path, blank=True)
     
     # SRI response
     sri_authorization_code = models.CharField(_('SRI authorization code'), max_length=49, blank=True)
@@ -1449,9 +1481,9 @@ class DebitNote(BaseModel):
     
     # Status y archivos
     status = models.CharField(_('status'), max_length=20, choices=ElectronicDocument.STATUS_CHOICES, default='DRAFT')
-    xml_file = models.FileField(_('XML file'), upload_to='debit_notes/xml/', blank=True)
-    signed_xml_file = models.FileField(_('signed XML file'), upload_to='debit_notes/xml/', blank=True)
-    pdf_file = models.FileField(_('PDF file'), upload_to='debit_notes/pdf/', blank=True)
+    xml_file = models.FileField(_('XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    signed_xml_file = models.FileField(_('signed XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    pdf_file = models.FileField(_('PDF file'), upload_to=get_sri_document_upload_path, blank=True)
     
     # SRI response
     sri_authorization_code = models.CharField(_('SRI authorization code'), max_length=49, blank=True)
@@ -1564,9 +1596,9 @@ class Retention(BaseModel):
     
     # Status y archivos
     status = models.CharField(_('status'), max_length=20, choices=ElectronicDocument.STATUS_CHOICES, default='DRAFT')
-    xml_file = models.FileField(_('XML file'), upload_to='retentions/xml/', blank=True)
-    signed_xml_file = models.FileField(_('signed XML file'), upload_to='retentions/xml/', blank=True)
-    pdf_file = models.FileField(_('PDF file'), upload_to='retentions/pdf/', blank=True)
+    xml_file = models.FileField(_('XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    signed_xml_file = models.FileField(_('signed XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    pdf_file = models.FileField(_('PDF file'), upload_to=get_sri_document_upload_path, blank=True)
     
     # SRI response
     sri_authorization_code = models.CharField(_('SRI authorization code'), max_length=49, blank=True)
@@ -1697,9 +1729,9 @@ class PurchaseSettlement(BaseModel):
     
     # Status y archivos
     status = models.CharField(_('status'), max_length=20, choices=ElectronicDocument.STATUS_CHOICES, default='DRAFT')
-    xml_file = models.FileField(_('XML file'), upload_to='settlements/xml/', blank=True)
-    signed_xml_file = models.FileField(_('signed XML file'), upload_to='settlements/xml/', blank=True)
-    pdf_file = models.FileField(_('PDF file'), upload_to='settlements/pdf/', blank=True)
+    xml_file = models.FileField(_('XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    signed_xml_file = models.FileField(_('signed XML file'), upload_to=get_sri_document_upload_path, blank=True)
+    pdf_file = models.FileField(_('PDF file'), upload_to=get_sri_document_upload_path, blank=True)
     
     # SRI response
     sri_authorization_code = models.CharField(_('SRI authorization code'), max_length=49, blank=True)

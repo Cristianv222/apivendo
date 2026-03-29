@@ -23,7 +23,8 @@ class EmailService:
     
     def send_document_email(self, document):
         """
-        Envía un documento electrónico por email usando SOLO SendGrid
+        Envía un documento electrónico por email.
+        Prioridad: 1. SendGrid, 2. SMTP (Django Mail)
         """
         try:
             # Validaciones básicas
@@ -33,91 +34,106 @@ class EmailService:
             if not self.sri_config.email_enabled:
                 return False, "Email sending is disabled for this company"
             
-            # IMPORTAR Y USAR SENDGRID
+            # Obtener contenidos de archivos del almacenamiento
+            xml_content = None
+            pdf_content = None
+            
+            if document.signed_xml_file:
+                try: xml_content = document.signed_xml_file.read()
+                except: pass
+            
+            if not xml_content and document.xml_file:
+                try: xml_content = document.xml_file.read()
+                except: pass
+                
+            if document.pdf_file:
+                try: pdf_content = document.pdf_file.read()
+                except: pass
+
+            if not xml_content and not pdf_content:
+                return False, "No files available to send"
+
+            # 1. INTENTAR SENDGRID
             from apps.sri_integration.services.sendgrid_service import SendGridService
             sendgrid = SendGridService()
             
-            # Verificar configuración
-            if not sendgrid.api_key:
-                logger.error("❌ SendGrid API key not configured")
-                return False, "SendGrid API key not configured"
+            if sendgrid.api_key:
+                logger.info("📤 Usando SENDGRID para enviar factura")
+                success = sendgrid.send_invoice(
+                    to_email=document.customer_email,
+                    invoice_number=document.document_number,
+                    xml_content=xml_content,
+                    pdf_content=pdf_content,
+                    cliente_nombre=document.customer_name
+                )
+                if success:
+                    self._after_send_success(document)
+                    return True, "Email sent via SendGrid"
+
+            # 2. FALLBACK A SMTP (DJANGO MAIL)
+            logger.info("📤 Usando SMTP (Django Mail) como fallback")
+            from django.core.mail import EmailMessage, get_connection
+            from apps.settings.models import SystemSetting
             
-            # Obtener rutas de archivos
-            xml_path = None
-            pdf_path = None
-            
-            # XML firmado (preferido)
-            if document.signed_xml_file:
-                try:
-                    xml_path = document.signed_xml_file.path
-                    logger.info(f"✅ Using signed XML: {xml_path}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Cannot access signed XML: {e}")
-            
-            # XML regular si no hay firmado
-            if not xml_path and document.xml_file:
-                try:
-                    xml_path = document.xml_file.path
-                    logger.info(f"✅ Using regular XML: {xml_path}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Cannot access XML: {e}")
-            
-            # PDF
-            if document.pdf_file:
-                try:
-                    pdf_path = document.pdf_file.path
-                    logger.info(f"✅ Using PDF: {pdf_path}")
-                except Exception as e:
-                    logger.warning(f"⚠️ Cannot access PDF: {e}")
-            
-            # Debe tener al menos un archivo
-            if not xml_path and not pdf_path:
-                logger.error("❌ No files to send")
-                return False, "No files available to send"
-            
-            # Enviar con SendGrid
-            logger.info(f"📤 Sending invoice via SendGrid to {document.customer_email}")
-            
-            success = sendgrid.send_invoice(
-                to_email=document.customer_email,
-                invoice_number=document.document_number,
-                xml_path=xml_path if xml_path else "",
-                pdf_path=pdf_path if pdf_path else "",
-                cliente_nombre=document.customer_name
+            # Obtener configuración SMTP de la base de datos
+            def get_setting(key, default):
+                s = SystemSetting.objects.filter(key=key).first()
+                return s.get_typed_value() if s else default
+
+            host = get_setting('SMTP_HOST', 'smtp.gmail.com')
+            port = get_setting('SMTP_PORT', 587)
+            user = get_setting('SMTP_USER', '')
+            password = get_setting('SMTP_PASSWORD', '')
+            use_tls = get_setting('USE_TLS', True)
+            from_email = get_setting('FROM_EMAIL', user)
+
+            if not user or not password:
+                return False, "SMTP or SendGrid not configured"
+
+            connection = get_connection(
+                backend='django.core.mail.backends.smtp.EmailBackend',
+                host=host, port=port, username=user, password=password, use_tls=use_tls
             )
             
-            if success:
-                # Actualizar documento
-                document.email_sent = True
-                document.email_sent_date = timezone.now()
-                document.save()
-                
-                # Auditoría
-                try:
-                    AuditLog.objects.create(
-                        action='SEND_EMAIL_SENDGRID',
-                        model_name='ElectronicDocument',
-                        object_id=str(document.id),
-                        object_representation=f"SendGrid: {document.customer_email}",
-                        additional_data={
-                            'document_number': document.document_number,
-                            'customer': document.customer_name,
-                            'email': document.customer_email,
-                            'service': 'SendGrid'
-                        }
-                    )
-                except:
-                    pass  # No crítico si falla auditoría
-                
-                logger.info(f"✅ SendGrid email sent successfully to {document.customer_email}")
-                return True, f"Email sent successfully via SendGrid"
-            else:
-                logger.error(f"❌ SendGrid failed to send")
-                return False, "SendGrid failed to send email"
+            subject = f"Factura Electrónica {document.document_number}"
+            body = f"Estimado/a {document.customer_name or 'Cliente'},\n\nAdjuntamos su documento electrónico {document.document_number}.\n\nSaludos."
+            
+            email = EmailMessage(
+                subject=subject,
+                body=body,
+                from_email=from_email,
+                to=[document.customer_email],
+                connection=connection
+            )
+            
+            if xml_content:
+                email.attach(f"factura_{document.document_number}.xml", xml_content, 'application/xml')
+            if pdf_content:
+                email.attach(f"factura_{document.document_number}.pdf", pdf_content, 'application/pdf')
+            
+            email.send()
+            self._after_send_success(document)
+            return True, "Email sent via SMTP"
                 
         except Exception as e:
-            logger.error(f"❌ SendGrid error: {str(e)}")
+            logger.error(f"❌ Error enviando email: {str(e)}")
             return False, f"Error: {str(e)}"
+
+    def _after_send_success(self, document):
+        """Acciones post-envío exitoso"""
+        document.email_sent = True
+        document.email_sent_date = timezone.now()
+        document.save()
+        
+        try:
+            AuditLog.objects.create(
+                action='SEND_EMAIL',
+                model_name='ElectronicDocument',
+                object_id=str(document.id),
+                object_representation=f"Email a: {document.customer_email}",
+                additional_data={'document_number': document.document_number}
+            )
+        except: pass
     
     def send_authorization_notification(self, document):
         """
