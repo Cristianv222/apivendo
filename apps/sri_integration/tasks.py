@@ -27,19 +27,10 @@ def check_document_authorization_async(self, document_id):
     """
     ✅ TAREA PRINCIPAL: Verificar autorización de documento automáticamente
     """
-    lock_id = None
     try:
         document = ElectronicDocument.objects.get(id=document_id)
         company_id = document.company.id
         
-        # Lock por empresa (carril independiente para SRI)
-        lock_id = f"sri_company_work_{company_id}"
-        
-        # Si la empresa ya está operando (otro worker firmando), esperamos turno
-        if not cache.add(lock_id, "locked", timeout=30):
-            logger.info(f"⏳ [CELERY] Company {company_id} session active. Re-queuing auth check for doc {document_id}")
-            self.retry(countdown=10)
-            
         logger.info(f"🔄 [CELERY] Checking authorization for document {document_id} [Company: {company_id}]")
         
         # Obtener documento con lock para evitar condiciones de carrera
@@ -116,13 +107,13 @@ def process_document_async(self, document_id):
         document = ElectronicDocument.objects.get(id=document_id)
         company_id = document.company.id
         
-        # Lock por empresa (Carril dinámico)
-        # Esto garantiza que cada empresa tenga su propia "cola" secuencial
-        lock_id = f"sri_company_work_{company_id}"
+        # Lock por empresa (Carril dinámico para FIRMA/ENVIO)
+        # Solo bloqueamos el ENVIO para evitar errores de secuencia en el SRI
+        lock_id = f"sri_lock_sign_{company_id}"
         
-        # Intentar obtener el carril. Si está ocupado por otra tarea de la misma empresa, reintentar.
+        # Intentar obtener el candado. Si está ocupado por otra firma de la misma empresa, esperar turno.
         if not cache.add(lock_id, "locked", timeout=120):
-            logger.info(f"⏳ [CELERY] Dynamic queue for Company {company_id} is busy. Document {document_id} waiting its turn...")
+            logger.info(f"⏳ [CELERY] Signing lock for Company {company_id} is busy. Document {document_id} waiting its turn...")
             self.retry(countdown=5)
             
         logger.info(f"🚀 [CELERY] Initializing isolated processing for Company {company_id} | Doc {document_id}")
@@ -160,7 +151,7 @@ def process_document_async(self, document_id):
         # Liberar el carril de la empresa para la siguiente factura en cola
         if lock_id:
             cache.delete(lock_id)
-            logger.debug(f"🔓 [CELERY] Dynamic queue slot released for Company {company_id}")
+            logger.debug(f"🔓 [CELERY] Dynamic signing lock released for Company {company_id}")
 
 @shared_task
 def check_all_pending_authorizations():
