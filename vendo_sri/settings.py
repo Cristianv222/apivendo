@@ -740,6 +740,7 @@ LOGGING = {
 SRI_AUTO_SEND = config('SRI_AUTO_SEND', default=True, cast=bool)
 SRI_AUTO_SEND_AFTER_GENERATION = config('SRI_AUTO_SEND_AFTER_GENERATION', default=True, cast=bool)
 SRI_AUTO_AUTHORIZE_CHECK = config('SRI_AUTO_AUTHORIZE_CHECK', default=True, cast=bool)
+SRI_AUTO_EMAIL = config('SRI_AUTO_EMAIL', default=True, cast=bool)
 
 # Configuración de reintentos automáticos
 SRI_AUTO_RETRY_FAILED = config('SRI_AUTO_RETRY_FAILED', default=True, cast=bool)

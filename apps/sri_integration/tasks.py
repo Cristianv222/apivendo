@@ -230,8 +230,8 @@ def cleanup_old_sri_responses():
         logger.error(f"❌ [CELERY_CLEANUP] Error in cleanup_old_sri_responses: {e}")
         return {'error': str(e)}
 
-@shared_task
-def send_authorization_notification_email(document_id):
+@shared_task(bind=True, max_retries=5, default_retry_delay=300)
+def send_authorization_notification_email(self, document_id):
     """
     ✅ TAREA: Enviar notificación por email cuando un documento es autorizado
     
@@ -244,8 +244,8 @@ def send_authorization_notification_email(document_id):
         document = ElectronicDocument.objects.get(id=document_id)
         
         if document.status != 'AUTHORIZED':
-            logger.warning(f"⚠️ [CELERY_EMAIL] Document {document_id} is not authorized, skipping email")
-            return {'sent': False, 'reason': 'Document not authorized'}
+            logger.warning(f"⚠️ [CELERY_EMAIL] Document {document_id} is not authorized (Status: {document.status}), skipping email")
+            return {'sent': False, 'reason': f'Document status is {document.status}'}
         
         # Importar EmailService aquí para evitar import circular
         from .services.email_service import EmailService
@@ -262,6 +262,8 @@ def send_authorization_notification_email(document_id):
             document.save(update_fields=['email_sent', 'email_sent_date'])
         else:
             logger.error(f"❌ [CELERY_EMAIL] Failed to send notification for document {document_id}: {message}")
+            # Reintentar si falló el envío (SMTP error, etc)
+            raise self.retry(exc=Exception(message))
         
         return {
             'sent': success,
@@ -276,6 +278,12 @@ def send_authorization_notification_email(document_id):
     except Exception as e:
         error_msg = f"Error sending email notification for document {document_id}: {e}"
         logger.error(f"❌ [CELERY_EMAIL] {error_msg}")
+        
+        # Reintentar en caso de error transitorio
+        if not isinstance(e, ElectronicDocument.DoesNotExist):
+            logger.info(f"🔄 [CELERY_EMAIL] Retrying email for document {document_id} in 300s...")
+            raise self.retry(exc=e)
+            
         return {'sent': False, 'error': error_msg}
 
 @shared_task

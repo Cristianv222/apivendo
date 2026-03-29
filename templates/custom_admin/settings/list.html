@@ -276,6 +276,18 @@
             </div>
             
             <div class="setting-item">
+                <div class="switch-container">
+                    <div>
+                        <div class="setting-label">Envío Automático de Comprobantes</div>
+                        <div class="setting-description">Enviar email automáticamente al cliente cuando se autoriza el documento</div>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="sri_auto_email" {% if settings.sri_auto_email %}checked{% endif %}>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="setting-item">
                 <button class="btn btn-admin btn-admin-secondary" onclick="testEmailSettings()">
                     <i class="fas fa-paper-plane"></i> Probar Configuración
                 </button>
@@ -317,18 +329,6 @@
                     </div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="sri_auto_send" {% if settings.sri_auto_send %}checked{% endif %}>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="setting-item">
-                <div class="switch-container">
-                    <div>
-                        <div class="setting-label">Email Automático</div>
-                        <div class="setting-description">Enviar email automáticamente al cliente cuando se autoriza el documento</div>
-                    </div>
-                    <div class="form-check form-switch">
-                        <input class="form-check-input" type="checkbox" id="sri_auto_email" {% if settings.sri_auto_email %}checked{% endif %}>
                     </div>
                 </div>
             </div>

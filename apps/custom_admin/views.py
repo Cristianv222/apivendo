@@ -2548,13 +2548,13 @@ def settings_list(request):
         'smtp_user': getattr(django_settings, 'EMAIL_HOST_USER', ''),
         'from_email': getattr(django_settings, 'DEFAULT_FROM_EMAIL', ''),
         'use_tls': getattr(django_settings, 'EMAIL_USE_TLS', True),
+        'sri_auto_email': getattr(django_settings, 'SRI_AUTO_EMAIL', True),
         
         # SRI
         'sri_environment': getattr(django_settings, 'SRI_ENVIRONMENT', '1'),
         'sri_reception_url': getattr(django_settings, 'SRI_RECEPTION_URL', ''),
         'sri_authorization_url': getattr(django_settings, 'SRI_AUTHORIZATION_URL', ''),
         'sri_auto_send': getattr(django_settings, 'SRI_AUTO_SEND', False),
-        'sri_auto_email': getattr(django_settings, 'SRI_AUTO_EMAIL', True),
         
         # Security
         'session_timeout': getattr(django_settings, 'SESSION_COOKIE_AGE', 1800) // 60,  # Convertir a minutos
@@ -2603,11 +2603,11 @@ def settings_save(request):
                 'smtp_password': {'name': 'Contraseña SMTP', 'type': 'PASSWORD', 'cat': 'EMAIL'},
                 'from_email': {'name': 'Email Remitente', 'type': 'STRING', 'cat': 'EMAIL'},
                 'use_tls': {'name': 'Usar TLS', 'type': 'BOOLEAN', 'cat': 'EMAIL'},
+                'sri_auto_email': {'name': 'Envío Automático de Comprobantes', 'type': 'BOOLEAN', 'cat': 'EMAIL'},
                 
                 # SRI
                 'sri_environment': {'name': 'Ambiente SRI', 'type': 'STRING', 'cat': 'SRI'},
                 'sri_auto_send': {'name': 'Envío Automático SRI', 'type': 'BOOLEAN', 'cat': 'SRI'},
-                'sri_auto_email': {'name': 'Email Automático SRI', 'type': 'BOOLEAN', 'cat': 'SRI'},
             }
             
             for key, info in settings_map.items():
@@ -2646,6 +2646,8 @@ def settings_save(request):
                 django_settings.DEFAULT_FROM_EMAIL = data['from_email']
             if 'use_tls' in data:
                 django_settings.EMAIL_USE_TLS = data['use_tls']
+            if 'sri_auto_email' in data:
+                django_settings.SRI_AUTO_EMAIL = data['sri_auto_email']
             
             messages.success(request, 'Configuraciones guardadas exitosamente')
             return JsonResponse({'success': True})

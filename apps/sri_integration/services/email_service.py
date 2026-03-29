@@ -31,6 +31,12 @@ class EmailService:
             if not document.customer_email:
                 return False, "Customer email not provided"
             
+            # 0. VERIFICA GLOBALMENTE DESDE SETTINGS (KILL-SWITCH)
+            from django.conf import settings
+            if not getattr(settings, 'SRI_AUTO_EMAIL', True):
+                logger.warning("📩 [EMAIL_SERVICE] Global email sending is DISABLED. Skipping.")
+                return False, "Global email sending is disabled"
+
             if not self.sri_config.email_enabled:
                 return False, "Email sending is disabled for this company"
             
@@ -73,26 +79,39 @@ class EmailService:
             # 2. FALLBACK A SMTP (DJANGO MAIL)
             logger.info("📤 Usando SMTP (Django Mail) como fallback")
             from django.core.mail import EmailMessage, get_connection
+            from django.conf import settings
             from apps.settings.models import SystemSetting
             
-            # Obtener configuración SMTP de la base de datos
+            # Obtener configuración SMTP (Prioridad: Base de Datos > Settings/ENV)
             def get_setting(key, default):
                 s = SystemSetting.objects.filter(key=key).first()
-                return s.get_typed_value() if s else default
+                if s and s.value:
+                    return s.get_typed_value()
+                return default
 
-            host = get_setting('SMTP_HOST', 'smtp.gmail.com')
-            port = get_setting('SMTP_PORT', 587)
-            user = get_setting('SMTP_USER', '')
-            password = get_setting('SMTP_PASSWORD', '')
-            use_tls = get_setting('USE_TLS', True)
-            from_email = get_setting('FROM_EMAIL', user)
+            host = get_setting('SMTP_HOST', settings.EMAIL_HOST)
+            port = get_setting('SMTP_PORT', settings.EMAIL_PORT)
+            user = get_setting('SMTP_USER', settings.EMAIL_HOST_USER)
+            password = get_setting('SMTP_PASSWORD', settings.EMAIL_HOST_PASSWORD)
+            use_tls = get_setting('USE_TLS', settings.EMAIL_USE_TLS)
+            use_ssl = get_setting('USE_SSL', getattr(settings, 'EMAIL_USE_SSL', False))
+            from_email = get_setting('FROM_EMAIL', settings.DEFAULT_FROM_EMAIL)
 
             if not user or not password:
+                logger.error("❌ SMTP not configured (no user or password)")
                 return False, "SMTP or SendGrid not configured"
 
+            logger.info(f"Connecting to SMTP: {host}:{port} (TLS={use_tls}, SSL={use_ssl})")
+            
             connection = get_connection(
                 backend='django.core.mail.backends.smtp.EmailBackend',
-                host=host, port=port, username=user, password=password, use_tls=use_tls
+                host=host, 
+                port=port, 
+                username=user, 
+                password=password, 
+                use_tls=use_tls,
+                use_ssl=use_ssl,
+                timeout=20  # Timeout de 20 segundos para evitar bloqueos infinitos
             )
             
             subject = f"Factura Electrónica {document.document_number}"
@@ -101,7 +120,7 @@ class EmailService:
             email = EmailMessage(
                 subject=subject,
                 body=body,
-                from_email=from_email,
+                from_email=from_email or user,
                 to=[document.customer_email],
                 connection=connection
             )
@@ -123,7 +142,7 @@ class EmailService:
         """Acciones post-envío exitoso"""
         document.email_sent = True
         document.email_sent_date = timezone.now()
-        document.save()
+        document.save(update_fields=['email_sent', 'email_sent_date'])
         
         try:
             AuditLog.objects.create(
@@ -137,6 +156,6 @@ class EmailService:
     
     def send_authorization_notification(self, document):
         """
-        Notificación de autorización usando SendGrid
+        Notificación de autorización usando SendGrid o SMTP
         """
         return self.send_document_email(document)

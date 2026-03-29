@@ -13,6 +13,7 @@ from datetime import datetime, timezone, timedelta
 from django.core.files.base import ContentFile
 from django.db import transaction
 from django.utils import timezone as django_timezone
+from django.conf import settings
 
 from cryptography import x509
 
@@ -306,27 +307,33 @@ class DocumentProcessor:
             return False, f"PDF_GENERATION_ERROR: {e}"
 
     def _send_email(self, document):
-        """Envía el documento autorizado por email al cliente."""
+        """Envía el documento autorizado por email al cliente (en segundo plano)."""
         try:
             if not document.customer_email:
                 return False, "Customer email not provided"
+            
+            # Verificar si el envío de email está habilitado (GLOBAL)
+            if not getattr(settings, 'SRI_AUTO_EMAIL', True):
+                logger.info("📧 [PROCESSOR] Global email sending is DISABLED. Skipping.")
+                return False, "Global email sending is disabled"
+
+            # Verificar si el envío de email está habilitado para la empresa
             if not self.sri_config.email_enabled:
-                return False, "Email sending is disabled"
+                logger.info("📧 [PROCESSOR] Email sending is disabled for company %s", self.company.id)
+                return False, "Email sending is disabled for company"
 
-            email_svc = EmailService(self.company)
-            success, message = email_svc.send_document_email(document)
-
-            if success:
-                document.email_sent = True
-                document.email_sent_date = django_timezone.now()
-                document.save()
-                logger.info("Email enviado para documento %s", document.id)
-
-            return success, message
+            # 🚀 ENVIAR A SEGUNDO PLANO (CELERY)
+            # Usamos import local para evitar importación circular con tasks.py
+            from apps.sri_integration.tasks import send_authorization_notification_email
+            
+            logger.info("📧 [PROCESSOR] Scheduling background email for document %s", document.id)
+            send_authorization_notification_email.delay(document.id)
+            
+            return True, "Email scheduled in background"
 
         except Exception as e:
-            logger.error("Error sending email: %s", e)
-            return False, f"EMAIL_EXCEPTION: {e}"
+            logger.error("Error scheduling background email: %s", e)
+            return False, f"EMAIL_SCHEDULING_EXCEPTION: {e}"
 
     def _consume_invoice_from_plan(self, document):
         """Descuenta una factura del plan de billing."""
