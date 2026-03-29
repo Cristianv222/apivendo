@@ -243,16 +243,18 @@ class DocumentProcessor:
             original_status = document.status
             sri_client = SRISOAPClient(self.company)
 
-            logger.info("Esperando 10s antes de consultar autorización...")
-            time.sleep(10)
+            logger.info("Esperando 3s antes de consultar autorización...")
+            time.sleep(3)
 
             for attempt in range(max_attempts):
                 if attempt > 0:
+                    # Ajustar tiempo de espera: 5s para los primeros 3 intentos, luego 15s
+                    current_wait = 5 if attempt < 3 else wait_seconds
                     logger.info(
                         "Esperando %ds (intento %d/%d)...",
-                        wait_seconds, attempt + 1, max_attempts,
+                        current_wait, attempt + 1, max_attempts,
                     )
-                    time.sleep(wait_seconds)
+                    time.sleep(current_wait)
 
                 success, message = sri_client.get_document_authorization(document)
                 if success:

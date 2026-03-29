@@ -1273,7 +1273,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             
             # Verificar si se debe procesar de forma asincrónica (por colas)
             async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
-            is_async = async_setting.get_typed_value() if async_setting else False
+            is_async = async_setting.get_typed_value() if async_setting else True
             
             if is_async:
                 logger.info(f" [INVOICE_COMPLETE] Queuing document {electronic_doc.id} for async processing")
@@ -1412,7 +1412,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             
             # Verificar si se debe procesar de forma asincrónica (por colas)
             async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
-            is_async = async_setting.get_typed_value() if async_setting else False
+            is_async = async_setting.get_typed_value() if async_setting else True
             
             if is_async:
                 logger.info(f" [CREDIT_NOTE_COMPLETE] Queuing document {electronic_doc.id} for async processing")
@@ -1555,7 +1555,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             
             # Verificar si se debe procesar de forma asincrónica (por colas)
             async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
-            is_async = async_setting.get_typed_value() if async_setting else False
+            is_async = async_setting.get_typed_value() if async_setting else True
             
             if is_async:
                 logger.info(f" [DEBIT_NOTE_COMPLETE] Queuing document {electronic_doc.id} for async processing")
@@ -2297,7 +2297,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
         try:
             # Verificar si se debe procesar de forma asincrónica (por colas)
             async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
-            is_async = async_setting.get_typed_value() if async_setting else False
+            is_async = async_setting.get_typed_value() if async_setting else True
             
             if is_async:
                 logger.info(f" [PROCESS_COMPLETE] Queuing document {electronic_doc.id} for async processing")
