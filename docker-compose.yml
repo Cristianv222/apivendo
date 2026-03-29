@@ -54,8 +54,8 @@ services:
     build: .
     image: vendo_sri_web
     container_name: vendo_sri_celery
-    # Ruta absoluta al logfile para evitar problemas con cwd
-    command: celery -A vendo_sri worker --loglevel=info --concurrency=1 --hostname=worker1@%h
+    # Escuchar todas las colas definidas en settings.py
+    command: celery -A vendo_sri worker --loglevel=info --concurrency=1 -Q celery,sri_processing,sri_authorization,sri_maintenance --hostname=worker1@%h
     volumes:
       - .:/app
       - static_volumen:/app/staticfiles

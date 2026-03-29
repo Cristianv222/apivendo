@@ -34,6 +34,8 @@ from apps.api.serializers.sri_serializers import (
 )
 from apps.sri_integration.services.global_certificate_manager import get_certificate_manager
 from apps.api.permissions import IsCompanyOwnerOrAdmin
+from apps.settings.models import SystemSetting
+from apps.sri_integration.tasks import process_document_async
 
 logger = logging.getLogger(__name__)
 
@@ -1266,15 +1268,43 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             creation_time = time.time()
             logger.info(f" [INVOICE_COMPLETE] Step 1: Invoice {electronic_doc.id} created in {creation_time - start_time:.2f}s")
             
-            # ===== PASO 2: PROCESAR COMPLETAMENTE =====
+            # ===== PASO 2: PROCESAR (SINCRÓNICO O ASÍNCRÓNICO) =====
             send_email = data.get('send_email', True)
+            
+            # Verificar si se debe procesar de forma asincrónica (por colas)
+            async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
+            is_async = async_setting.get_typed_value() if async_setting else False
+            
+            if is_async:
+                logger.info(f" [INVOICE_COMPLETE] Queuing document {electronic_doc.id} for async processing")
+                process_document_async.delay(electronic_doc.id)
+                
+                return Response(
+                    {
+                        'success': True,
+                        'message': 'Factura recibida y puesta en cola para procesamiento (SRI asíncrono)',
+                        'invoice': {
+                            'id': electronic_doc.id,
+                            'number': electronic_doc.document_number,
+                            'access_key': electronic_doc.access_key,
+                            'customer': electronic_doc.customer_name,
+                            'total': float(electronic_doc.total_amount),
+                            'status': 'QUEUED',
+                            'date': electronic_doc.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+
+            # PROCESAMIENTO SINCRÓNICO (TRADICIONAL)
+            from apps.sri_integration.services.document_processor import DocumentProcessor
             processor = DocumentProcessor(company)
             success, message = processor.process_document(electronic_doc, send_email)
             
             process_time = time.time()
             
             if success:
-                logger.info(f" [INVOICE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
+                logger.info(f" [INVOICE_COMPLETE] Processing completed synchronously in {process_time - creation_time:.2f}s")
                 
                 # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
@@ -1284,6 +1314,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'invoice': {
                             'id': electronic_doc.id,
                             'number': electronic_doc.document_number,
+                            'access_key': electronic_doc.access_key,
                             'customer': electronic_doc.customer_name,
                             'total': float(electronic_doc.total_amount),
                             'status': electronic_doc.get_status_display(),
@@ -1293,7 +1324,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f" [INVOICE_COMPLETE] Processing failed: {message}")
+                logger.error(f" [INVOICE_COMPLETE] Synchronous processing failed: {message}")
                 return Response(
                     {
                         'success': False,
@@ -1301,6 +1332,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'invoice': {
                             'id': electronic_doc.id,
                             'number': electronic_doc.document_number,
+                            'access_key': electronic_doc.access_key,
                             'error_details': message
                         }
                     },
@@ -1375,8 +1407,36 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             creation_time = time.time()
             logger.info(f" [CREDIT_NOTE_COMPLETE] Step 1: Credit note {credit_note.id} created in {creation_time - start_time:.2f}s")
             
-            # Procesar completamente
+            # ===== PASO 2: PROCESAR (SINCRÓNICO O ASÍNCRÓNICO) =====
             send_email = data.get('send_email', True)
+            
+            # Verificar si se debe procesar de forma asincrónica (por colas)
+            async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
+            is_async = async_setting.get_typed_value() if async_setting else False
+            
+            if is_async:
+                logger.info(f" [CREDIT_NOTE_COMPLETE] Queuing document {electronic_doc.id} for async processing")
+                process_document_async.delay(electronic_doc.id)
+                
+                return Response(
+                    {
+                        'success': True,
+                        'message': 'Nota de crédito recibida y puesta en cola (SRI asíncrono)',
+                        'credit_note': {
+                            'id': credit_note.id,
+                            'number': credit_note.document_number,
+                            'access_key': credit_note.access_key,
+                            'customer': credit_note.customer_name,
+                            'total': float(credit_note.total_amount),
+                            'status': 'QUEUED',
+                            'date': credit_note.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+
+            # PROCESAMIENTO SINCRÓNICO (TRADICIONAL)
+            from apps.sri_integration.services.document_processor import DocumentProcessor
             processor = DocumentProcessor(company)
             success, message = processor.process_document(electronic_doc, send_email)
             
@@ -1387,7 +1447,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 credit_note.status = electronic_doc.status
                 credit_note.save()
                 
-                logger.info(f" [CREDIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
+                logger.info(f" [CREDIT_NOTE_COMPLETE] Processing completed synchronously in {process_time - creation_time:.2f}s")
                 
                 # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
@@ -1397,6 +1457,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'credit_note': {
                             'id': credit_note.id,
                             'number': credit_note.document_number,
+                            'access_key': credit_note.access_key,
                             'customer': credit_note.customer_name,
                             'total': float(credit_note.total_amount),
                             'status': credit_note.get_status_display(),
@@ -1406,7 +1467,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f" [CREDIT_NOTE_COMPLETE] Processing failed: {message}")
+                logger.error(f" [CREDIT_NOTE_COMPLETE] Synchronous processing failed: {message}")
                 return Response(
                     {
                         'success': False,
@@ -1414,6 +1475,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'credit_note': {
                             'id': credit_note.id,
                             'number': credit_note.document_number,
+                            'access_key': credit_note.access_key,
                             'error_details': message
                         }
                     },
@@ -1488,8 +1550,36 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
             creation_time = time.time()
             logger.info(f" [DEBIT_NOTE_COMPLETE] Step 1: Debit note {debit_note.id} created in {creation_time - start_time:.2f}s")
             
-            # Procesar completamente
+            # ===== PASO 2: PROCESAR (SINCRÓNICO O ASÍNCRÓNICO) =====
             send_email = data.get('send_email', True)
+            
+            # Verificar si se debe procesar de forma asincrónica (por colas)
+            async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
+            is_async = async_setting.get_typed_value() if async_setting else False
+            
+            if is_async:
+                logger.info(f" [DEBIT_NOTE_COMPLETE] Queuing document {electronic_doc.id} for async processing")
+                process_document_async.delay(electronic_doc.id)
+                
+                return Response(
+                    {
+                        'success': True,
+                        'message': 'Nota de débito recibida y puesta en cola (SRI asíncrono)',
+                        'debit_note': {
+                            'id': debit_note.id,
+                            'number': debit_note.document_number,
+                            'access_key': debit_note.access_key,
+                            'customer': debit_note.customer_name,
+                            'total': float(debit_note.total_amount),
+                            'status': 'QUEUED',
+                            'date': debit_note.created_at.strftime("%Y-%m-%d %H:%M")
+                        }
+                    },
+                    status=status.HTTP_201_CREATED
+                )
+
+            # PROCESAMIENTO SINCRÓNICO (TRADICIONAL)
+            from apps.sri_integration.services.document_processor import DocumentProcessor
             processor = DocumentProcessor(company)
             success, message = processor.process_document(electronic_doc, send_email)
             
@@ -1500,7 +1590,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 debit_note.status = electronic_doc.status
                 debit_note.save()
                 
-                logger.info(f" [DEBIT_NOTE_COMPLETE] Processing completed in {process_time - creation_time:.2f}s")
+                logger.info(f" [DEBIT_NOTE_COMPLETE] Processing completed synchronously in {process_time - creation_time:.2f}s")
                 
                 # 🎯 RESPUESTA SIMPLIFICADA
                 return Response(
@@ -1510,6 +1600,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'debit_note': {
                             'id': debit_note.id,
                             'number': debit_note.document_number,
+                            'access_key': debit_note.access_key,
                             'customer': debit_note.customer_name,
                             'total': float(debit_note.total_amount),
                             'status': debit_note.get_status_display(),
@@ -1519,7 +1610,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_201_CREATED
                 )
             else:
-                logger.error(f" [DEBIT_NOTE_COMPLETE] Processing failed: {message}")
+                logger.error(f" [DEBIT_NOTE_COMPLETE] Synchronous processing failed: {message}")
                 return Response(
                     {
                         'success': False,
@@ -1527,6 +1618,7 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                         'debit_note': {
                             'id': debit_note.id,
                             'number': debit_note.document_number,
+                            'access_key': debit_note.access_key,
                             'error_details': message
                         }
                     },
@@ -2203,9 +2295,31 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
         send_email = request.data.get('send_email', True)
         
         try:
-            from apps.sri_integration.services.document_processor import DocumentProcessor
+            # Verificar si se debe procesar de forma asincrónica (por colas)
+            async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
+            is_async = async_setting.get_typed_value() if async_setting else False
             
-            processor = DocumentProcessor(document.company)
+            if is_async:
+                logger.info(f" [PROCESS_COMPLETE] Queuing document {electronic_doc.id} for async processing")
+                process_document_async.delay(electronic_doc.id)
+                
+                return Response(
+                    {
+                        'success': True,
+                        'message': 'Documento puesto en cola para procesamiento (SRI asíncrono)',
+                        'data': {
+                            'document_id': pk,
+                            'document_number': electronic_doc.document_number,
+                            'access_key': electronic_doc.access_key,
+                            'status': 'QUEUED'
+                        }
+                    },
+                    status=status.HTTP_202_ACCEPTED
+                )
+
+            # PROCESAMIENTO SINCRÓNICO (TRADICIONAL)
+            from apps.sri_integration.services.document_processor import DocumentProcessor
+            processor = DocumentProcessor(company)
             success, message = processor.process_document(electronic_doc, send_email)
             
             # Actualizar documento original también
@@ -2218,21 +2332,14 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': True,
-                        'message': 'Document processed completely - ERROR 35 RESOLVED',
-                        'password_required': False,
-                        'error_35_resolved': True,
+                        'message': 'Document processed completely synchronously',
                         'data': {
                             'document_id': pk,
                             'document_type': document_type,
+                            'access_key': electronic_doc.access_key,
                             'final_status': electronic_doc.status,
                             'status_info': status_info,
-                            'has_xml': bool(electronic_doc.xml_file),
-                            'has_signed_xml': bool(electronic_doc.signed_xml_file),
-                            'has_pdf': bool(electronic_doc.pdf_file),
-                            'email_sent': electronic_doc.email_sent,
-                            'authorization_code': electronic_doc.sri_authorization_code,
-                            'authorization_date': electronic_doc.sri_authorization_date,
-                            'certificate_cached': True
+                            'authorized': electronic_doc.status == 'AUTHORIZED'
                         }
                     },
                     status=status.HTTP_200_OK
@@ -2241,11 +2348,9 @@ class SRIDocumentViewSet(viewsets.ModelViewSet):
                 return Response(
                     {
                         'success': False,
-                        'message': f'Error in complete process: {message}',
+                        'message': f'Error in synchronous process: {message}',
                         'data': {
                             'document_id': pk,
-                            'document_type': document_type,
-                            'current_status': electronic_doc.status,
                             'error_details': message
                         }
                     },

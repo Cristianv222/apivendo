@@ -5,6 +5,8 @@ apps/custom_admin/views.py
 """
 
 import json
+import logging
+import traceback
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.http import JsonResponse, HttpResponse
@@ -12,10 +14,15 @@ from django.views.decorators.http import require_http_methods
 from django.db.models import Count, Q, Sum, Avg
 from django.core.paginator import Paginator
 from django.contrib import messages
+from django.db.models import Count, Sum, Q, F
+from apps.sri_integration.tasks import process_document_async
 from django.utils import timezone
 from datetime import datetime, timedelta
 from functools import wraps
 from django.conf import settings
+
+# Logger configuration
+logger = logging.getLogger(__name__)
 
 # Import models
 from apps.users.models import User, UserCompanyAssignment, AdminNotification
@@ -4049,16 +4056,31 @@ def company_test_sri(request, company_id):
                 tax_amount=iva
             )
             
-            # 7. Procesar Factura con DocumentProcessor
-            # Esto genera XML, Firma XAdES-BES, y envía al SRI
+            # 7. Procesar Factura (SINCRÓNICO O ASÍNCRÓNICO)
+            from apps.settings.models import SystemSetting
+            async_setting = SystemSetting.objects.filter(key='SRI_ASYNC_PROCESSING').first()
+            is_async = async_setting.get_typed_value() if async_setting else False
+            
+            if is_async:
+                logger.info(f" [MINI_POS] Queuing document {doc.id} for async processing")
+                process_document_async.delay(doc.id)
+                
+                return JsonResponse({
+                    'success': True,
+                    'message': '¡Factura recibida! Se está procesando en cola (asíncronamente). Puede cerrar este modal.',
+                    'status': 'QUEUED',
+                    'access_key': doc.access_key
+                })
+
+            # Procesamiento sincrónico (tradicional)
             processor = DocumentProcessor(company)
-            # send_email a True solo en este mini pos de pruebas
             success, msg = processor.process_document(doc, send_email=(customer_email != ''))
             
             if success:
                 return JsonResponse({
                     'success': True, 
-                    'message': f'¡Factura enviada satisfactoriamente! Estado: {doc.status}. SRI Msg: {msg}'
+                    'message': f'¡Factura enviada satisfactoriamente! Estado: {doc.status}. SRI Msg: {msg}',
+                    'access_key': doc.access_key
                 })
             else:
                 return JsonResponse({
@@ -4068,8 +4090,6 @@ def company_test_sri(request, company_id):
                 })
                 
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             error_trace = traceback.format_exc()
             logger.error(f'Error en prueba POS SRI: {error_trace}')
             return JsonResponse({

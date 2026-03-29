@@ -13,6 +13,7 @@ Tareas en background para autorización automática de documentos SRI
 import logging
 from celery import shared_task
 from django.utils import timezone
+from django.core.cache import cache
 from datetime import timedelta
 from django.db import transaction
 from .models import ElectronicDocument, SRIResponse
@@ -25,15 +26,21 @@ logger = logging.getLogger(__name__)
 def check_document_authorization_async(self, document_id):
     """
     ✅ TAREA PRINCIPAL: Verificar autorización de documento automáticamente
-    
-    Args:
-        document_id (int): ID del documento a verificar
-        
-    Returns:
-        bool: True si está autorizado o no necesita más verificación
     """
+    lock_id = None
     try:
-        logger.info(f"🔄 [CELERY] Checking authorization for document {document_id}")
+        document = ElectronicDocument.objects.get(id=document_id)
+        company_id = document.company.id
+        
+        # Lock por empresa (carril independiente para SRI)
+        lock_id = f"sri_company_work_{company_id}"
+        
+        # Si la empresa ya está operando (otro worker firmando), esperamos turno
+        if not cache.add(lock_id, "locked", timeout=30):
+            logger.info(f"⏳ [CELERY] Company {company_id} session active. Re-queuing auth check for doc {document_id}")
+            self.retry(countdown=10)
+            
+        logger.info(f"🔄 [CELERY] Checking authorization for document {document_id} [Company: {company_id}]")
         
         # Obtener documento con lock para evitar condiciones de carrera
         try:
@@ -99,49 +106,61 @@ def check_document_authorization_async(self, document_id):
             logger.error(f"❌ [CELERY] Max retries exceeded for document {document_id}")
             return False
 
-@shared_task
-def process_document_async(document_id):
+@shared_task(bind=True, max_retries=20)
+def process_document_async(self, document_id):
     """
-    ✅ TAREA: Procesar documento completo en background
-    
-    Args:
-        document_id (int): ID del documento a procesar
-        
-    Returns:
-        dict: Resultado del procesamiento
+    ✅ TAREA: Procesar documento completo en background (Cola aislada por empresa)
     """
+    lock_id = None
     try:
-        logger.info(f"🚀 [CELERY] Processing document {document_id} in background")
-        
         document = ElectronicDocument.objects.get(id=document_id)
-        processor = DocumentProcessor(document.company)
+        company_id = document.company.id
         
+        # Lock por empresa (Carril dinámico)
+        # Esto garantiza que cada empresa tenga su propia "cola" secuencial
+        lock_id = f"sri_company_work_{company_id}"
+        
+        # Intentar obtener el carril. Si está ocupado por otra tarea de la misma empresa, reintentar.
+        if not cache.add(lock_id, "locked", timeout=120):
+            logger.info(f"⏳ [CELERY] Dynamic queue for Company {company_id} is busy. Document {document_id} waiting its turn...")
+            self.retry(countdown=5)
+            
+        logger.info(f"🚀 [CELERY] Initializing isolated processing for Company {company_id} | Doc {document_id}")
+        
+        processor = DocumentProcessor(document.company)
         success, message = processor.process_document(document)
         
         if success and document.status == 'SENT':
             # Programar verificación de autorización automática
-            logger.info(f"📅 [CELERY] Scheduling authorization check for document {document_id}")
+            logger.info(f"📅 [CELERY] Document sent. Scheduling auth follow-up for doc {document_id}")
             check_document_authorization_async.apply_async(
                 args=[document_id], 
                 countdown=120  # 2 minutos
             )
         
-        logger.info(f"✅ [CELERY] Document {document_id} processing completed: {success}")
+        logger.info(f"✅ [CELERY] Isolated processing completed for Company {company_id} | Success: {success}")
         return {
             'success': success, 
             'message': message,
             'document_id': document_id,
-            'status': document.status
+            'status': document.status,
+            'company_id': company_id
         }
         
     except ElectronicDocument.DoesNotExist:
-        error_msg = f"Document {document_id} not found"
-        logger.error(f"❌ [CELERY] {error_msg}")
-        return {'success': False, 'message': error_msg}
+        logger.error(f"❌ [CELERY] Document {document_id} not found")
+        return {'success': False, 'error': 'Document not found'}
+        
     except Exception as e:
-        error_msg = f"Error processing document {document_id}: {e}"
-        logger.error(f"❌ [CELERY] {error_msg}")
-        return {'success': False, 'message': error_msg}
+        logger.exception(f"💥 [CELERY] Critical error processing document {document_id}: {str(e)}")
+        # No relanzamos para evitar bucles infinitos en errores de lógica
+        return {'success': False, 'error': str(e)}
+        
+    finally:
+        # Liberar el carril de la empresa para la siguiente factura en cola
+        if lock_id:
+            cache.delete(lock_id)
+            logger.debug(f"🔓 [CELERY] Dynamic queue slot released for Company {company_id}")
 
 @shared_task
 def check_all_pending_authorizations():

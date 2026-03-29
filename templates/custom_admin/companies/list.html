@@ -529,8 +529,8 @@ $(document).ready(function() {
                     }
                     
                     Swal.fire({
-                        title: 'Enviando al SRI...',
-                        text: 'Por favor, espera unos segundos. Facturando en modo PRUEBAS...',
+                        title: 'Procesando...',
+                        text: 'Enviando documento al sistema de colas...',
                         allowOutsideClick: false,
                         showConfirmButton: false,
                         willOpen: function() {
@@ -544,16 +544,19 @@ $(document).ready(function() {
                         data: $form.serialize(),
                         success: function(res) {
                             if (res.success) {
+                                let title = res.status === 'QUEUED' ? '¡Recibida!' : '¡Aprobada!';
+                                let icon = 'success';
+                                
                                 Swal.fire({
-                                    icon: 'success',
-                                    title: '¡Aprobada!',
+                                    icon: icon,
+                                    title: title,
                                     text: res.message,
-                                    confirmButtonText: 'Genial'
+                                    confirmButtonText: 'Entendido'
                                 }).then(function() {
                                     testSriModal.hide();
                                 });
                             } else {
-                                Swal.fire('Rechazada o Fallida', res.error, 'error');
+                                Swal.fire('Error', res.error || 'No se pudo procesar', 'error');
                             }
                         },
                         error: function(xhr, status, error) {
