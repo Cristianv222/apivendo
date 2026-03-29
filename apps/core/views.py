@@ -2037,3 +2037,209 @@ def public_landing_view(request):
         }
     
     return render(request, 'landing/index.html', context)
+
+
+# ==========================================
+# NUEVAS VISTAS PARA DASHBOARD DE CLIENTE (MODAL Y ENVIO MASIVO)
+# ==========================================
+
+@login_required
+def invoice_detail_modal_api(request, invoice_id):
+    """
+    API específica para el modal de detalle en el dashboard de cliente.
+    Retorna JSON con todos los detalles requeridos del documento.
+    """
+    from apps.sri_integration.models import ElectronicDocument
+    
+    # Obtener empresas del usuario de forma SEGURA
+    user_companies = get_user_companies_secure(request.user)
+    
+    try:
+        document = ElectronicDocument.objects.select_related('company').get(
+            id=invoice_id,
+            company__in=user_companies
+        )
+    except ElectronicDocument.DoesNotExist:
+        # Intentar obtener de invoicing (Invoice) como fallback
+        try:
+            from apps.invoicing.models import Invoice
+            invoice = Invoice.objects.select_related('company').get(
+                id=invoice_id,
+                company__in=user_companies
+            )
+            # Mapear datos básicos si es Invoice legacy
+            data = {
+                'success': True,
+                'document': {
+                    'id': invoice.id,
+                    'number': getattr(invoice, 'invoice_number', str(invoice.id)),
+                    'type': 'Factura',
+                    'status': invoice.status,
+                    'status_display': invoice.get_status_display() if hasattr(invoice, 'get_status_display') else invoice.status,
+                    'date': invoice.created_at.strftime('%d/%m/%Y'),
+                    'hour': invoice.created_at.strftime('%H:%M'),
+                    'total': float(invoice.total_amount or 0),
+                    'client_name': getattr(invoice, 'client_name', 'N/A'),
+                    'client_ruc': getattr(invoice, 'client_identification', 'N/A'),
+                    'can_resend': False,
+                    'legacy': True
+                },
+                'company': {
+                    'name': invoice.company.business_name,
+                    'ruc': invoice.company.ruc,
+                }
+            }
+            return JsonResponse(data)
+        except:
+            return JsonResponse({'error': 'Documento no encontrado o sin permisos'}, status=404)
+        
+    company = document.company
+    
+    # Obtener los últimos mensajes de respuesta del SRI
+    sri_messages = []
+    if document.sri_response:
+        if isinstance(document.sri_response, dict):
+            sri_messages = document.sri_response.get('mensajes', [])
+        elif isinstance(document.sri_response, str):
+            try:
+                res_dict = json.loads(document.sri_response)
+                sri_messages = res_dict.get('mensajes', [])
+            except:
+                pass
+                
+        if not isinstance(sri_messages, list):
+            sri_messages = [sri_messages]
+
+    data = {
+        'success': True,
+        'document': {
+            'id': document.id,
+            'number': document.document_number,
+            'type': document.get_document_type_display(),
+            'status': document.status,
+            'status_display': document.get_status_display(),
+            'date': document.created_at.strftime('%d/%m/%Y'),
+            'hour': document.created_at.strftime('%H:%M'),
+            'access_key': document.access_key,
+            'total': float(document.total_amount or 0),
+            'sri_authorization_date': document.sri_authorization_date.strftime('%d/%m/%Y %H:%M') if document.sri_authorization_date else None,
+            'sri_messages': sri_messages,
+            'can_resend': document.status not in ['AUTHORIZED', 'SENT'],
+            'client_name': document.customer_name,
+            'client_ruc': document.customer_identification,
+        },
+        'company': {
+            'name': company.business_name or company.trade_name,
+            'ruc': company.ruc,
+            'address': company.address,
+        }
+    }
+    
+    return JsonResponse(data)
+
+@login_required
+def bulk_email_list_api(request):
+    """
+    Retorna lista de documentos autorizados para envío masivo.
+    """
+    from apps.sri_integration.models import ElectronicDocument
+    
+    token = request.GET.get('token')
+    if not token:
+        return JsonResponse({'error': 'Token de empresa requerido'}, status=400)
+        
+    user_companies = get_user_companies_secure(request.user)
+    try:
+        company_token = CompanyAPIToken.objects.get(key=token, company__in=user_companies, is_active=True)
+        company = company_token.company
+    except CompanyAPIToken.DoesNotExist:
+        return JsonResponse({'error': 'Empresa no encontrada o sin permisos'}, status=403)
+        
+    # Filtrar documentos autorizados
+    documents = ElectronicDocument.objects.filter(
+        company=company,
+        status='AUTHORIZED'
+    ).order_by('-created_at')[:100]
+    
+    docs_data = []
+    for doc in documents:
+        docs_data.append({
+            'id': doc.id,
+            'number': doc.document_number,
+            'client': doc.customer_name,
+            'email': doc.customer_email,
+            'date': doc.created_at.strftime('%d/%m/%Y'),
+            'total': float(doc.total_amount or 0),
+            'email_sent': getattr(doc, 'email_sent', False),
+            'can_send': bool(doc.customer_email)
+        })
+        
+    return JsonResponse({
+        'success': True,
+        'documents': docs_data,
+        'company_name': company.business_name
+    })
+
+@login_required
+@require_POST
+def bulk_email_send_api(request):
+    """
+    Procesa el envío masivo de emails.
+    """
+    from apps.sri_integration.models import ElectronicDocument
+    from apps.sri_integration.services.email_service import EmailService
+    
+    try:
+        data = json.loads(request.body)
+        document_ids = data.get('document_ids', [])
+        
+        if not document_ids:
+            return JsonResponse({'error': 'No se seleccionaron documentos'}, status=400)
+            
+        user_companies = get_user_companies_secure(request.user)
+        documents = ElectronicDocument.objects.filter(
+            id__in=document_ids,
+            company__in=user_companies,
+            status='AUTHORIZED'
+        )
+        
+        results = {
+            'success_count': 0,
+            'failed_count': 0,
+            'details': []
+        }
+        
+        # Agrupar por empresa
+        companies_docs = {}
+        for doc in documents:
+            if doc.company_id not in companies_docs:
+                companies_docs[doc.company_id] = []
+            companies_docs[doc.company_id].append(doc)
+            
+        for company_id, docs in companies_docs.items():
+            company = docs[0].company
+            email_service = EmailService(company)
+            
+            for doc in docs:
+                if not doc.customer_email:
+                    results['failed_count'] += 1
+                    results['details'].append({'id': doc.id, 'success': False, 'error': 'Sin email configurado'})
+                    continue
+                    
+                success, message = email_service.send_document_email(doc)
+                if success:
+                    results['success_count'] += 1
+                    results['details'].append({'id': doc.id, 'success': True})
+                else:
+                    results['failed_count'] += 1
+                    results['details'].append({'id': doc.id, 'success': False, 'error': message})
+                    
+        return JsonResponse({
+            'success': True,
+            'message': f"Proceso completado. Enviados: {results['success_count']}, Fallidos: {results['failed_count']}",
+            'results': results
+        })
+        
+    except Exception as e:
+        logger.error(f"Error en bulk_email_send_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)

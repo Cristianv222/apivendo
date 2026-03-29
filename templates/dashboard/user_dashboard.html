@@ -1327,6 +1327,10 @@ body {
             <option value="nota_credito">Notas de Crédito</option>
             <option value="nota_debito">Notas de Débito</option>
         </select>
+        
+        <button class="btn btn-sm btn-outline-success ms-2" onclick="openBulkEmailModal()" title="Enviar comprobantes autorizados por email en lote">
+            <i class="fas fa-mail-bulk me-1"></i>Envío Masivo
+        </button>
     </div>
     
     <div class="documents-metrics">
@@ -1894,6 +1898,89 @@ body {
                             </div>
                             <p class="mt-2">Cargando módulo de prueba...</p>
                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Modal Detalle de Documento (EXCLUSIVO CLIENTE) -->
+        <div class="modal fade" id="documentDetailModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-primary text-white border-0 py-3">
+                        <h5 class="modal-title fw-bold">
+                            <i class="fas fa-file-invoice me-2"></i>Detalle de Comprobante
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-4" id="documentDetailContent">
+                        <div class="text-center py-5">
+                            <div class="spinner-border text-primary mb-3" role="status"></div>
+                            <p class="text-muted">Obteniendo información del servidor...</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0">
+                        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="button" class="btn btn-primary px-4" id="resendBtnInModal" style="display:none;" onclick="resendSRIFromModal()">
+                            <i class="fas fa-redo me-1"></i>Reintentar SRI
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Envío Masivo por Email -->
+        <div class="modal fade" id="bulkEmailModal" tabindex="-1" aria-hidden="true" style="z-index: 1060;">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content border-0 shadow-lg">
+                    <div class="modal-header bg-success text-white border-0 py-3">
+                        <h5 class="modal-title fw-bold">
+                            <i class="fas fa-mail-bulk me-2"></i>Envío Masivo por Email
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body p-0">
+                        <div class="alert alert-info border-0 rounded-0 mb-0 d-flex align-items-center">
+                            <i class="fas fa-info-circle fa-2x me-3"></i>
+                            <div>
+                                <h6 class="alert-heading fw-bold mb-1">Instrucciones</h6>
+                                <p class="mb-0 small">Seleccione los documentos autorizados que desea enviar. Los documentos que ya fueron enviados aparecen atenuados pero pueden volver a enviarse si es necesario.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
+                            <div class="fw-bold text-muted small" id="bulkStatsLabel">0 documentos seleccionados</div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAllEmails" onchange="toggleAllEmails(this)">
+                                <label class="form-check-label small fw-bold" for="selectAllEmails">Seleccionar Todos</label>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0" id="bulkEmailTable">
+                                <thead class="bg-light text-uppercase small fw-bold">
+                                    <tr>
+                                        <th style="width: 50px;" class="ps-3">#</th>
+                                        <th>Comprobante</th>
+                                        <th>Cliente</th>
+                                        <th>Email Destino</th>
+                                        <th>Fecha Autoriz.</th>
+                                        <th class="text-end">Total</th>
+                                        <th class="text-center pe-3">Estado Envío</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bulkEmailList">
+                                    <tr><td colspan="7" class="text-center py-5 text-muted">Cargando lista de pendientes...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light border-0">
+                        <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="button" class="btn btn-success px-4" id="sendBulkEmailBtn" onclick="processBulkEmails()" disabled>
+                            <i class="fas fa-paper-plane me-2"></i>Enviar Seleccionados
+                        </button>
                     </div>
                 </div>
             </div>
@@ -2588,9 +2675,251 @@ function showFileStatusModal(fileData) {
 }
 
 function viewDocumentDetail(documentId) {
-    showLoadingToast('Cargando detalle...');
-    // Redirigir a la vista de detalle real
-    window.location.href = `/dashboard/invoice/${documentId}/`;
+    // NUEVA IMPLEMENTACIÓN CON MODAL SECURE CLIENT
+    const modalElement = document.getElementById('documentDetailModal');
+    const modal = new bootstrap.Modal(modalElement);
+    modal.show();
+    
+    const content = document.getElementById('documentDetailContent');
+    const resendBtn = document.getElementById('resendBtnInModal');
+    
+    // Reset estado
+    content.innerHTML = '<div class="text-center py-5"><div class="spinner-border text-primary mb-3"></div><p class="text-muted">Cargando detalles del comprobante...</p></div>';
+    resendBtn.style.display = 'none';
+    window.currentModalDocId = documentId;
+    
+    fetch(`/dashboard/api/invoice/${documentId}/detail/`)
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            content.innerHTML = `<div class="alert alert-danger shadow-sm border-0"><i class="fas fa-exclamation-triangle me-2"></i>${data.error || 'No se pudo obtener la información'}</div>`;
+            return;
+        }
+        
+        const doc = data.document;
+        const comp = data.company;
+        
+        // Renderizar mensajes SRI si existen
+        let sriReport = '';
+        if (doc.sri_messages && doc.sri_messages.length > 0) {
+            sriReport = `
+                <div class="mt-4 p-3 bg-light rounded border-start border-4 ${doc.status === 'AUTHORIZED' ? 'border-success' : 'border-danger'}">
+                    <h6 class="fw-bold small text-uppercase mb-2">Respuesta del SRI:</h6>
+                    <ul class="list-unstyled mb-0 small">
+                        ${doc.sri_messages.map(m => `
+                            <li class="mb-1">
+                                <i class="fas ${m.tipo === 'ERROR' ? 'fa-times-circle text-danger' : 'fa-info-circle text-info'} me-2"></i>
+                                <strong>${m.mensaje}</strong> ${m.informacionAdicional ? `<br><span class="text-muted ms-4">${m.informacionAdicional}</span>` : ''}
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+
+        content.innerHTML = `
+            <div class="row g-4 mb-3">
+                <div class="col-md-7">
+                    <h6 class="text-muted text-uppercase fw-bold xs-title mb-3">Datos del Comprobante</h6>
+                    <div class="p-3 bg-white rounded border shadow-sm">
+                        <table class="table table-sm table-borderless mb-0 align-middle">
+                            <tr><td class="text-muted small" style="width: 130px;">ID Sistema:</td><td class="fw-bold">#${doc.id}</td></tr>
+                            <tr><td class="text-muted small">Número:</td><td class="fw-bold">${doc.number}</td></tr>
+                            <tr><td class="text-muted small">Tipo:</td><td><span class="badge bg-light text-dark border">${doc.type}</span></td></tr>
+                            <tr><td class="text-muted small">Estado:</td><td>${renderStatusBadge(doc.status, doc.status_display)}</td></tr>
+                            <tr><td class="text-muted small">Fecha Emisión:</td><td>${doc.date} ${doc.hour}</td></tr>
+                            <tr><td class="text-muted small">Clave Acceso:</td><td class="small font-monospace text-wrap">${doc.access_key || 'No generada'}</td></tr>
+                            <tr><td class="text-muted small">Autorizado en:</td><td>${doc.sri_authorization_date || 'N/A'}</td></tr>
+                            <tr><hr class="my-2"></tr>
+                            <tr class="table-active"><td class="text-muted small">TOTAL:</td><td class="h5 fw-bold text-primary mb-0">$${parseFloat(doc.total).toFixed(2)}</td></tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <h6 class="text-muted text-uppercase fw-bold xs-title mb-3">Participantes</h6>
+                    <div class="mb-4">
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="avatar-sm bg-primary-subtle rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 30px; height: 30px;">
+                                <i class="fas fa-building text-primary small"></i>
+                            </div>
+                            <span class="fw-bold">Emisor</span>
+                        </div>
+                        <div class="ps-4 ms-2 border-start">
+                            <p class="mb-0 fw-bold small">${comp.name}</p>
+                            <p class="mb-0 text-muted smaller">${comp.ruc}</p>
+                            <p class="mb-0 text-muted smaller">${comp.address || ''}</p>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="d-flex align-items-center mb-2">
+                            <div class="avatar-sm bg-success-subtle rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 30px; height: 30px;">
+                                <i class="fas fa-user text-success small"></i>
+                            </div>
+                            <span class="fw-bold">Receptor</span>
+                        </div>
+                        <div class="ps-4 ms-2 border-start">
+                            <p class="mb-0 fw-bold small">${doc.client_name}</p>
+                            <p class="mb-0 text-muted smaller">${doc.client_ruc}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            ${sriReport}
+        `;
+        
+        // Mostrar botón de reintento si corresponde
+        if (doc.can_resend) {
+            resendBtn.style.display = 'block';
+        }
+    })
+    .catch(e => {
+        content.innerHTML = `<div class="alert alert-danger">Error crítico de red: ${e.message}</div>`;
+    });
+}
+
+// Helpers para UI Modal
+function renderStatusBadge(status, label) {
+    let color = 'bg-secondary';
+    if (status === 'AUTHORIZED') color = 'bg-success';
+    else if (status === 'REJECTED' || status === 'ERROR') color = 'bg-danger';
+    else if (['PENDIENTE', 'DRAFT', 'SIGNED', 'GENERATED'].includes(status)) color = 'bg-warning text-dark';
+    return `<span class="badge ${color}">${label}</span>`;
+}
+
+function resendSRIFromModal() {
+    if (!window.currentModalDocId) return;
+    const modal = bootstrap.Modal.getInstance(document.getElementById('documentDetailModal'));
+    if (modal) modal.hide();
+    processDocument(window.currentModalDocId);
+}
+
+// ==========================================
+// FUNCIONES ENVÍO MASIVO
+// ==========================================
+function openBulkEmailModal() {
+    const modal = new bootstrap.Modal(document.getElementById('bulkEmailModal'));
+    modal.show();
+    
+    refreshBulkEmailList();
+}
+
+function refreshBulkEmailList() {
+    const list = document.getElementById('bulkEmailList');
+    const sendBtn = document.getElementById('sendBulkEmailBtn');
+    const token = new URLSearchParams(window.location.search).get('token');
+    
+    list.innerHTML = '<tr><td colspan="7" class="text-center py-5"><div class="spinner-border text-primary"></div></td></tr>';
+    sendBtn.disabled = true;
+    
+    fetch(`/dashboard/api/bulk-email/list/?token=${token}`)
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) {
+            list.innerHTML = `<tr><td colspan="7" class="text-center text-danger p-4">${data.error}</td></tr>`;
+            return;
+        }
+        
+        if (data.documents.length === 0) {
+            list.innerHTML = '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="fas fa-check-circle fa-2x d-block mb-3 text-success"></i>Todos los documentos autorizados parecen haber sido procesados.</td></tr>';
+            return;
+        }
+        
+        list.innerHTML = data.documents.map((doc, idx) => `
+            <tr class="${doc.email_sent ? 'table-light text-muted' : ''}">
+                <td class="ps-3">
+                    <input type="checkbox" class="form-check-input bulk-email-check" 
+                           value="${doc.id}" 
+                           onchange="updateBulkEmailSelectCount()"
+                           ${!doc.can_send ? 'disabled' : ''}>
+                </td>
+                <td class="small fw-bold">${doc.number}</td>
+                <td class="small">${doc.client}</td>
+                <td class="small font-monospace">${doc.email || '<span class="text-danger">SIN EMAIL</span>'}</td>
+                <td class="small">${doc.date}</td>
+                <td class="text-end fw-bold">$${doc.total.toFixed(2)}</td>
+                <td class="text-center pe-3">
+                    <span class="badge ${doc.email_sent ? 'bg-success-subtle text-success' : 'bg-warning-subtle text-warning'} border rounded-pill px-3">
+                        ${doc.email_sent ? 'Enviado' : 'Pendiente'}
+                    </span>
+                </td>
+            </tr>
+        `).join('');
+        
+        updateBulkEmailSelectCount();
+    })
+    .catch(e => {
+        list.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error de conexión: ${e.message}</td></tr>`;
+    });
+}
+
+function updateBulkEmailSelectCount() {
+    const count = document.querySelectorAll('.bulk-email-check:checked').length;
+    const label = document.getElementById('bulkStatsLabel');
+    const btn = document.getElementById('sendBulkEmailBtn');
+    
+    label.innerText = `${count} documentos seleccionados`;
+    btn.disabled = count === 0;
+    btn.innerHTML = `<i class="fas fa-paper-plane me-2"></i>Enviar ${count > 0 ? count : ''} Seleccionados`;
+}
+
+function toggleAllEmails(master) {
+    document.querySelectorAll('.bulk-email-check:not(:disabled)').forEach(c => c.checked = master.checked);
+    updateBulkEmailSelectCount();
+}
+
+function processBulkEmails() {
+    const ids = Array.from(document.querySelectorAll('.bulk-email-check:checked')).map(c => c.value);
+    
+    Swal.fire({
+        title: '¿Confirmar envío masivo?',
+        text: `Se enviarán ${ids.length} comprobantes por correo electrónico. Este proceso puede tardar unos segundos.`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, enviar ahora',
+        cancelButtonText: 'Cancelar',
+        confirmButtonColor: '#198754'
+    }).then(result => {
+        if (result.isConfirmed) {
+            const btn = document.getElementById('sendBulkEmailBtn');
+            const originalHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
+            
+            showLoadingToast(`Enviando ${ids.length} correos...`);
+            
+            fetch('/dashboard/api/bulk-email/send/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ document_ids: ids })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    Swal.fire({
+                        title: 'Proceso Finalizado',
+                        text: data.message,
+                        icon: 'success'
+                    }).then(() => {
+                        const modal = bootstrap.Modal.getInstance(document.getElementById('bulkEmailModal'));
+                        if (modal) modal.hide();
+                        location.reload();
+                    });
+                } else {
+                    Swal.fire('Error', data.error || 'Ocurrió un error inesperado', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = originalHtml;
+                }
+            })
+            .catch(err => {
+                Swal.fire('Error de Red', err.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalHtml;
+            });
+        }
+    });
 }
 
 function processDocument(documentId) {

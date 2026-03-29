@@ -69,6 +69,12 @@ urlpatterns = [
     
     # Vista detallada de factura con validación
     path('invoice/<int:invoice_id>/', views.invoice_detail_view, name='invoice_detail'),
+    
+    # 🔑 NUEVAS VISTAS PARA MODALES Y ENVIO MASIVO (DASHBOARD)
+    path('api/invoice/<int:invoice_id>/detail/', views.invoice_detail_modal_api, name='invoice_detail_modal_api'),
+    path('api/bulk-email/list/', views.bulk_email_list_api, name='bulk_email_list_api'),
+    path('api/bulk-email/send/', views.bulk_email_send_api, name='bulk_email_send_api'),
+    
     path('landing/', views.public_landing_view, name='public_landing'),
 ]
 
