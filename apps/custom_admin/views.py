@@ -4102,3 +4102,52 @@ def company_test_sri(request, company_id):
 
     # GET => render the Modal form
     return render(request, 'custom_admin/companies/test_sri_modal.html', {'company': company})
+
+
+@login_required
+@staff_required
+@require_http_methods(["POST"])
+def sri_document_delete(request, document_id):
+    """
+    TEMPORARY: Delete SRI document and refund billing plan.
+    User requested this for internal testing/correction.
+    """
+    from apps.sri_integration.models import ElectronicDocument
+    from apps.billing.models import CompanyBillingProfile
+    from apps.core.models import AuditLog
+    
+    try:
+        document = get_object_or_404(ElectronicDocument, id=document_id)
+        company = document.company
+        
+        # Log before deletion
+        AuditLog.objects.create(
+            user=request.user,
+            action='DELETE',
+            model_name='ElectronicDocument',
+            object_id=str(document.id),
+            object_representation=f'Documento {document.document_number} ELIMINADO (Reintegro de plan)',
+            ip_address=request.META.get('REMOTE_ADDR')
+        )
+        
+        # Reimbolsar el plan de facturación si existe
+        try:
+            profile = CompanyBillingProfile.objects.get(company=company)
+            profile.refund_invoice()
+            logger.info(f"Plan reintegrado para {company.business_name} tras eliminar doc {document.id}")
+        except CompanyBillingProfile.DoesNotExist:
+            logger.warning(f"No se encontró perfil de facturación para {company.business_name}")
+            
+        document.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Documento eliminado y plan reintegrado exitosamente'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error al eliminar documento {document_id}: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        })

@@ -53,6 +53,7 @@ urlpatterns = [
     # SRI Documents
     path('sri-documents/', views.sri_documents_list, name='sri_documents'),
     path('sri-documents/<int:document_id>/view/', views.sri_document_view, name='sri_document_view'),
+    path('sri-documents/<int:document_id>/delete/', views.sri_document_delete, name='sri_document_delete'),
     path('sri-documents/<int:document_id>/authorize/', views.sri_document_authorize, name='sri_document_authorize'),
     path('sri-documents/<int:document_id>/download/', views.sri_document_download, name='sri_document_download'),
     path('sri-documents/<int:document_id>/cancel/', views.sri_document_cancel, name='sri_document_cancel'),

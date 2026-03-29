@@ -111,6 +111,13 @@ class CompanyBillingProfile(models.Model):
             return True
         return False
     
+    def refund_invoice(self):
+        """Devolver una factura al perfil (por eliminación o error)"""
+        self.available_invoices += 1
+        self.total_invoices_consumed -= 1
+        self.save(update_fields=['available_invoices', 'total_invoices_consumed', 'updated_at'])
+        return True
+    
     def add_invoices(self, count, cost=None):
         """Agregar facturas al perfil"""
         self.available_invoices += count

@@ -377,6 +377,11 @@
                             <i class="fas fa-ban"></i>
                         </button>
                         {% endif %}
+                        <button class="btn btn-sm btn-outline-danger btn-action btn-delete-temporary" 
+                                data-doc-id="{{ doc.id }}"
+                                title="ELIMINAR Y REINTEGRAR PLAN">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
                     </td>
                 </tr>
                 {% empty %}
@@ -640,6 +645,41 @@ $(document).ready(function() {
         });
     });
     
+    // Delete Document (TEMPORARY - AS REQUESTED)
+    $('.btn-delete-temporary').on('click', function() {
+        var docId = $(this).data('doc-id');
+        
+        Swal.fire({
+            title: '¿ELIMINAR DOCUMENTO Y REINTEGRAR PLAN?',
+            text: 'Esta acción es permanente y devolverá 1 crédito al plan de la empresa. (Función temporal habilitada por soporte)',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, eliminar y reintegrar',
+            cancelButtonText: 'Cancelar'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                $.ajax({
+                    url: "{% url 'custom_admin:sri_document_delete' 0 %}".replace('0', docId),
+                    method: 'POST',
+                    success: function(response) {
+                        if (response.success) {
+                            Swal.fire('Eliminado!', response.message, 'success').then(() => {
+                                location.reload();
+                            });
+                        } else {
+                            Swal.fire('Error', response.error, 'error');
+                        }
+                    },
+                    error: function() {
+                        Swal.fire('Error', 'No se pudo eliminar el documento', 'error');
+                    }
+                });
+            }
+        });
+    });
+
     // Export Documents
     $('#btnExportDocuments').on('click', function() {
         var selectedDocs = $('.doc-select:checked').map(function() {
