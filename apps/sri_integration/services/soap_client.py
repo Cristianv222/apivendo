@@ -565,7 +565,7 @@ class SRISOAPClient:
                 )
                 # ✅ FIX: Si el SRI dice que ya se está procesando o ya fue registrada, es como si se hubiera RECIBIDO
                 # Esto permite que el flujo continúe hacia la consulta de autorización de forma segura.
-                if any(kw in error_text.upper() for kw in ["EN PROCESAMIENTO", "IN PROCESSING", "PROCESADA", "PROCESAMIENTO", "REGISTRADA"]):
+                if any(kw in error_text.upper() for kw in ["EN PROCESAMIENTO", "IN PROCESSING", "PROCESADA", "PROCESAMIENTO", "REGISTRADA", "REGISTRADO"]):
                     logger.info(f"🎉 [SRI_FIXED] Document already handled by SRI ({error_text}) - treating as RECEIVED")
                     document.status = "SENT"
                     document.save()

@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
 Core models for VENDO_SRI
 Modelos base y compartidos del sistema
@@ -154,8 +154,7 @@ class AuditLog(BaseModel):
     
     action = models.CharField(
         _('action'),
-        max_length=50,  # Aumentado para acciones más largas
-        choices=ACTION_CHOICES,
+        max_length=50,
         help_text=_('Type of action performed.')
     )
     
