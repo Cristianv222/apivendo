@@ -690,12 +690,58 @@ def user_dashboard(request):
             logger.error(f"Error obteniendo estadísticas para empresa {selected_company.business_name}: {e}")
             # Mantener valores por defecto en caso de error
 
+    # ==================== DOCUMENTOS EN COLA (PERSISTENCIA) ====================
+    queue_documents = []
+    if selected_company:
+        # Definimos "en cola" como documentos no finalizados O finalizados hace menos de 15 min
+        time_threshold = timezone.now() - timedelta(minutes=15)
+        
+        try:
+            from apps.sri_integration.models import ElectronicDocument
+            active_docs = ElectronicDocument.objects.filter(
+                company=selected_company
+            ).filter(
+                Q(status__in=['DRAFT', 'GENERATED', 'SIGNED', 'SENT']) | 
+                Q(status__in=['AUTHORIZED', 'REJECTED', 'ERROR'], updated_at__gte=time_threshold)
+            ).order_by('-updated_at')[:10]
+            
+            type_mapping = {
+                'INVOICE': 'Factura',
+                'RETENTION': 'Retención',
+                'PURCHASE_SETTLEMENT': 'Liquidación',
+                'CREDIT_NOTE': 'Nota de Crédito',
+                'DEBIT_NOTE': 'Nota de Débito',
+            }
+            
+            for doc in active_docs:
+                # Determinar paso actual para el stepper (0-5)
+                step = 0
+                if doc.status == 'GENERATED': step = 1
+                elif doc.status == 'SIGNED': step = 2
+                elif doc.status == 'SENT': step = 3
+                elif doc.status == 'AUTHORIZED': step = 5
+                elif doc.status in ['ERROR', 'REJECTED']: step = 5
+                
+                queue_documents.append({
+                    'id': doc.id,
+                    'number': doc.document_number or f"ID: {doc.id}",
+                    'type': type_mapping.get(doc.document_type, 'Documento'),
+                    'status': doc.status,
+                    'step': step,
+                    'time': doc.updated_at.strftime('%H:%M:%S'),
+                    'is_final': doc.status in ['AUTHORIZED', 'REJECTED', 'ERROR']
+                })
+        except Exception as e:
+            logger.error(f"Error fetching queue documents: {e}")
+
     # ==================== PREPARAR CONTEXTO FINAL ====================
     context = {
         'user': user,
+        'user_companies': user_companies,
         'selected_company': selected_company,
         'selected_token': selected_token,
         'available_companies_with_tokens': available_companies_with_tokens,
+        'queue_documents': queue_documents,
         'has_certificate': has_certificate,
         'certificate_info': certificate_info,
         'stats': stats,
@@ -708,6 +754,7 @@ def user_dashboard(request):
         'certificate_expiry': certificate_info.get('expiry'),
         'certificate_issuer': certificate_info.get('issuer'),
         'certificate_days_left': certificate_info.get('days_left'),
+        'certificate_expired': certificate_info.get('expired', False),
         'billing_available': BILLING_AVAILABLE,
         'page_title': 'Dashboard Principal',
         'security_validation': {

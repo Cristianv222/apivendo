@@ -36,14 +36,16 @@ CSRF_TRUSTED_ORIGINS = config('CSRF_TRUSTED_ORIGINS', default='https://localhost
 
 # Django core apps
 DJANGO_APPS = [
+    'daphne',  # ✅ Requerido para Channels
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django.contrib.sites',  
-    'django_celery_beat'  # ✅ CORREGIDO: Agregado para tareas periódicas
+    'django.contrib.sites',
+    'django_celery_beat',
+    'channels',  # ✅ Django Channels
 ]
 
 # Third party apps
@@ -205,6 +207,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'vendo_sri.wsgi.application'
+ASGI_APPLICATION = 'vendo_sri.asgi.application'
 
 # ==========================================
 # DATABASE CONFIGURATION
@@ -471,6 +474,18 @@ REDIS_AUTH = f":{REDIS_PASSWORD}@" if REDIS_PASSWORD else ""
 
 # Construir URL de Redis automáticamente - ✅ CORREGIDO
 REDIS_URL = config('REDIS_URL', default=f'redis://{REDIS_HOST}:{REDIS_PORT}')
+
+# ==========================================
+# CHANNEL LAYERS CONFIGURATION - ✅ AGREGADO
+# ==========================================
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [f'redis://{REDIS_AUTH}{REDIS_HOST}:{REDIS_PORT}'],
+        },
+    },
+}
 
 # ==========================================
 # CELERY CONFIGURATION - ✅ COMPLETAMENTE CORREGIDO
@@ -852,132 +867,62 @@ if not DEBUG:
     LOGGING['loggers']['apps.certificates']['level'] = 'INFO'
 
 # ==========================================
-# CREAR DIRECTORIOS NECESARIOS
+# CREAR DIRECTORIOS NECESARIOS - ✅ OPTIMIZADO
 # ==========================================
 
-# Crear directorios automáticamente
 import os
-import tempfile
+import sys
 
-# Crear directorios automáticamente
-directories_to_create = [
-    LOG_DIR,
-    'storage',
-    'storage/certificates',
-    'storage/invoices',
-    'storage/invoices/xml',
-    'storage/invoices/pdf',
-    'storage/backup',
-    'storage/backup/sri',
-]
+# Solo crear directorios si no estamos en testing y solo una vez (proceso principal)
+if 'test' not in sys.argv:
+    directories_to_create = [
+        'logs',
+        'storage',
+        'storage/certificates',
+        'storage/invoices',
+        'storage/invoices/xml',
+        'storage/invoices/pdf',
+        'storage/backup',
+        'storage/backup/sri',
+    ]
 
-for directory in directories_to_create:
-    dir_path = BASE_DIR / directory
-try:
-    os.makedirs(dir_path, exist_ok=True)
-except PermissionError:
-    import tempfile
-    dir_path = os.path.join(tempfile.gettempdir(), 'vendo_sri_logs')
-    os.makedirs(dir_path, exist_ok=True)
-
-    # Configurar permisos seguros para certificados y backups
-    if 'certificates' in directory or 'backup' in directory:
-        os.chmod(dir_path, 0o700)
-    if directory == LOG_DIR:
-        dir_path = LOG_DIR  # LOG_DIR ya es ruta completa
-    else:
+    for directory in directories_to_create:
         dir_path = BASE_DIR / directory
-    
-    try:
-        os.makedirs(dir_path, exist_ok=True)
-        
-        # Configurar permisos seguros para certificados y backups
-        if 'certificates' in str(directory) or 'backup' in str(directory):
-            os.chmod(dir_path, 0o700)
-            
-    except PermissionError:
-        # Usar directorio temporal como fallback
-        temp_dir = os.path.join(tempfile.gettempdir(), f'vendo_sri_{directory.replace("/", "_")}')
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        # Actualizar LOG_DIR si es necesario
-        if directory == LOG_DIR:
-            LOG_DIR = temp_dir
-            
-        print(f"Warning: Using temporary directory {temp_dir} for {directory}")
+        try:
+            os.makedirs(dir_path, exist_ok=True)
+            # Permisos solo en carpetas críticas
+            if 'certificates' in directory or 'backup' in directory:
+                try:
+                    os.chmod(dir_path, 0o700)
+                except:
+                    pass
+        except Exception as e:
+            if DEBUG:
+                print(f"⚠️ No se pudo crear/acceder a {directory}: {e}")
 
 # ==========================================
-# CONFIGURACIÓN DE STARTUP
-# ==========================================
-
-# Configuración de inicialización automática
-CERTIFICATE_AUTO_STARTUP = config('CERTIFICATE_AUTO_STARTUP', default=True, cast=bool)
-CELERY_AUTO_STARTUP = config('CELERY_AUTO_STARTUP', default=True, cast=bool)
-SRI_AUTO_STARTUP_VALIDATION = config('SRI_AUTO_STARTUP_VALIDATION', default=True, cast=bool)
-
-# ==========================================
-# MENSAJES DE CONFIGURACIÓN - ✅ ACTUALIZADOS
+# ESTATUS DE CONFIGURACIÓN
 # ==========================================
 
 def print_config_status():
-    """Imprimir estado de la configuración al iniciar"""
-    print("✅ Settings VENDO_SRI configurado exitosamente")
-    print(f"🔧 Modo: {'Desarrollo' if DEBUG else 'Producción'}")
-    print(f"🗄️  Base de datos: {DATABASES['default']['NAME']} en {DATABASES['default']['HOST']}")
-    print(f"🔴 Redis: redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}")
-    print(f"📊 Celery Broker: {CELERY_BROKER_URL}")
-    print(f"⏰ Session timeout: {SESSION_COOKIE_AGE // 60} minutos")
-    print(f"🔐 Certificados cache: {CERTIFICATE_CACHE_TIMEOUT // 60} minutos")
-    print(f"📧 Email backend: {EMAIL_BACKEND}")
-    print(f"🌐 CORS origins: {len(CORS_ALLOWED_ORIGINS)} configurados")
-    print(f"🔍 Log level: {LOG_LEVEL}")
-    print(f"🚀 SRI Auto-send: {'Activado' if SRI_AUTO_SEND else 'Desactivado'}")
-    print(f"🔄 SRI Reintentos: {SRI_MAX_RETRY_ATTEMPTS} máximo")
-    print(f"📊 SRI Lote: {SRI_BATCH_SIZE} documentos")
-    
-    if DEBUG:
-        print("🛠️  Configuración de desarrollo activa")
-        print(f"   - Celery eager: {config('CELERY_TASK_ALWAYS_EAGER', default=False)}")
-        print(f"   - CORS allow all: {config('CORS_ALLOW_ALL_ORIGINS', default=True)}")
-        print(f"   - SRI Circuit breaker: {'Desactivado' if not SRI_CIRCUIT_BREAKER_ENABLED else 'Activado'}")
-    else:
-        print("🏭 Configuración de producción activa")
-        print(f"   - SSL redirect: {SECURE_SSL_REDIRECT}")
-        print(f"   - HSTS seconds: {SECURE_HSTS_SECONDS}")
-        print(f"   - SRI Backup: {'Activado' if SRI_AUTO_BACKUP_DOCUMENTS else 'Desactivado'}")
+    """Imprimir resumen ligero del estado al iniciar"""
+    if os.environ.get('RUN_MAIN') == 'true' or not DEBUG: # Evitar doble impresión en dev
+        print(f"🚀 VENDO_SRI | Modo: {'Desarrollo' if DEBUG else 'Producción'} | DB: {DATABASES['default']['NAME']}")
+        if not EMAIL_HOST_USER:
+             print("⚠️ Email no configurado")
 
-# Ejecutar solo si no estamos en testing
-if 'test' not in sys.argv and os.environ.get('DJANGO_SETTINGS_MODULE'):
+# Ejecutar resumen solo si es el proceso principal
+if 'manage.py' in sys.argv and 'runserver' in sys.argv:
     print_config_status()
+elif 'daphne' in sys.argv or 'celery' in sys.argv:
+    # Solo un log minimalista para servicios de fondo
+    print(f"📦 Iniciando {sys.argv[0]}...")
 
 # ==========================================
-# VALIDACIÓN DE CONFIGURACIÓN
+# VALIDACIÓN FINAL
 # ==========================================
 
-# Validar configuración crítica
-critical_settings = [
-    ('SECRET_KEY', SECRET_KEY),
-    ('DB_NAME', DATABASES['default']['NAME']),
-    ('CELERY_BROKER_URL', CELERY_BROKER_URL),
-    ('REDIS_HOST', REDIS_HOST),
-]
-
-for setting_name, setting_value in critical_settings:
-    if not setting_value or setting_value == 'django-insecure-vendo-sri-change-this-in-production':
-        if not DEBUG:
-            raise ValueError(f"⚠️ {setting_name} debe estar configurado en producción")
-        else:
-            print(f"⚠️ WARNING: {setting_name} usando valor por defecto (solo desarrollo)")
-
-# Advertencias de configuración
-if DEBUG and not EMAIL_HOST_USER:
-    print("⚠️ WARNING: EMAIL_HOST_USER no configurado - las alertas por email no funcionarán")
-
-if not config('GOOGLE_CLIENT_ID', default=''):
-    print("⚠️ WARNING: OAuth con Google no configurado")
-
-print("🚀 Configuración validada exitosamente - Sistema listo para usar")
-if SRI_WEBHOOK_ENABLED and not SRI_WEBHOOK_URL:
-    print("⚠️ WARNING: SRI Webhook habilitado pero URL no configurada")
-
-print("🚀 Configuración validada exitosamente - Sistema listo para usar")
+# Validar solo variables críticas extremas
+if not SECRET_KEY or SECRET_KEY == 'django-insecure-vendo-sri-change-this-in-production':
+    if not DEBUG:
+        raise ValueError("❌ SECRET_KEY crítica no configurada para producción")

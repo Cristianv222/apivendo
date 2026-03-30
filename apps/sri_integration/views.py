@@ -124,20 +124,55 @@ class ElectronicDocumentViewSet(viewsets.ModelViewSet):
                 sequence = sri_config.get_next_sequence("INVOICE")
                 document_number = sri_config.get_full_document_number("INVOICE", sequence)
                 
-                # Crear documento electrónico
-                document = ElectronicDocument.objects.create(
+                # =============================================================
+                # MANEJO DE DUPLICADOS: Verificar si ya existe antes de crear
+                # =============================-================================
+                document = ElectronicDocument.objects.filter(
                     company=company,
                     document_type="INVOICE",
-                    document_number=document_number,
-                    issue_date=validated_data.get("issue_date", timezone.now().date()),
-                    customer_identification_type=validated_data["customer_identification_type"],
-                    customer_identification=validated_data["customer_identification"],
-                    customer_name=validated_data["customer_name"],
-                    customer_address=validated_data.get("customer_address", ""),
-                    customer_email=validated_data.get("customer_email", ""),
-                    customer_phone=validated_data.get("customer_phone", ""),
-                    status="DRAFT"
-                )
+                    document_number=document_number
+                ).first()
+                
+                if document:
+                    logger.info(f"Documento duplicado detectado: {document_number}. Reutilizando reporte...")
+                    # Si ya está autorizado, no necesitamos hacer nada más, solo devolverlo
+                    if document.status == "AUTHORIZED":
+                        response_serializer = ElectronicDocumentSerializer(document)
+                        data = response_serializer.data
+                        data.update({
+                            'message': 'Documento ya existía y estaba autorizado.',
+                            'reused': True
+                        })
+                        return Response(data, status=status.HTTP_200_OK)
+                    
+                    # Si existe pero no está autorizado, actualizamos datos básicos y lo procesamos
+                    document.issue_date = validated_data.get("issue_date", timezone.now().date())
+                    document.customer_identification_type = validated_data["customer_identification_type"]
+                    document.customer_identification = validated_data["customer_identification"]
+                    document.customer_name = validated_data["customer_name"]
+                    document.customer_address = validated_data.get("customer_address", "")
+                    document.customer_email = validated_data.get("customer_email", "")
+                    document.customer_phone = validated_data.get("customer_phone", "")
+                    document.status = "DRAFT"
+                    document.save()
+                    
+                    # Limpiar items anteriores para recrearlos
+                    document.items.all().delete()
+                else:
+                    # Crear documento electrónico nuevo
+                    document = ElectronicDocument.objects.create(
+                        company=company,
+                        document_type="INVOICE",
+                        document_number=document_number,
+                        issue_date=validated_data.get("issue_date", timezone.now().date()),
+                        customer_identification_type=validated_data["customer_identification_type"],
+                        customer_identification=validated_data["customer_identification"],
+                        customer_name=validated_data["customer_name"],
+                        customer_address=validated_data.get("customer_address", ""),
+                        customer_email=validated_data.get("customer_email", ""),
+                        customer_phone=validated_data.get("customer_phone", ""),
+                        status="DRAFT"
+                    )
                 
                 # Función para redondear decimales correctamente
                 def fix_decimal_places(value, places=2):

@@ -30,20 +30,26 @@ services:
     build: .
     image: vendo_sri_web
     container_name: vendo_sri_web
-    # El entrypoint.sh se ejecuta primero, luego este command
-    command: sh -c "python manage.py migrate --noinput && python manage.py collectstatic --noinput && gunicorn vendo_sri.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2 --access-logfile /app/storage/logs/gunicorn_access.log --error-logfile /app/storage/logs/gunicorn_error.log"
+    command: sh -c "python manage.py migrate --noinput && daphne -b 0.0.0.0 -p 8000 vendo_sri.asgi:application"
     volumes:
       - .:/app
       - static_volumen:/app/staticfiles
       - media_volumen:/app/mediafiles
     ports:
       - "127.0.0.1:8000:8000"
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
     depends_on:
       - db
       - redis
     environment:
       - TZ=America/Guayaquil
       - REDIS_PASSWORD=Redis2026Secure!
+      - PYTHONUNBUFFERED=1
     env_file:
       - .env
     restart: unless-stopped
@@ -54,18 +60,24 @@ services:
     build: .
     image: vendo_sri_web
     container_name: vendo_sri_celery
-    # Escuchar todas las colas definidas en settings.py
-    command: celery -A vendo_sri worker --loglevel=info --concurrency=1 -Q celery,sri_processing,sri_authorization,sri_maintenance --hostname=worker1@%h
+    command: celery -A vendo_sri worker --loglevel=info --concurrency=1 -Q celery,sri_processing,sri_authorization,sri_maintenance
     volumes:
       - .:/app
       - static_volumen:/app/staticfiles
       - media_volumen:/app/mediafiles
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 128M
     depends_on:
       - db
       - redis
     environment:
       - TZ=America/Guayaquil
       - REDIS_PASSWORD=Redis2026Secure!
+      - PYTHONUNBUFFERED=1
     env_file:
       - .env
     restart: unless-stopped

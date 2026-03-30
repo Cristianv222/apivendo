@@ -576,15 +576,18 @@ class SRIConfiguration(BaseModel):
         
         field_name = field_map[document_type]
         
-        # Operación atómica para asegurar secuencia 100% correcta
+        # Operación atómica y con bloqueo de fila para asegurar secuencia 100% correcta
         with transaction.atomic():
-            # Refrescar desde DB para evitar condiciones de carrera
-            self.refresh_from_db()
-            current_value = getattr(self, field_name)
+            # Obtener configuración con bloqueo para que otros hilos/procesos esperen
+            # Usando select_for_update() para evitar condiciones de carrera tipo "click doble"
+            config = SRIConfiguration.objects.select_for_update().get(pk=self.pk)
+            current_value = getattr(config, field_name)
             
             # Incrementar de forma segura
-            SRIConfiguration.objects.filter(pk=self.pk).update(**{field_name: F(field_name) + 1})
+            setattr(config, field_name, current_value + 1)
+            config.save(update_fields=[field_name])
             
+            logger.info(f"🔢 Secuencia {document_type} incrementada: {current_value} -> {current_value + 1} para empresa {self.company_id}")
             return current_value
     
     def get_full_document_number(self, document_type, sequence=None):
@@ -802,24 +805,34 @@ class ElectronicDocument(BaseModel):
         return f"{self.get_document_type_display()} {self.document_number} - {self.company.business_name}"
     
     def save(self, *args, **kwargs):
-        # ✅ SIEMPRE intentar obtener un nuevo número si el actual falló (REJECTED/ERROR)
-        # Esto es vital para recuperarse de errores de "FIRMA INVALIDA" en Producción
-        # o "CLAVE DE ACCESO EN PROCESAMIENTO" en Pruebas.
-        if self.status in ['ERROR', 'REJECTED']:
-            # Limpiar para forzar regeneración con nueva secuencia y/o clave aleatoria
-            # Mantenemos los datos pero limpiamos los identificadores SRI que causaron el error
-            self.document_number = None
-            self.access_key = None
-            logger.info(f"🔄 Limpiando identificadores para re-intento de documento ID {self.id} (Status: {self.status})")
-
-        # Generar número de documento si no existe
+        # Solo generamos número si no existe (la lógica de limpieza se movió al Processor y Tasks)
         if not self.document_number:
             try:
                 sri_config = self.company.sri_configuration
-                sequence = sri_config.get_next_sequence(self.document_type)
-                self.document_number = f"{sri_config.establishment_code}-{sri_config.emission_point}-{sequence:09d}"
-            except:
-                self.document_number = "001-001-000000001"
+                
+                # Bucle de seguridad para asegurar que el número no exista ya en DB
+                # Esto previene errores de "UniqueConstraint" si un proceso "saltó" a un número futuro
+                max_safety_retries = 10
+                for _ in range(max_safety_retries):
+                    sequence = sri_config.get_next_sequence(self.document_type)
+                    new_number = f"{sri_config.establishment_code}-{sri_config.emission_point}-{sequence:09d}"
+                    
+                    if not ElectronicDocument.objects.filter(
+                        company=self.company, 
+                        document_type=self.document_type, 
+                        document_number=new_number
+                    ).exists():
+                        self.document_number = new_number
+                        break
+                    logger.warning(f"🔢 El número {new_number} ya existe en DB. Saltando al siguiente...")
+                
+                if not self.document_number:
+                    raise ValidationError("Could not generate a unique document number after 10 attempts.")
+                    
+            except Exception as e:
+                logger.error(f"Error generando secuencial: {e}")
+                if not self.document_number:
+                    self.document_number = "001-001-000000001"
         
         # Generar clave de acceso si no existe
         if not self.access_key:

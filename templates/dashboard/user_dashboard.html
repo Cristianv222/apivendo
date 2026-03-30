@@ -5,6 +5,7 @@
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <!-- En el <head> del archivo -->
+
         <title>FronteraTech - Dashboard</title>
         <link rel="icon" type="image/png" href="{% static 'images/frontera-logo-hex.png' %}">
         <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -932,6 +933,120 @@ body {
 
 /* Mantenemos los colores originales, sin modo oscuro automático */
 
+/* Real-time Queue Styles */
+.queue-item {
+    padding: 1.25rem;
+    border-bottom: 1px solid #edf2f7;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+.queue-item:last-child { border-bottom: none; }
+.queue-item.active { background: #fff; border-left: 4px solid #0d6efd; }
+.queue-item.finished { background: #f8f9fa; opacity: 0.65; grayscale: 50%; }
+.queue-item.error-state { background: #fff5f5; border-left: 4px solid #dc3545; }
+
+.queue-icon-wrapper {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+.active .queue-icon-wrapper { background: #e0e7ff; color: #4f46e5; }
+.finished .queue-icon-wrapper { background: #f1f5f9; color: #94a3b8; }
+.error-state .queue-icon-wrapper { background: #fee2e2; color: #dc2626; }
+
+.queue-info { flex-grow: 1; min-width: 0; }
+.queue-title { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; color: #1e293b; }
+.queue-subtitle { font-size: 0.8rem; color: #64748b; }
+
+.queue-status {
+    min-width: 140px;
+    text-align: right;
+}
+.status-pill {
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.025em;
+}
+.status-pulse { animation: statusPulse 2s infinite; }
+@keyframes statusPulse {
+    0% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(13, 110, 253, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(13, 110, 253, 0); }
+}
+
+/* Stepper Styles */
+.stepper-wrapper {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+    position: relative;
+}
+.stepper-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+}
+.stepper-item::before {
+    position: absolute;
+    content: "";
+    border-bottom: 2px solid #e2e8f0;
+    width: 100%;
+    top: 12px;
+    left: -50%;
+    z-index: 1;
+}
+.stepper-item:first-child::before { content: none; }
+.stepper-circle {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: #64748b;
+    z-index: 2;
+    transition: all 0.3s ease;
+}
+.stepper-label {
+    font-size: 0.65rem;
+    color: #94a3b8;
+    margin-top: 0.5rem;
+    text-align: center;
+}
+.stepper-item.completed .stepper-circle { background: #10b981; color: white; }
+.stepper-item.completed::before { border-color: #10b981; }
+.stepper-item.active .stepper-circle { 
+    background: #3b82f6; 
+    color: white;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2);
+    animation: stepPulse 1.5s infinite;
+}
+.stepper-item.error-step .stepper-circle { background: #ef4444; color: white; }
+
+@keyframes stepPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+}
+
         </style>
     </head>
     <body>
@@ -1235,6 +1350,11 @@ body {
                         </button>
                     </li>
                     <li class="nav-item">
+                        <button class="nav-link" data-bs-toggle="tab" data-bs-target="#colaTab">
+                            <i class="fas fa-stream me-1"></i>Colas
+                        </button>
+                    </li>
+                    <li class="nav-item">
                         <button class="nav-link" data-bs-toggle="tab" data-bs-target="#planesTab">
                             <i class="fas fa-shopping-cart me-1"></i>Planes
                         </button>
@@ -1248,6 +1368,80 @@ body {
 
                 <!-- Tab Content -->
                 <div class="tab-content">
+                    <!-- Colas Tab (NUEVO) -->
+                    <div class="tab-pane fade" id="colaTab">
+    <div class="section-card">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="section-title mb-0">Centro de Procesamiento en Tiempo Real</div>
+            <div id="wsStatus" class="badge bg-secondary p-2 shadow-sm ripple-effect">
+                <i class="fas fa-plug me-1"></i>Conectando...
+            </div>
+        </div>
+        <div id="queueList" class="border rounded bg-white shadow-sm" style="min-height: 300px; max-height: 600px; overflow-y: auto;">
+            <div id="cola-list" class="queue-container">
+                            {% if queue_documents %}
+                                {% for doc in queue_documents %}
+                                <div class="queue-item {% if doc.is_final %}finished{% else %}active{% endif %} {% if doc.status == 'ERROR' or doc.status == 'REJECTED' %}error-state{% endif %}" id="doc-{{ doc.id }}">
+                                    <div class="queue-icon-wrapper">
+                                        <i class="fas {% if doc.is_final %}fa-check-circle{% else %}fa-sync fa-spin{% endif %}"></i>
+                                    </div>
+                                    <div class="queue-info">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <div>
+                                                <div class="queue-title">{{ doc.type }} #{{ doc.number }}</div>
+                                                <div class="queue-subtitle" id="msg-{{ doc.id }}">
+                                                    {% if doc.status == 'AUTHORIZED' %}Autorizado exitosamente{% else %}Estado: {{ doc.status }}{% endif %}
+                                                </div>
+                                            </div>
+                                            <div class="queue-status">
+                                                <span class="status-pill {% if doc.status == 'AUTHORIZED' %}bg-success text-white{% elif doc.status == 'ERROR' or doc.status == 'REJECTED' %}bg-danger text-white{% else %}bg-primary text-white status-pulse{% endif %}">
+                                                    {{ doc.status }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Stepper dinámico -->
+                                        <div class="stepper-wrapper" id="stepper-{{ doc.id }}">
+                                            <div class="stepper-item {% if doc.step >= 1 %}completed{% elif doc.step == 0 %}active{% endif %}" data-step="1">
+                                                <div class="stepper-circle">1</div>
+                                                <div class="stepper-label">XML</div>
+                                            </div>
+                                            <div class="stepper-item {% if doc.step >= 2 %}completed{% elif doc.step == 1 %}active{% endif %}" data-step="2">
+                                                <div class="stepper-circle">2</div>
+                                                <div class="stepper-label">Firma</div>
+                                            </div>
+                                            <div class="stepper-item {% if doc.step >= 3 %}completed{% elif doc.step == 2 %}active{% endif %}" data-step="3">
+                                                <div class="stepper-circle">3</div>
+                                                <div class="stepper-label">Envío</div>
+                                            </div>
+                                            <div class="stepper-item {% if doc.step >= 4 %}completed{% elif doc.step == 3 %}active{% endif %}" data-step="4">
+                                                <div class="stepper-circle">4</div>
+                                                <div class="stepper-label">SRI</div>
+                                            </div>
+                                            <div class="stepper-item {% if doc.status == 'AUTHORIZED' %}completed{% elif doc.step == 4 %}active{% endif %} {% if doc.status == 'ERROR' or doc.status == 'REJECTED' %}error-step{% endif %}" data-step="5">
+                                                <div class="stepper-circle">5</div>
+                                                <div class="stepper-label">Final</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                            <div id="cola-empty-state" class="text-center py-5">
+                                <i class="fas fa-bars fa-3x text-light mb-3"></i>
+                                <h5 class="text-secondary">Tu cola está lista</h5>
+                                <p class="text-muted small">Los documentos aparecerán aquí en cuanto empieces a facturar.</p>
+                            </div>
+                            {% endif %}
+                        </div>
+        </div>
+        <div class="mt-3 text-end">
+            <button class="btn btn-sm btn-outline-secondary" onclick="clearFinishedQueue()">
+                <i class="fas fa-eraser me-1"></i>Limpiar finalizados
+            </button>
+        </div>
+    </div>
+</div>
                     <!-- Dashboard Tab -->
                     <div class="tab-pane fade show active" id="dashboardTab">
                         <div class="row">
@@ -3028,6 +3222,239 @@ function showLoadingToast(message) {
         }
     }, 3000);
 }
+
+ // WebSocket for Queue Monitoring
+let queueSocket = null;
+const companyId = "{{ selected_company.id }}";
+
+function initQueueSocket() {
+    if (queueSocket || !companyId || companyId === "None") return;
+    
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${wsProtocol}//${window.location.host}/ws/queue/${companyId}/`;
+    
+    console.log('Connecting to Queue WebSocket:', wsUrl);
+    queueSocket = new WebSocket(wsUrl);
+    
+    queueSocket.onopen = function(e) {
+        console.log('Queue WebSocket connected');
+        updateWsStatus('Conectado', 'bg-success');
+    };
+    
+    queueSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        if (data.type === 'queue_update') {
+            handleQueueUpdate(data.data);
+        }
+    };
+    
+    queueSocket.onclose = function(e) {
+        console.log('Queue WebSocket closed. Attempting reconnect in 5s...');
+        updateWsStatus('Desconectado', 'bg-danger');
+        queueSocket = null;
+        setTimeout(initQueueSocket, 5000);
+    };
+    
+    queueSocket.onerror = function(err) {
+        console.error('Queue WebSocket error:', err);
+        queueSocket.close();
+    };
+}
+
+function updateWsStatus(text, className) {
+    const statusEl = document.getElementById('wsStatus');
+    if (statusEl) {
+        statusEl.className = `badge p-2 shadow-sm ripple-effect ${className}`;
+        statusEl.innerHTML = `<i class="fas fa-plug me-1"></i>${text}`;
+    }
+}
+
+function handleQueueUpdate(data) {
+    const queueList = document.getElementById('cola-list');
+    const emptyMsg = document.getElementById('cola-empty-state');
+    
+    if (emptyMsg) emptyMsg.classList.add('d-none');
+    
+    let item = document.getElementById(`doc-${data.document_id}`);
+    
+    if (!item) {
+        item = createQueueItem(data);
+        queueList.prepend(item);
+        
+        // Efecto de entrada
+        item.style.opacity = '0';
+        item.style.transform = 'translateY(-20px)';
+        setTimeout(() => {
+            item.style.transition = 'all 0.5s ease';
+            item.style.opacity = '1';
+            item.style.transform = 'translateY(0)';
+        }, 10);
+    } else {
+        updateQueueItem(item, data);
+    }
+    
+    if (data.status === 'AUTHORIZED') {
+        if (typeof confetti === 'function') {
+            confetti({
+                particleCount: 100,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
+        }
+    }
+}
+
+function renderStepper(currentStep, isError = false) {
+    const steps = [
+        { n: 1, label: 'XML' },
+        { n: 2, label: 'Firma' },
+        { n: 3, label: 'Envío' },
+        { n: 4, label: 'SRI' },
+        { n: 5, label: 'Final' }
+    ];
+    
+    return steps.map(s => {
+        let cls = "";
+        if (isError && s.n === 5) cls = "error-step";
+        else if (s.n < currentStep || (currentStep === 5 && !isError)) cls = "completed";
+        else if (s.n === currentStep) cls = "active";
+        
+        return `<div class="stepper-item ${cls}" data-step="${s.n}">
+            <div class="stepper-circle">${s.n}</div>
+            <div class="stepper-label">${s.label}</div>
+        </div>`;
+    }).join('');
+}
+
+function createQueueItem(data) {
+    const div = document.createElement('div');
+    div.id = `doc-${data.document_id}`;
+    div.className = 'queue-item active';
+    
+    const typeLabel = data.extra.type || 'Documento';
+    const number = data.extra.number || 'Pendiente';
+    
+    div.innerHTML = `
+        <div class="queue-icon-wrapper">
+            <i class="fas fa-sync fa-spin"></i>
+        </div>
+        <div class="queue-info">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div>
+                    <div class="queue-title">${typeLabel} #${number}</div>
+                    <div class="queue-subtitle" id="msg-${data.document_id}">${data.message}</div>
+                </div>
+                <div class="queue-status">
+                    <span class="status-pill bg-primary text-white status-pulse">
+                        ${getStatusLabel(data.status)}
+                    </span>
+                </div>
+            </div>
+            <div class="stepper-wrapper" id="stepper-${data.document_id}">
+                ${renderStepper(0)}
+            </div>
+        </div>
+    `;
+    return div;
+}
+
+function updateQueueItem(item, data) {
+    const subtitle = item.querySelector('.queue-subtitle');
+    const pill = item.querySelector('.status-pill');
+    const icon = item.querySelector('.queue-icon-wrapper');
+    const stepper = item.querySelector('.stepper-wrapper');
+    
+    subtitle.innerText = data.message;
+    pill.innerText = getStatusLabel(data.status);
+    
+    let step = 0;
+    const status = data.status;
+    
+    if (status === 'GENERATING_XML') step = 1;
+    else if (status === 'SIGNING_XML') step = 2;
+    else if (status === 'SENDING_SRI') step = 3;
+    else if (status === 'AUTHORIZING') step = 4;
+    else if (status === 'GENERATING_PDF' || status === 'AUTHORIZED') step = 5;
+    else if (status === 'ERROR' || status === 'REJECTED') step = 5;
+    
+    stepper.innerHTML = renderStepper(step, status === 'ERROR' || status === 'REJECTED');
+    
+    if (status === 'AUTHORIZED') {
+        item.classList.add('finished');
+        item.classList.remove('active');
+        pill.className = 'status-pill bg-success text-white';
+        icon.innerHTML = '<i class="fas fa-check-circle text-success"></i>';
+    } else if (status === 'ERROR' || status === 'REJECTED') {
+        item.classList.add('error-state');
+        pill.className = 'status-pill bg-danger text-white';
+        icon.innerHTML = '<i class="fas fa-exclamation-circle text-danger"></i>';
+    } else {
+        item.classList.add('active');
+        item.classList.remove('finished', 'error-state');
+        pill.className = 'status-pill bg-primary text-white status-pulse';
+        icon.innerHTML = '<i class="fas fa-sync fa-spin"></i>';
+    }
+}
+
+function getStatusLabel(status) {
+    const labels = {
+        'PROCESSING': 'Iniciando',
+        'GENERATING_XML': 'XML',
+        'SIGNING_XML': 'Firmando',
+        'SENDING_SRI': 'Enviando',
+        'AUTHORIZING': 'Autorizando',
+        'GENERATING_PDF': 'PDF',
+        'AUTHORIZED': 'Completado',
+        'ERROR': 'Error',
+        'REJECTED': 'Rechazado'
+    };
+    return labels[status] || status;
+}
+
+function updateQueueBadge(delta) {
+    const badge = document.getElementById('queueBadge');
+    if (badge) {
+        let count = parseInt(badge.innerText) || 0;
+        count += delta;
+        badge.innerText = count;
+        if (count > 0) badge.classList.remove('d-none');
+    }
+}
+
+function clearFinishedQueue() {
+    const finishedItems = document.querySelectorAll('.queue-item.finished, .queue-item.error-state');
+    finishedItems.forEach(el => el.remove());
+    
+    const queueList = document.getElementById('cola-list');
+    if (queueList && queueList.querySelectorAll('.queue-item').length === 0) {
+        const emptyMsg = document.getElementById('cola-empty-state');
+        if (emptyMsg) emptyMsg.classList.remove('d-none');
+        const badge = document.getElementById('queueBadge');
+        if (badge) {
+            badge.innerText = '0';
+            badge.classList.add('d-none');
+        }
+    }
+}
+
+// Inicializar WebSocket al cargar la página si el tab ya está activo o al entrar al tab
+document.addEventListener('DOMContentLoaded', function() {
+    const tabEl = document.querySelector('button[data-bs-target="#colaTab"]');
+    if (tabEl) {
+        tabEl.addEventListener('shown.bs.tab', function () {
+            initQueueSocket();
+            const badge = document.getElementById('queueBadge');
+            if (badge) {
+                badge.innerText = '0';
+                badge.classList.add('d-none');
+            }
+        });
+    }
+    
+    if (document.getElementById('colaTab') && document.getElementById('colaTab').classList.contains('active')) {
+        initQueueSocket();
+    }
+});
 
 // Función auxiliar para obtener CSRF token
 function getCookie(name) {

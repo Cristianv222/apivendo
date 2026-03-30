@@ -41,7 +41,7 @@ django-debug-toolbar
 django-extensions
 
 # Security & Validation
-cryptography
+cryptography>=42.0.0
 certifi
 
 # File processing
@@ -62,6 +62,11 @@ django-redis
 django-celery-beat
 django-celery-results
 
+# Django Channels for WebSockets
+channels
+channels-redis
+daphne
+
 # QR Code generation
 qrcode
 
@@ -79,4 +84,4 @@ whitenoise
 sendgrid==6.11.0
 flower==1.2.0
 
-pyOpenSSL==20.0.1
+pyOpenSSL>=23.2.1

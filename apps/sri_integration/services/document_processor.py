@@ -24,6 +24,7 @@ from apps.sri_integration.services.pdf_generator import PDFGenerator
 from apps.sri_integration.services.global_certificate_manager import get_certificate_manager
 from apps.sri_integration.services.soap_client import SRISOAPClient
 from apps.sri_integration.services.email_service import EmailService
+from apps.core.websockets_utils import send_queue_update
 
 logger = logging.getLogger(__name__)
 
@@ -52,67 +53,162 @@ class DocumentProcessor:
     # ------------------------------------------------------------------
 
     def process_document(self, document, send_email=True, certificate_password=None):
-        """Procesa completamente un documento electrónico."""
+        """Procesa completamente un documento electrónico con reintentos automáticos."""
         try:
-            with transaction.atomic():
-                logger.info("Iniciando procesamiento de documento %s", document.id)
+            # Nota: No usamos transaction.atomic alrededor de todo porque el envío al SRI 
+            # es externo y queremos guardar estados parciales si fallan reintentos.
+            
+            logger.info("Iniciando procesamiento de documento %s", document.id)
 
-                # Validar certificado
-                cert_data = self.cert_manager.get_certificate(self.company.id)
-                if not cert_data:
-                    return False, f"Certificate not available for company {self.company.id}"
+            # 📡 WS: Inicio de procesamiento
+            send_queue_update(
+                self.company.id, document.id, 'PROCESSING', 
+                "Iniciando procesamiento...", 
+                {'type': document.document_type, 'number': document.document_number or 'Pendiente'}
+            )
 
-                is_valid, val_msg = self.cert_manager.validate_certificate(self.company.id)
-                if not is_valid:
-                    return False, f"Certificate validation failed: {val_msg}"
+            # Validar certificado
+            cert_data = self.cert_manager.get_certificate(self.company.id)
+            if not cert_data:
+                return False, f"Certificate not available for company {self.company.id}"
 
-                ok, cert_msg = self._verify_certificate(cert_data)
-                if not ok:
-                    return False, cert_msg
+            is_valid, val_msg = self.cert_manager.validate_certificate(self.company.id)
+            if not is_valid:
+                return False, f"Certificate validation failed: {val_msg}"
 
-                # 1. Generar XML
-                ok, xml_content = self._generate_xml(document)
-                if not ok:
+            ok, cert_msg = self._verify_certificate(cert_data)
+            if not ok:
+                return False, cert_msg
+
+            # 3. Ciclo de Envío con Regeneración Automática si hay duplicados
+            max_attempts = 4 # Un intento extra por si acaso
+            ok = False
+            sri_msg = ""
+            
+            for attempt in range(1, max_attempts + 1):
+                # 📡 WS: Actualizar estado
+                send_queue_update(self.company.id, document.id, 'PROCESSING', f"Preparando documento (Intento {attempt}/{max_attempts})...")
+
+                # A. ASEGURAR IDENTIFICADORES (Regenerar si se limpiaron en el intento anterior)
+                if not document.access_key or not document.document_number:
+                    logger.info("Regenerando identificadores para documento %s", document.id)
+                    document.save() # Disparará la lógica de generación automática en models.py
+                
+                # B. GENERAR XML
+                ok_gen, xml_content = self._generate_xml(document)
+                if not ok_gen:
+                    send_queue_update(self.company.id, document.id, 'ERROR', f"Error en generación XML: {xml_content}")
                     return False, f"XML generation failed: {xml_content}"
-
-                # 2. Firmar XML (Python puro — sin Java)
-                ok, signed_xml = self._sign_xml(document, xml_content, cert_data)
-                if not ok:
+                
+                # C. FIRMAR XML
+                ok_sign, signed_xml = self._sign_xml(document, xml_content, cert_data)
+                if not ok_sign:
+                    send_queue_update(self.company.id, document.id, 'ERROR', f"Error en firma digital: {signed_xml}")
                     return False, f"XML signing failed: {signed_xml}"
-
-                # 3. Enviar al SRI
+                
+                # D. ENVIAR AL SRI
+                msg = f"Enviando al SRI (Intento {attempt}/{max_attempts})..."
+                logger.info(f"Documento {document.id} [%s]: {msg}", document.access_key)
+                send_queue_update(self.company.id, document.id, 'SENDING_SRI', msg)
+                
                 ok, sri_msg = self._send_to_sri(document, signed_xml)
-                if not ok:
-                    return False, sri_msg
+                
+                # E. MANEJO ESPECIAL DE CLAVE DUPLICADA / REGISTRADA / SECUENCIAL DUPLICADO
+                # Detectamos tanto "REGISTRADA" (clave) como "REGISTRADO" (secuencial)
+                sri_msg_upper = str(sri_msg).upper()
+                if "REGISTRADA" in sri_msg_upper or "REGISTRADO" in sri_msg_upper:
+                    logger.info("⚠️ Documento con identificadores ya registrados detectado (%s).", sri_msg)
+                    
+                    # Intento rápido de autorización para ver si ya está autorizado
+                    send_queue_update(self.company.id, document.id, 'AUTHORIZING', "Identificador ya registrado. Verificando autorización previa...")
+                    auth_ok, auth_msg = self._check_authorization(document, max_attempts=1)
+                    if auth_ok and document.status == "AUTHORIZED":
+                        logger.info("✅ El documento ya estaba AUTORIZADO en el SRI. Continuando flujo.")
+                        ok = True
+                        break
+                    
+                    # Si no está autorizado, la clave o el secuencial están "quemados"
+                    if attempt < max_attempts:
+                        logger.warning(f"🔄 Clave/Secuencial registrado pero NO autorizado. Forzando regeneración para reintento {attempt+1}...")
+                        
+                        # Siempre limpiamos la clave de acceso (numeric_code cambiará)
+                        document.access_key = None
+                        
+                        # EXCEPCIÓN IMPORTANTE: Si es un error de SECUENCIAL, debemos limpiar el número siempre
+                        # para que models.py obtenga el siguiente disponible, tanto en TEST como PRODUCTION.
+                        if "SECUENCIAL REGISTRADO" in sri_msg_upper or self.sri_config.environment == 'TEST':
+                            logger.info("🔢 Limpiando número de documento para obtener el siguiente secuencial disponible.")
+                            document.document_number = None
+                            
+                        document.save() # Esto generará nuevos IDs en models.py
+                        time.sleep(2)
+                        ok = False # Forzar retry del loop
+                        continue
+                    else:
+                        logger.error("❌ Se agotaron los intentos de regeneración por colisión de identificadores.")
+                        ok = False # Reportar como error
+                        break
+                
+                if ok:
+                    break
+                
+                # F. OTROS ERRORES: Reintentar después de una pausa
+                if attempt < max_attempts:
+                    logger.info("Error temporal en envío al SRI: %s. Esperando para reintentar...", sri_msg)
+                    time.sleep(3)
 
-                # 4. Consultar autorización
+            if not ok:
+                send_queue_update(self.company.id, document.id, 'ERROR', f"Error final en envío al SRI: {sri_msg}")
+                return False, sri_msg
+
+            # 4. Consultar autorización (Hasta 3 intentos)
+            ok = False
+            auth_msg = ""
+            for attempt in range(1, max_attempts + 1):
+                msg = f"Consultando autorización (Intento {attempt}/{max_attempts})..."
+                send_queue_update(self.company.id, document.id, 'AUTHORIZING', msg)
+                
                 ok, auth_msg = self._check_authorization(document)
-                if not ok:
-                    logger.warning("Authorization check failed: %s", auth_msg)
+                if ok and document.status == "AUTHORIZED":
+                    break
+                
+                # Si el SRI nos dice "No autorizado" directamente, paramos de consultar
+                if "NO AUTORIZADO" in auth_msg.upper():
+                    logger.warning(f"❌ Documento {document.id} rechazado definitivamente en consulta: {auth_msg}")
+                    break
+                
+                if attempt < max_attempts:
+                    time.sleep(3) # El SRI tarda un poco en procesar offline
 
-                # 5. Generar PDF
-                ok, pdf_msg = self._generate_pdf(document)
-                if not ok:
-                    logger.warning("PDF generation failed: %s", pdf_msg)
+            # 5. Generar PDF
+            send_queue_update(self.company.id, document.id, 'GENERATING_PDF', "Generando PDF RIDE...")
+            ok_pdf, pdf_msg = self._generate_pdf(document)
+            if not ok_pdf:
+                logger.warning("PDF generation failed: %s", pdf_msg)
 
-                document.refresh_from_db()
+            document.refresh_from_db()
 
-                # 6. Email y billing solo si fue autorizado
-                if document.status == "AUTHORIZED":
-                    if send_email:
-                        self._send_email(document)
-                    self._consume_invoice_from_plan(document)
+            # 6. Email y finalización
+            if document.status == "AUTHORIZED":
+                send_queue_update(self.company.id, document.id, 'AUTHORIZED', "¡Documento Autorizado!", {'auth_code': document.sri_authorization_code})
+                if send_email:
+                    self._send_email(document)
+                self._consume_invoice_from_plan(document)
+            elif document.status == "SENT":
+                msg = f"Documento enviado correctamente (Esperando Autorización SRI). Detalle: {auth_msg}"
+                send_queue_update(self.company.id, document.id, 'SENT', msg)
+                logger.info(f"⏳ Documento {document.id} queda en SENT/PENDIENTE: {auth_msg}")
+            else:
+                send_queue_update(self.company.id, document.id, 'REJECTED', f"Estado final: {document.status}. Info: {auth_msg}")
 
-                logger.info(
-                    "Documento %s procesado con estado: %s",
-                    document.id, document.status,
-                )
-                return True, f"Document processed successfully with status: {document.status}"
+            logger.info("Documento %s procesado con estado final: %s", document.id, document.status)
+            return True, f"Document processed with status: {document.status}"
 
         except Exception as e:
             logger.exception("Critical error processing document %s", document.id)
             document.status = "ERROR"
             document.save()
+            send_queue_update(self.company.id, document.id, 'ERROR', f"Error crítico: {str(e)}")
             return False, f"PROCESSOR_CRITICAL_ERROR: {e}"
 
     # ------------------------------------------------------------------
@@ -387,11 +483,13 @@ class DocumentProcessor:
         document.sri_authorization_date = None
         document.sri_response = {}
         
-        # En entorno de pruebas, forzar regeneración de número y clave
+        # Forzar regeneración de clave (numeric_code aleatorio nuevo)
+        document.access_key = None
+        
+        # En entorno de pruebas, forzar también regeneración de número secuencial
         try:
             if self.sri_config.environment == 'TEST':
                 document.document_number = None
-                document.access_key = None
         except:
             pass
             

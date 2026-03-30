@@ -19,6 +19,7 @@ from django.db import transaction
 from .models import ElectronicDocument, SRIResponse
 from .services.soap_client import SRISOAPClient
 from .services.document_processor import DocumentProcessor
+from apps.core.websockets_utils import send_queue_update
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ def check_document_authorization_async(self, document_id):
         company_id = document.company.id
         
         logger.info(f"🔄 [CELERY] Checking authorization for document {document_id} [Company: {company_id}]")
+        send_queue_update(company_id, document_id, 'PROCESSING', "Verificando autorización en SRI...")
         
         # Obtener documento con lock para evitar condiciones de carrera
         try:
@@ -83,6 +85,7 @@ def check_document_authorization_async(self, document_id):
                 countdown = 600  # 10 minutos para intentos finales
             
             logger.info(f"🔄 [CELERY] Scheduling retry {retry_count + 1} in {countdown // 60} minutes")
+            send_queue_update(document.company.id, document.id, 'WAITING', f"Reintento {retry_count + 1} en {countdown // 60} min...")
             raise self.retry(countdown=countdown)
     
     except Exception as e:
@@ -112,8 +115,10 @@ def process_document_async(self, document_id):
         lock_id = f"sri_lock_sign_{company_id}"
         
         # Intentar obtener el candado. Si está ocupado por otra firma de la misma empresa, esperar turno.
-        if not cache.add(lock_id, "locked", timeout=120):
+        # Aumentamos timeout a 10 min (600s) para permitir el ciclo completo de reintentos internos
+        if not cache.add(lock_id, "locked", timeout=600):
             logger.info(f"⏳ [CELERY] Signing lock for Company {company_id} is busy. Document {document_id} waiting its turn...")
+            send_queue_update(company_id, document_id, 'WAITING', "En espera (otra factura en proceso)...")
             self.retry(countdown=5)
             
         logger.info(f"🚀 [CELERY] Initializing isolated processing for Company {company_id} | Doc {document_id}")
@@ -349,9 +354,19 @@ def retry_failed_documents():
         retry_count = 0
         for doc in failed_docs:
             try:
-                # Resetear estado para reintento
+                # Resetear estado e identificadores para reintento genuino
+                # Al limpiar access_key forzamos que el models.py genere uno nuevo
                 doc.status = 'GENERATED'
-                doc.save(update_fields=['status'])
+                doc.access_key = None
+                
+                # En TEST, regeneramos también el secuencial para evitar bloqueos del SRI
+                try:
+                    if doc.company.sri_configuration.environment == 'TEST':
+                        doc.document_number = None
+                except:
+                    pass
+                    
+                doc.save() # Guardamos todo para que se auto-generen los nuevos identificadores
                 
                 # Procesar nuevamente
                 process_document_async.delay(doc.id)
