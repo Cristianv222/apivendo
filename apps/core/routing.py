@@ -4,6 +4,6 @@ from . import consumers
 
 websocket_urlpatterns = [
     # Ruta para el monitoreo de colas SRI en tiempo real
-    # Ejemplo: ws/queue/1/
-    re_path(r'ws/queue/(?P<company_id>\d+)/$', consumers.QueueConsumer.as_asgi()),
+    # Aseguramos el anclaje con ^ y $ para evitar 404 en producción
+    re_path(r'^ws/queue/(?P<company_id>\d+)/$', consumers.QueueConsumer.as_asgi()),
 ]
