@@ -438,6 +438,25 @@ def user_dashboard(request):
             
             if last_purchase:
                 current_plan = last_purchase.plan
+                # Hotfix: Sincronizar estado ilimitado y verificar expiración
+                if not billing_profile.last_purchase_date or billing_profile.last_purchase_date != last_purchase.created_at:
+                    billing_profile.last_purchase_date = last_purchase.created_at
+                    billing_profile.save(update_fields=['last_purchase_date'])
+
+                if current_plan.is_unlimited:
+                    # Si el plan ilimitado ya expiró (30 días), lo desactivamos
+                    if billing_profile.is_expired:
+                        if billing_profile.is_unlimited:
+                            billing_profile.is_unlimited = False
+                            billing_profile.save()
+                    elif not billing_profile.is_unlimited:
+                        # Si es ilimitado y no ha expirado, asegurar que esté activo
+                        billing_profile.is_unlimited = True
+                        billing_profile.save()
+                else:
+                    if billing_profile.is_unlimited:
+                        billing_profile.is_unlimited = False
+                        billing_profile.save()
             
             # Obtener todos los planes activos
             all_plans = Plan.objects.filter(is_active=True).order_by('price')

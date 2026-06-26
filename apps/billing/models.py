@@ -37,7 +37,8 @@ class Plan(models.Model):
     """
     name = models.CharField('Nombre del Plan', max_length=100)
     description = models.TextField('Descripción', blank=True)
-    invoice_limit = models.PositiveIntegerField('Límite de Facturas', validators=[MinValueValidator(1)])
+    invoice_limit = models.PositiveIntegerField('Límite de Facturas', validators=[MinValueValidator(1)], default=1)
+    is_unlimited = models.BooleanField('Facturas Ilimitadas', default=False, help_text='Si se marca, el límite de facturas se ignora')
     price = models.DecimalField('Precio (USD)', max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     
     # Configuración
@@ -80,6 +81,7 @@ class CompanyBillingProfile(models.Model):
     
     # Créditos disponibles
     available_invoices = models.PositiveIntegerField('Facturas Disponibles', default=0)
+    is_unlimited = models.BooleanField('Plan Ilimitado', default=False)
     total_invoices_purchased = models.PositiveIntegerField('Total Facturas Compradas', default=0)
     total_invoices_consumed = models.PositiveIntegerField('Total Facturas Consumidas', default=0)
     
@@ -104,6 +106,20 @@ class CompanyBillingProfile(models.Model):
     
     def consume_invoice(self):
         """Consumir una factura"""
+        if getattr(self, 'is_unlimited', False):
+            # Verificar si el plan ilimitado ya expiró antes de permitir el consumo
+            if self.is_expired:
+                self.is_unlimited = False
+                self.save(update_fields=['is_unlimited', 'updated_at'])
+                # Si expiró y no tiene facturas prepagadas, no puede consumir
+                if self.available_invoices <= 0:
+                    return False
+            else:
+                self.total_invoices_consumed += 1
+                self.save(update_fields=['total_invoices_consumed', 'updated_at'])
+                return True
+        
+        # Lógica para planes normales (limitados)
         if self.available_invoices > 0:
             self.available_invoices -= 1
             self.total_invoices_consumed += 1
@@ -137,6 +153,31 @@ class CompanyBillingProfile(models.Model):
         if self.total_invoices_purchased == 0:
             return 0
         return (self.total_invoices_consumed / self.total_invoices_purchased) * 100
+
+    @property
+    def expiration_date(self):
+        """Calcula la fecha de vencimiento (30 días después de la última compra)"""
+        if self.is_unlimited and self.last_purchase_date:
+            from datetime import timedelta
+            return self.last_purchase_date + timedelta(days=30)
+        return None
+
+    @property
+    def days_remaining(self):
+        """Calcula los días que quedan hasta el vencimiento"""
+        exp_date = self.expiration_date
+        if exp_date:
+            delta = exp_date - timezone.now()
+            return max(0, delta.days)
+        return None
+
+    @property
+    def is_expired(self):
+        """Verifica si el plan ilimitado ya expiró"""
+        if self.is_unlimited:
+            days = self.days_remaining
+            return days is not None and days <= 0
+        return False
 
 
 class PlanPurchase(models.Model):
